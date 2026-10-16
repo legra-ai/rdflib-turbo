@@ -9,7 +9,7 @@ from rdflib.query import Result
 
 from ._native import NativeDataset
 
-__version__ = "0.1.0a1"
+__version__ = "0.1.0a2"
 __all__ = ["Dataset"]
 
 

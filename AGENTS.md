@@ -9,3 +9,6 @@
   status explicitly at its call site. set -u and pipefail alone are fine.
 - Keep the sibling pyshacl-turbo, rdflib-turbo and owlrl-turbo READMEs linked.
 - Publish only through the tested ci.yml pipeline; preserve original archives.
+- These three companion turbo projects are not part of the Legra platform. Do not
+  describe them as a Legra RDF stack; reuse of legra-ai repositories does not imply
+  platform membership. Keep this distinction in package and repository descriptions.

@@ -3,7 +3,7 @@
 [![PyPI](https://img.shields.io/pypi/v/rdflib-turbo)](https://pypi.org/project/rdflib-turbo/)
 [![Tests and wheels](https://github.com/legra-ai/rdflib-turbo/actions/workflows/ci.yml/badge.svg)](https://github.com/legra-ai/rdflib-turbo/actions/workflows/ci.yml)
 
-Part of the Legra RDF stack: [pyshacl-turbo](https://github.com/legra-ai/pyshacl-turbo),
+Companion turbo projects: [pyshacl-turbo](https://github.com/legra-ai/pyshacl-turbo),
 [rdflib-turbo](https://github.com/legra-ai/rdflib-turbo) and
 [owlrl-turbo](https://github.com/legra-ai/owlrl-turbo).
 
@@ -11,7 +11,7 @@ Functional alpha of a native RDF dataset runtime for Python, built on Oxigraph
 and exact-term compatibility work extracted from pyshacl-turbo.
 
 ```sh
-pip install rdflib-turbo==0.1.0a1
+pip install rdflib-turbo==0.1.0a2
 ```
 
 ```python
