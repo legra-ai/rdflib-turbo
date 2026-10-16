@@ -65,6 +65,12 @@ Copyright 2026 DataRoad Inc, Delaware, USA, trading as Legra.
 
 ## Development
 
+The [shared companion-project benchmark suite](https://github.com/legra-ai/pyshacl-turbo/blob/main/benchmarks/companions.md)
+compares parsing, serialization, queries, inference, conversion costs and complete
+SHACL pipelines against the reference packages. With all three repositories as
+siblings, run `make benchmark-companions`. It uses pinned published wheels and
+separate timing and peak RSS workers; it does not use local editable builds.
+
 Use `make dev` and `make check`. The initial alpha is published only by the
 verified GitHub Actions workflow; see [release instructions](docs/releasing.md).
 

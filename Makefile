@@ -17,3 +17,7 @@ test:
 
 build:
 	uv build
+
+.PHONY: benchmark-companions
+benchmark-companions:
+	$(MAKE) -C ../pyshacl-turbo benchmark-companions
