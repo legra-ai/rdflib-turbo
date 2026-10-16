@@ -1,0 +1,129 @@
+"""Native coverage must include Python execution and every owned source file."""
+
+import hashlib
+import importlib.util
+import json
+from pathlib import Path
+
+import pytest
+
+
+def harness():
+    path = Path(__file__).resolve().parents[1] / "scripts/native_coverage.py"
+    spec = importlib.util.spec_from_file_location("native_coverage", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def file_report(path, covered, count=10):
+    return {
+        "filename": str(path),
+        "summary": {
+            name: {"count": count, "covered": covered} for name in ("lines", "regions", "functions")
+        },
+    }
+
+
+def test_owned_inventory_cannot_disappear_from_the_denominator(tmp_path):
+    module = harness()
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "lib.rs").write_text("fn main() {}")
+    (src / "uncovered.rs").write_text("fn uncovered() {}")
+    report = {"data": [{"files": [file_report(src / "lib.rs", 10)]}]}
+    with pytest.raises(RuntimeError, match=r"uncovered\.rs"):
+        module.summarize(report, tmp_path)
+    report["data"][0]["files"].append(file_report(src / "uncovered.rs", 0))
+    summary = module.summarize(report, tmp_path)
+    assert summary["owned"]["lines"] == {"count": 20, "covered": 10, "percent": 50.0}
+    assert summary["branches"] is None
+
+
+def test_dependencies_do_not_inflate_owned_coverage(tmp_path):
+    module = harness()
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "lib.rs").write_text("fn main() {}")
+    report = {
+        "data": [
+            {
+                "files": [
+                    file_report(src / "lib.rs", 2),
+                    file_report(tmp_path / "vendor/library/src/lib.rs", 10),
+                    file_report(tmp_path / "tests/integration.rs", 10),
+                    file_report(tmp_path.parent / "registry/dependency.rs", 10),
+                ]
+            }
+        ]
+    }
+    summary = module.summarize(report, tmp_path)
+    assert summary["owned"]["lines"]["percent"] == 20.0
+    assert summary["vendored"]["lines"]["percent"] == 100.0
+
+
+def test_environment_is_parsed_without_executing_shell_text():
+    module = harness()
+    assert module.parse_environment("RUSTFLAGS='-C instrument-coverage'\nCARGO_LLVM_COV=1\n") == {
+        "RUSTFLAGS": "-C instrument-coverage",
+        "CARGO_LLVM_COV": "1",
+    }
+    with pytest.raises(ValueError):
+        module.parse_environment("RUSTFLAGS=x; touch /tmp/should-never-execute")
+
+
+def test_rust_only_profiles_cannot_pass_as_python_integration_coverage():
+    module = harness()
+    with pytest.raises(RuntimeError, match="Python"):
+        module.require_python_execution(
+            {"files": {"src/lib.rs": {"lines": {"covered": 0}}}}, "src/lib.rs"
+        )
+    module.require_python_execution(
+        {"files": {"src/lib.rs": {"lines": {"covered": 2}}}}, "src/lib.rs"
+    )
+
+
+def test_cargo_private_environment_assignments_are_supported():
+    assert (
+        harness().parse_environment(
+            "RUSTFLAGS='-C instrument-coverage'\n__CARGO_LLVM_COV_RUSTC_WRAPPER=1\n"
+        )["__CARGO_LLVM_COV_RUSTC_WRAPPER"]
+        == "1"
+    )
+
+
+def test_pinned_cargo_wrapper_carries_instrumentation_flags():
+    environment = harness().parse_environment(
+        "__CARGO_LLVM_COV_RUSTC_WRAPPER=1\n"
+        "__CARGO_LLVM_COV_RUSTC_WRAPPER_RUSTFLAGS='-C\x1finstrument-coverage'\n"
+        "RUSTC_WRAPPER=/tools/cargo-llvm-cov\n"
+    )
+    assert environment["RUSTC_WRAPPER"] == "/tools/cargo-llvm-cov"
+
+
+def test_zero_mapping_declarations_require_an_exact_source_hash(tmp_path):
+    module = harness()
+    (tmp_path / "src").mkdir()
+    source = tmp_path / "src/types.rs"
+    source.write_text("pub type Id = u64;")
+    inventory = {
+        "src/types.rs": {
+            "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+            "reason": "Declarations only; no executable LLVM mapping",
+        }
+    }
+    (tmp_path / "native-coverage-sources.json").write_text(json.dumps(inventory))
+    summary = module.summarize({"data": [{"files": []}]}, tmp_path)
+    assert summary["unmapped_non_executable"] == inventory
+    source.write_text("pub fn now_executable() {}")
+    with pytest.raises(RuntimeError, match="source hash"):
+        module.summarize({"data": [{"files": []}]}, tmp_path)
+
+
+def test_profile_mapping_cannot_shrink_the_owned_denominator():
+    module = harness()
+    expected = {"files": {"src/lib.rs": {key: {"count": 10} for key in module.METRICS}}}
+    actual = {"files": {"src/lib.rs": {key: {"count": 9} for key in module.METRICS}}}
+    with pytest.raises(RuntimeError, match="denominator"):
+        module.verify_denominators(actual, expected)
+    module.verify_denominators(expected, expected)

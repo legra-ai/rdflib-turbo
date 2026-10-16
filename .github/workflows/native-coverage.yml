@@ -1,0 +1,47 @@
+name: Native Rust coverage
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      revision:
+        required: true
+        type: string
+  schedule:
+    - cron: '11 6 * * 1'
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash {0}
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.revision || github.sha }}
+      - uses: actions/checkout@v7
+        with:
+          repository: legra-ai/owlrl-turbo
+          ref: 5ba4b346a93f1f89e4230d9acdc8b4fb1343af4e
+          path: coverage-companion-owlrl
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - uses: astral-sh/setup-uv@v10.3.0
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          toolchain: 1.99.1
+          components: llvm-tools-preview
+      - run: cargo install cargo-llvm-cov --version 0.9.1 --locked
+      - run: python scripts/native_coverage.py --owlrl-source coverage-companion-owlrl
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: native-rust-coverage
+          path: native-coverage/
+          if-no-files-found: error

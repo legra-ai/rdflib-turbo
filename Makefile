@@ -19,5 +19,9 @@ build:
 	uv build
 
 .PHONY: benchmark-companions
+.PHONY: test-rust-coverage
+test-rust-coverage:
+	uv run --no-project --python 3.13 python scripts/native_coverage.py --owlrl-source ../owlrl-turbo
+
 benchmark-companions:
 	$(MAKE) -C ../pyshacl-turbo benchmark-companions

@@ -23,7 +23,7 @@ test = ["pytest>=8,<9", "pytest-cov>=7.1,<8", "ruff>=0.12"]
 [tool.maturin]
 python-source = "python"
 module-name = "rdflib_turbo._native"
-include = [{path = "vendor/**/*", format = "sdist"}, {path = "tests/**/*", format = "sdist"}, {path = "docs/**/*", format = "sdist"}, {path = "scripts/**/*", format = "sdist"}, {path = ".github/**/*", format = "sdist"}, {path = "rust-toolchain.toml", format = "sdist"}]
+include = [{path = "requirements-coverage.in", format = "sdist"}, {path = "requirements-coverage.lock", format = "sdist"}, {path = "vendor/**/*", format = "sdist"}, {path = "tests/**/*", format = "sdist"}, {path = "docs/**/*", format = "sdist"}, {path = "scripts/**/*", format = "sdist"}, {path = ".github/**/*", format = "sdist"}, {path = "rust-toolchain.toml", format = "sdist"}]
 exclude = ["**/target/**/*", "**/__pycache__/**/*"]
 
 [tool.pytest.ini_options]

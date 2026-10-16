@@ -1,5 +1,16 @@
 # rdflib-turbo
 
+[![Python line coverage](https://legra-ai.github.io/rdflib-turbo/python-lines.svg)](https://legra-ai.github.io/rdflib-turbo/)
+[![Python branch coverage](https://legra-ai.github.io/rdflib-turbo/python-branches.svg)](https://legra-ai.github.io/rdflib-turbo/)
+[![Rust line coverage](https://legra-ai.github.io/rdflib-turbo/rust-lines.svg)](https://legra-ai.github.io/rdflib-turbo/)
+[![Rust region coverage](https://legra-ai.github.io/rdflib-turbo/rust-regions.svg)](https://legra-ai.github.io/rdflib-turbo/)
+[![Rust function coverage](https://legra-ai.github.io/rdflib-turbo/rust-functions.svg)](https://legra-ai.github.io/rdflib-turbo/)
+
+Coverage badges update from successful main-branch CI measurements, including the
+daily scheduled run. Python lines and branches are separate; Rust badges measure
+owned native source exercised by Rust and Python integration tests.
+Rust branch coverage and dependency/vendored-patch coverage are not measured by these badges.
+
 [![PyPI](https://img.shields.io/pypi/v/rdflib-turbo)](https://pypi.org/project/rdflib-turbo/)
 [![Tests and wheels](https://github.com/legra-ai/rdflib-turbo/actions/workflows/ci.yml/badge.svg)](https://github.com/legra-ai/rdflib-turbo/actions/workflows/ci.yml)
 
