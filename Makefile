@@ -7,7 +7,7 @@ dev:
 	VIRTUAL_ENV=$(CURDIR)/.venv .venv/bin/maturin develop --release
 
 check: test
-	cargo fmt --check
+	./scripts/fmt.sh --check
 	cargo clippy --locked -- -D warnings
 	.venv/bin/ruff check python tests scripts
 	.venv/bin/ruff format --check python tests scripts
