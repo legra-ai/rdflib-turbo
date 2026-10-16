@@ -1,0 +1,14 @@
+{
+  "sparopt-0.3.7": {
+    "source_revision": "0e81a29d27575ab69e7f85ea9c7f1058b277fcd0",
+    "crate_sha256": "973ee503ab3d6c3de66b4b459233cd5b22b44dad0fb7b8d0931daf73d2ede935"
+  },
+  "spareval-0.2.7": {
+    "source_revision": "0e81a29d27575ab69e7f85ea9c7f1058b277fcd0",
+    "crate_sha256": "85b51144836ff9ca2f792b7a2422c4170ff04460d86cd8f2f764cf53e339cbec"
+  },
+  "fancy-regex-0.19.2": {
+    "source_revision": "e2684857abcfd723562864077c6bc5f3f70ecedf",
+    "crate_sha256": "d301f5bf187b3c295fce6468d3875037a0bccc5f6b151c63cac2f85babf21912"
+  }
+}

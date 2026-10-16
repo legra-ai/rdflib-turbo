@@ -1,0 +1,45 @@
+# Local patches to spareval 0.2.7
+
+Upstream Oxigraph revision: `0e81a29d27575ab69e7f85ea9c7f1058b277fcd0`.
+MIT and Apache-2.0 license texts and original archive provenance are retained.
+
+The prebinding patch supplies initially bound variables to the optimizer;
+see `../sparql-prebinding.patch` and ADR 0004.
+
+The opt-in `cached-query-plans` feature reuses immutable optimized graph patterns
+in a process-local 128-entry LRU. Exact parsed patterns and sorted initial bound
+variable names form the key; execution values, current data and registered
+callbacks are never cached. SELECT, ASK, CONSTRUCT and DESCRIBE share this path.
+Explicit `without_optimizations()` bypasses the cache. Without the feature, each
+execution still performs its own optimization. See ADR 0025 and `src/plan_cache.rs`.
+
+The opt-in `undefined-functions-as-expression-errors` feature changes only the
+unregistered scalar-function arm in expression evaluator construction. An
+unknown function returns an expression error (`None`) at evaluation time, so
+FILTER, BIND, COALESCE and logical operators can handle it. Without this feature,
+upstream's UnsupportedCustomFunction construction error remains unchanged.
+Registered callbacks and unsupported aggregates are not changed by this patch.
+
+The engine enables this feature for pySHACL compatibility under ADR 0012.
+`tests/test_undefined_functions.py` checks the expression contexts, and
+`test_sparql_function_error_cannot_become_a_conforming_report` keeps registered
+callback failures visible.
+
+The separate opt-in `exact-custom-function-terms` feature retains RDF terms
+across registered custom-function calls. Arguments and returned terms bypass
+`ExpressionTerm` canonicalization, preserving noncanonical numeric lexical
+forms and plain versus explicitly typed strings. Enclosing value expressions
+continue to request value semantics. The feature enables oxrdf's local
+`rdf-10-string-identity` feature and is used under ADR 0015.
+
+This feature also preserves terms produced by `xsd:string(...)` and `STRDT`,
+including `IF` and `COALESCE` branches containing ordinary value expressions.
+Explicit string constructors must not pass through `ExpressionTerm::StringLiteral`,
+which loses their datatype spelling. `STR` and `CONCAT` continue to produce plain
+strings. See ADR 0022 and `tests/test_literal_identity.py`.
+
+`make test-sparql-evaluator` tests upstream callback behavior with the feature
+disabled and exact terms with Turbo's features enabled. The standalone manifest
+uses the same local oxrdf/spargebra/sparopt patches, with its own pinned lockfile.
+It is excluded from the main workspace to prevent feature unification from
+silently enabling the compatibility features during the default-mode test.
