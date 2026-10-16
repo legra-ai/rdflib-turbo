@@ -17,7 +17,10 @@ if Path("Cargo.toml").exists():
     if rust_version.replace("-alpha.", "a") != version:
         raise ValueError("Rust and Python versions differ")
 revision = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-for header in subprocess.check_output(["git", "log", "--format=%s"], text=True).splitlines():
+# GitHub PR checkouts contain a generated merge title, not an authored subject.
+for header in subprocess.check_output(
+    ["git", "log", "--no-merges", "--format=%s"], text=True
+).splitlines():
     validate(header)
 with open(os.environ["GITHUB_OUTPUT"], "a") as output:
     output.write(f"version={version}\nrevision={revision}\n")
