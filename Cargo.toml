@@ -2,7 +2,7 @@
 name = "rdflib-turbo-native"
 version = "0.1.0-alpha.2"
 edition = "2024"
-rust-version = "1.98.0"
+rust-version = "1.99.1"
 license = "MIT OR Apache-2.0"
 description = "Native exact-term RDF dataset runtime for Python"
 repository = "https://github.com/legra-ai/rdflib-turbo"
