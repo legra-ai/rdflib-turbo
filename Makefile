@@ -7,7 +7,7 @@ dev:
 	VIRTUAL_ENV=$(CURDIR)/.venv .venv/bin/maturin develop --release
 
 check: test
-	cargo fmt --check
+	./scripts/fmt.sh --check
 	cargo clippy --locked -- -D warnings
 	.venv/bin/ruff check python tests scripts
 	.venv/bin/ruff format --check python tests scripts
@@ -19,5 +19,9 @@ build:
 	uv build
 
 .PHONY: benchmark-companions
+.PHONY: test-rust-coverage
+test-rust-coverage:
+	uv run --no-project --python 3.13 python scripts/native_coverage.py --owlrl-source ../owlrl-turbo
+
 benchmark-companions:
 	$(MAKE) -C ../pyshacl-turbo benchmark-companions

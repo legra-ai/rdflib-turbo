@@ -125,6 +125,12 @@ jobs:
           path: dist/*.whl
           if-no-files-found: error
 
+  native-coverage:
+    needs: prepare
+    uses: ./.github/workflows/native-coverage.yml
+    with:
+      revision: ${{ needs.prepare.outputs.revision }}
+
   verify:
     needs: prepare
     runs-on: ubuntu-latest
@@ -137,14 +143,18 @@ jobs:
         with:
           toolchain: 1.99.1
           components: rustfmt, clippy
-      - run: cargo fmt --check
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          toolchain: nightly-2026-10-16
+          components: rustfmt
+      - run: cargo +nightly-2026-10-16 fmt --check
       - run: cargo clippy --locked -- -D warnings
       - run: uvx ruff check python tests scripts
       - run: uvx ruff format --check python tests scripts
 
   test:
     name: test
-    needs: [prepare, verify, sdist, wheels]
+    needs: [prepare, verify, sdist, wheels, native-coverage]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -214,3 +224,33 @@ jobs:
           packages-dir: pending-packages/
       - run: python scripts/release_packages.py verify
       - run: gh release edit "v$RELEASE_VERSION" --draft=false
+
+  publish-coverage:
+    name: Publish measured coverage
+    needs: [prepare, test]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.revision }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@v8
+        with:
+          name: native-rust-coverage
+          path: coverage-site/reports
+      - run: python scripts/coverage_site.py --python coverage-site/reports/python-coverage.json --rust coverage-site/reports/summary.json --output coverage-site --project rdflib-turbo --revision "${{ needs.prepare.outputs.revision }}"
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: coverage-site
+      - uses: actions/deploy-pages@v5
+        id: deployment

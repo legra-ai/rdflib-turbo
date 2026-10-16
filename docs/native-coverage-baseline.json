@@ -1,0 +1,466 @@
+{
+  "project": "rdflib-turbo",
+  "date": "2026-10-16T22:47:16.188661+00:00",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)\nbinary: rustc\ncommit-hash: 58cf8f9c35b355199727627d07ae34a4e2846d67\ncommit-date: 2026-10-13\nhost: aarch64-apple-darwin\nrelease: 1.99.1\nLLVM version: 23.1.1\n",
+  "cargo_llvm_cov": "0.9.1",
+  "revision": "0b290a4c2c0313ca302d6fea16cf67879cd74c1f",
+  "source_sha256": {
+    "src/graph.rs": "ded5a1aaea78a619ba8ab473943448fec02ed3305759882c4c3a29f4eec49f67",
+    "src/inference.rs": "57f320ae80cc6833ebbcffa1e874c7dbf2468f326212f46e99a835847b29b739",
+    "src/inference/axioms.rs": "067dff6c54e846dabca7b29af1d2ebb9d43defa9802aeced8a2613d07fdc57d5",
+    "src/lib.rs": "67dd28c92714a7f001288f6296794d2cc18a6cfae02dbf35bc1ff6b01342f399",
+    "src/path.rs": "e825fd0f614c5894ef13cc50eca6428d51b0d11ccbe940afb33fd1d95fae9464"
+  },
+  "harness_sha256": "590489225702351117ebd6d48635f24116e2e6f07612a4623436dee62e58cf65",
+  "test_lock_sha256": "a7bd10fd0ab0f020a592938f2c1960d7a537fd7fc7a2cc240901197b997d1b94",
+  "wheel_sha256": "9f4ad9ca81b3dfcea02392963ef2dc47946dd500bf148462cad731d4d51bbed5",
+  "native_sha256": "0733e9e71c9fb9ee0e36622c6ce29fefe5e59cb2253f848eacb96d6272e97e46",
+  "rust_test_cases": 0,
+  "stages": {
+    "rust": {
+      "owned": {
+        "lines": {
+          "count": 621,
+          "covered": 0,
+          "percent": 0.0
+        },
+        "regions": {
+          "count": 1139,
+          "covered": 0,
+          "percent": 0.0
+        },
+        "functions": {
+          "count": 80,
+          "covered": 0,
+          "percent": 0.0
+        }
+      },
+      "vendored": {
+        "lines": {
+          "count": 0,
+          "covered": 0,
+          "percent": null
+        },
+        "regions": {
+          "count": 0,
+          "covered": 0,
+          "percent": null
+        },
+        "functions": {
+          "count": 0,
+          "covered": 0,
+          "percent": null
+        }
+      },
+      "files": {
+        "src/graph.rs": {
+          "lines": {
+            "count": 56,
+            "covered": 0
+          },
+          "regions": {
+            "count": 72,
+            "covered": 0
+          },
+          "functions": {
+            "count": 11,
+            "covered": 0
+          }
+        },
+        "src/inference.rs": {
+          "lines": {
+            "count": 153,
+            "covered": 0
+          },
+          "regions": {
+            "count": 293,
+            "covered": 0
+          },
+          "functions": {
+            "count": 15,
+            "covered": 0
+          }
+        },
+        "src/inference/axioms.rs": {
+          "lines": {
+            "count": 151,
+            "covered": 0
+          },
+          "regions": {
+            "count": 329,
+            "covered": 0
+          },
+          "functions": {
+            "count": 12,
+            "covered": 0
+          }
+        },
+        "src/lib.rs": {
+          "lines": {
+            "count": 243,
+            "covered": 0
+          },
+          "regions": {
+            "count": 398,
+            "covered": 0
+          },
+          "functions": {
+            "count": 41,
+            "covered": 0
+          }
+        },
+        "src/path.rs": {
+          "lines": {
+            "count": 18,
+            "covered": 0
+          },
+          "regions": {
+            "count": 47,
+            "covered": 0
+          },
+          "functions": {
+            "count": 1,
+            "covered": 0
+          }
+        }
+      },
+      "vendored_files": {},
+      "branches": null,
+      "unmapped_non_executable": {}
+    },
+    "python": {
+      "owned": {
+        "lines": {
+          "count": 621,
+          "covered": 413,
+          "percent": 66.50563607085346
+        },
+        "regions": {
+          "count": 1139,
+          "covered": 691,
+          "percent": 60.66725197541703
+        },
+        "functions": {
+          "count": 80,
+          "covered": 49,
+          "percent": 61.25
+        }
+      },
+      "vendored": {
+        "lines": {
+          "count": 0,
+          "covered": 0,
+          "percent": null
+        },
+        "regions": {
+          "count": 0,
+          "covered": 0,
+          "percent": null
+        },
+        "functions": {
+          "count": 0,
+          "covered": 0,
+          "percent": null
+        }
+      },
+      "files": {
+        "src/graph.rs": {
+          "lines": {
+            "count": 56,
+            "covered": 26
+          },
+          "regions": {
+            "count": 72,
+            "covered": 38
+          },
+          "functions": {
+            "count": 11,
+            "covered": 5
+          }
+        },
+        "src/inference.rs": {
+          "lines": {
+            "count": 153,
+            "covered": 60
+          },
+          "regions": {
+            "count": 293,
+            "covered": 99
+          },
+          "functions": {
+            "count": 15,
+            "covered": 6
+          }
+        },
+        "src/inference/axioms.rs": {
+          "lines": {
+            "count": 151,
+            "covered": 94
+          },
+          "regions": {
+            "count": 329,
+            "covered": 186
+          },
+          "functions": {
+            "count": 12,
+            "covered": 11
+          }
+        },
+        "src/lib.rs": {
+          "lines": {
+            "count": 243,
+            "covered": 220
+          },
+          "regions": {
+            "count": 398,
+            "covered": 335
+          },
+          "functions": {
+            "count": 41,
+            "covered": 26
+          }
+        },
+        "src/path.rs": {
+          "lines": {
+            "count": 18,
+            "covered": 13
+          },
+          "regions": {
+            "count": 47,
+            "covered": 33
+          },
+          "functions": {
+            "count": 1,
+            "covered": 1
+          }
+        }
+      },
+      "vendored_files": {},
+      "branches": null,
+      "unmapped_non_executable": {}
+    },
+    "owlrl": {
+      "owned": {
+        "lines": {
+          "count": 621,
+          "covered": 434,
+          "percent": 69.88727858293076
+        },
+        "regions": {
+          "count": 1139,
+          "covered": 731,
+          "percent": 64.17910447761194
+        },
+        "functions": {
+          "count": 80,
+          "covered": 52,
+          "percent": 65.0
+        }
+      },
+      "vendored": {
+        "lines": {
+          "count": 0,
+          "covered": 0,
+          "percent": null
+        },
+        "regions": {
+          "count": 0,
+          "covered": 0,
+          "percent": null
+        },
+        "functions": {
+          "count": 0,
+          "covered": 0,
+          "percent": null
+        }
+      },
+      "files": {
+        "src/graph.rs": {
+          "lines": {
+            "count": 56,
+            "covered": 43
+          },
+          "regions": {
+            "count": 72,
+            "covered": 57
+          },
+          "functions": {
+            "count": 11,
+            "covered": 8
+          }
+        },
+        "src/inference.rs": {
+          "lines": {
+            "count": 153,
+            "covered": 106
+          },
+          "regions": {
+            "count": 293,
+            "covered": 194
+          },
+          "functions": {
+            "count": 15,
+            "covered": 12
+          }
+        },
+        "src/inference/axioms.rs": {
+          "lines": {
+            "count": 151,
+            "covered": 96
+          },
+          "regions": {
+            "count": 329,
+            "covered": 192
+          },
+          "functions": {
+            "count": 12,
+            "covered": 11
+          }
+        },
+        "src/lib.rs": {
+          "lines": {
+            "count": 243,
+            "covered": 172
+          },
+          "regions": {
+            "count": 398,
+            "covered": 245
+          },
+          "functions": {
+            "count": 41,
+            "covered": 20
+          }
+        },
+        "src/path.rs": {
+          "lines": {
+            "count": 18,
+            "covered": 17
+          },
+          "regions": {
+            "count": 47,
+            "covered": 43
+          },
+          "functions": {
+            "count": 1,
+            "covered": 1
+          }
+        }
+      },
+      "vendored_files": {},
+      "branches": null,
+      "unmapped_non_executable": {}
+    },
+    "combined": {
+      "owned": {
+        "lines": {
+          "count": 621,
+          "covered": 483,
+          "percent": 77.77777777777777
+        },
+        "regions": {
+          "count": 1139,
+          "covered": 828,
+          "percent": 72.69534679543459
+        },
+        "functions": {
+          "count": 80,
+          "covered": 58,
+          "percent": 72.5
+        }
+      },
+      "vendored": {
+        "lines": {
+          "count": 0,
+          "covered": 0,
+          "percent": null
+        },
+        "regions": {
+          "count": 0,
+          "covered": 0,
+          "percent": null
+        },
+        "functions": {
+          "count": 0,
+          "covered": 0,
+          "percent": null
+        }
+      },
+      "files": {
+        "src/graph.rs": {
+          "lines": {
+            "count": 56,
+            "covered": 43
+          },
+          "regions": {
+            "count": 72,
+            "covered": 57
+          },
+          "functions": {
+            "count": 11,
+            "covered": 8
+          }
+        },
+        "src/inference.rs": {
+          "lines": {
+            "count": 153,
+            "covered": 106
+          },
+          "regions": {
+            "count": 293,
+            "covered": 194
+          },
+          "functions": {
+            "count": 15,
+            "covered": 12
+          }
+        },
+        "src/inference/axioms.rs": {
+          "lines": {
+            "count": 151,
+            "covered": 96
+          },
+          "regions": {
+            "count": 329,
+            "covered": 192
+          },
+          "functions": {
+            "count": 12,
+            "covered": 11
+          }
+        },
+        "src/lib.rs": {
+          "lines": {
+            "count": 243,
+            "covered": 221
+          },
+          "regions": {
+            "count": 398,
+            "covered": 342
+          },
+          "functions": {
+            "count": 41,
+            "covered": 26
+          }
+        },
+        "src/path.rs": {
+          "lines": {
+            "count": 18,
+            "covered": 17
+          },
+          "regions": {
+            "count": 47,
+            "covered": 43
+          },
+          "functions": {
+            "count": 1,
+            "covered": 1
+          }
+        }
+      },
+      "vendored_files": {},
+      "branches": null,
+      "unmapped_non_executable": {}
+    }
+  },
+  "owlrl_revision": "5ba4b346a93f1f89e4230d9acdc8b4fb1343af4e"
+}

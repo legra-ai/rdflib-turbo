@@ -1,4 +1,5 @@
 /target/
+/native-coverage/
 /.venv/
 /dist/
 __pycache__/
