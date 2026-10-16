@@ -1,5 +1,5 @@
 #!/bin/sh
-if cargo fmt --check; then
+if ./scripts/fmt.sh --check; then
     :
 else
     printf 'Rust formatting check failed; run make dev before committing\n' >&2
