@@ -3,7 +3,7 @@ PYTHON ?= 3.13
 
 dev:
 	uv venv --python $(PYTHON)
-	uv pip install --python .venv/bin/python maturin==1.15.0 'pytest>=8,<9' 'pytest-cov>=7.1,<8' ruff
+	uv pip install --python .venv/bin/python maturin==1.15.0 'pytest>=8,<10' 'pytest-cov>=7.1,<8' ruff
 	VIRTUAL_ENV=$(CURDIR)/.venv .venv/bin/maturin develop --release
 
 check: test
