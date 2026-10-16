@@ -1,0 +1,25 @@
+#!/bin/sh
+if cargo fmt --check; then
+    :
+else
+    printf 'Rust formatting check failed; run make dev before committing\n' >&2
+    exit 1
+fi
+if cargo clippy --locked -- -D warnings; then
+    :
+else
+    printf 'Rust lint check failed; run make dev before committing\n' >&2
+    exit 1
+fi
+if .venv/bin/ruff check python tests scripts; then
+    :
+else
+    printf 'Python lint check failed; run make dev before committing\n' >&2
+    exit 1
+fi
+if .venv/bin/ruff format --check python tests scripts; then
+    :
+else
+    printf 'Python formatting check failed; run make dev before committing\n' >&2
+    exit 1
+fi
