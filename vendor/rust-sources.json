@@ -10,5 +10,9 @@
   "fancy-regex-0.19.2": {
     "source_revision": "e2684857abcfd723562864077c6bc5f3f70ecedf",
     "crate_sha256": "d301f5bf187b3c295fce6468d3875037a0bccc5f6b151c63cac2f85babf21912"
+  },
+  "oxsdatatypes-0.2.3": {
+    "source_revision": "0e81a29d27575ab69e7f85ea9c7f1058b277fcd0",
+    "crate_sha256": "c17c2ae62ac34fda465f6331105906c0e17b4e088dac3249e1f229b962062503"
   }
 }

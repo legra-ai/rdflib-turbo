@@ -62,6 +62,16 @@ def run(arguments, environment=None, *, capture=False):
         return text
 
 
+def embedded_python_environment(python, environment):
+    """An embedded interpreter needs its selected distribution's standard library."""
+    prefix = run(
+        [python, "-I", "-c", "import sys; print(sys.base_prefix)"], environment, capture=True
+    ).strip()
+    if not Path(prefix).is_absolute():
+        raise RuntimeError("Python did not report an absolute runtime prefix")
+    return {**environment, "PYTHONHOME": prefix}
+
+
 def parse_environment(text):
     result = {}
     for line in text.splitlines():
@@ -290,12 +300,14 @@ def main():
     )
     if not executables:
         raise RuntimeError("Cargo did not produce Rust test executables")
+    rust_environment = embedded_python_environment(python, environment)
     rust_cases = 0
     for executable in executables:
         listing = run([executable, "--list"], environment, capture=True)
         rust_cases += sum(line.endswith(": test") for line in listing.splitlines())
         run(
-            [executable], {**environment, "LLVM_PROFILE_FILE": str(profiles / "rust/%p-%m.profraw")}
+            [executable],
+            {**rust_environment, "LLVM_PROFILE_FILE": str(profiles / "rust/%p-%m.profraw")},
         )
     wheels = target / "wheels" / uuid.uuid4().hex
     run(

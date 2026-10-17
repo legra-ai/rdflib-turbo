@@ -205,3 +205,7 @@ pub(super) fn resources(data: &Dataset) -> Vec<Quad> {
         })
         .collect()
 }
+
+#[cfg(test)]
+#[path = "axioms_tests.rs"]
+mod tests;
