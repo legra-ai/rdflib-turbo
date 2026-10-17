@@ -129,21 +129,23 @@ def test_profile_mapping_cannot_shrink_the_owned_denominator():
     module.verify_denominators(expected, expected)
 
 
-def test_embedded_python_uses_the_selected_interpreters_standard_library(monkeypatch):
+def test_embedded_python_uses_the_selected_interpreters_standard_library(monkeypatch, tmp_path):
     module = harness()
     calls = []
+    prefix = tmp_path / "Python runtime"
+    interpreter = tmp_path / "venv" / "python"
 
     def run(arguments, environment, *, capture=False):
         calls.append((arguments, environment, capture))
-        return "/opt/python/runtime\n"
+        return f"{prefix}\n"
 
     monkeypatch.setattr(module, "run", run)
     original = {"PATH": "/bin", "LLVM_PROFILE_FILE": "profiles/%p.profraw"}
-    configured = module.embedded_python_environment(Path("/venv/bin/python"), original)
-    assert configured["PYTHONHOME"] == "/opt/python/runtime"
+    configured = module.embedded_python_environment(interpreter, original)
+    assert configured["PYTHONHOME"] == str(prefix)
     assert "PYTHONHOME" not in original
     assert configured["LLVM_PROFILE_FILE"] == original["LLVM_PROFILE_FILE"]
-    assert calls[0][0][0] == Path("/venv/bin/python")
+    assert calls[0][0][0] == interpreter
     assert calls[0][2] is True
 
 
