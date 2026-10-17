@@ -327,13 +327,11 @@ impl NativeDataset {
                 .inner
                 .write()
                 .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
-            let mut working = current.clone();
             if let Some(destination) = destination {
-                inference::expand_into(&mut working, mode, destination.into()).map_err(error)?;
+                inference::expand_into(&mut current, mode, destination.into()).map_err(error)?;
             } else {
-                inference::expand(&mut working, mode).map_err(error)?;
+                inference::expand(&mut current, mode).map_err(error)?;
             }
-            *current = working;
             Ok(())
         })
     }

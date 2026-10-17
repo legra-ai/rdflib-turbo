@@ -92,3 +92,33 @@ fn profile_pipeline_allocations() {
         phase("released", 0);
     });
 }
+
+/// A deterministic allocation budget, independent of RSS, timing and arena reuse.
+/// Baseline inference exceeded 2.8 times the retained Rust heap on this workload.
+#[test]
+#[ignore = "global counters require this test to run alone"]
+fn inference_heap_budget() {
+    use std::fmt::Write;
+    let mut source = String::from(
+        "@prefix ex: <urn:example:> . @prefix owl: <http://www.w3.org/2002/07/owl#> . @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> . ex:Employee rdfs:subClassOf ex:Person . ex:knows a owl:SymmetricProperty .\n",
+    );
+    for index in 0..1000 {
+        writeln!(source, "ex:p{index} a ex:Employee; ex:knows ex:p{}; ex:score {index}; ex:name \"Person {index}\" .", (index + 1) % 1000).unwrap();
+    }
+    Python::initialize();
+    Python::attach(|py| {
+        let data = NativeDataset::new();
+        data.load(py, &source, "turtle", None, true).unwrap();
+        PEAK.store(LIVE.load(Relaxed), Relaxed);
+        data.infer(py, "owlrl", None).unwrap();
+        let peak = PEAK.load(Relaxed);
+        let retained = LIVE.load(Relaxed);
+        assert!(
+            peak < retained * 2,
+            "Inference heap budget exceeded: peak={peak}, retained={retained}"
+        );
+        let first = data.dump(py, "nquads").unwrap();
+        data.infer(py, "owlrl", None).unwrap();
+        assert_eq!(data.dump(py, "nquads").unwrap(), first);
+    });
+}

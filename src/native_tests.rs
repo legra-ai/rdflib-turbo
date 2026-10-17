@@ -1,6 +1,38 @@
 use super::*;
 use crate::graph::{RDF, iri};
 
+#[test]
+fn failure_after_an_inference_round_rolls_back_all_axioms_and_derived_facts() {
+    Python::initialize();
+    Python::attach(|py| {
+        for format in ["turtle", "trig"] {
+            for destination in [None, Some("urn:destination")] {
+                let statements = "<urn:keyAlias> <http://www.w3.org/2000/01/rdf-schema#subPropertyOf> <http://www.w3.org/2002/07/owl#hasKey> . <urn:C> <urn:keyAlias> <urn:broken> .";
+                let source = if format == "trig" {
+                    format!("<urn:original> {{ {statements} }}")
+                } else {
+                    statements.to_owned()
+                };
+                let native = NativeDataset::new();
+                native.load(py, &source, format, None, true).unwrap();
+                let before = native.dump(py, "nquads").unwrap();
+                assert!(
+                    native
+                        .infer(py, "owlrl", destination)
+                        .unwrap_err()
+                        .to_string()
+                        .contains("Malformed RDF list")
+                );
+                assert_eq!(native.dump(py, "nquads").unwrap(), before);
+                // The failed round must not leave the newly derived hasKey or
+                // the OWL axioms behind. A corrected input can then succeed.
+                native.load(py, "<urn:broken> <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <urn:key>; <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil> .", "turtle", None, true).unwrap();
+                native.infer(py, "owlrl", destination).unwrap();
+            }
+        }
+    });
+}
+
 fn dataset(source: &str) -> Dataset {
     RdfParser::from_format(RdfFormat::Turtle)
         .for_slice(source.as_bytes())
@@ -51,17 +83,7 @@ fn graph_helpers_preserve_context_and_exact_subject_identity() {
     ));
     let union = graph::with_union(&before);
     assert_eq!(union.len(), before.len() + 1);
-    let mut after = union.clone();
-    after.insert(&Quad::new(
-        NamedNode::new("urn:new").unwrap(),
-        predicate,
-        object,
-        GraphName::DefaultGraph,
-    ));
-    let mut committed = before.clone();
-    graph::commit_additions(&mut committed, &union, &after);
-    assert_eq!(committed.len(), before.len() + 1);
-    assert!(!committed.contains(QuadRef::new(
+    assert!(!before.contains(QuadRef::new(
         NamedNodeRef::new_unchecked("urn:n"),
         NamedNodeRef::new_unchecked("urn:p"),
         NamedNodeRef::new_unchecked("urn:o"),

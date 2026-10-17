@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use oxigraph::model::*;
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
+use oxrdf::dataset::InsertTransaction;
 
 use crate::graph::{RDF, iri, objects, subject, subjects};
 use crate::path::rdf_list;
@@ -200,31 +201,43 @@ const OWL_RULES: &[(&str, &str)] = &[
 
 pub fn expand(data: &mut Dataset, mode: &str) -> Result<()> {
     if data.iter().any(|q| !q.graph_name.is_default_graph()) {
-        let before = crate::graph::with_union(data);
-        let mut working = before.clone();
-        expand_inner(&mut working, mode)?;
-        crate::graph::commit_additions(data, &before, &working);
-        return Ok(());
+        return expand_into(data, mode, GraphName::DefaultGraph);
     }
-    expand_inner(data, mode)
+    let mut transaction = data.insert_transaction();
+    expand_inner(&mut transaction, mode)?;
+    transaction.commit();
+    Ok(())
 }
 
 /// Infer over the dataset union and put only new statements in the destination.
 /// Original graph contexts remain available to callers and report descriptions.
 pub fn expand_into(data: &mut Dataset, mode: &str, destination: GraphName) -> Result<()> {
-    let before = crate::graph::with_union(data);
-    let mut working = before.clone();
-    expand_inner(&mut working, mode)?;
+    let mut union = crate::graph::with_union(data);
+    let mut transaction = union.insert_transaction();
+    expand_inner(&mut transaction, mode)?;
     data.extend(
-        working
-            .iter()
-            .filter(|q| !before.contains(*q))
+        transaction
+            .inserted()
             .map(|q| Quad::new(q.subject, q.predicate, q.object, destination.clone())),
     );
+    transaction.commit();
     Ok(())
 }
 
-fn expand_inner(data: &mut Dataset, mode: &str) -> Result<()> {
+/// One round retains only distinct statements absent from its read snapshot.
+/// Existing facts and duplicate rule results never enter the retained buffer.
+#[derive(Default)]
+struct Pending(HashSet<Quad>);
+
+impl Pending {
+    fn push(&mut self, data: &Dataset, quad: Quad) {
+        if !data.contains(&quad) {
+            self.0.insert(quad);
+        }
+    }
+}
+
+fn expand_inner(data: &mut InsertTransaction<'_>, mode: &str) -> Result<()> {
     match mode {
         "none" | "" => return Ok(()),
         "rdfs" | "owlrl" | "both" => {}
@@ -238,11 +251,12 @@ fn expand_inner(data: &mut Dataset, mode: &str) -> Result<()> {
         rules.extend_from_slice(OWL_RULES);
         axioms::owl(data, mode == "both");
     }
-    let mut initial_resources = if mode != "owlrl" {
-        axioms::resources(data)
-    } else {
-        Vec::new()
-    };
+    let mut initial_resources = Pending::default();
+    if mode != "owlrl" {
+        for quad in axioms::resources(data) {
+            initial_resources.push(data, quad);
+        }
+    }
     let queries = rules
         .iter()
         .map(|(template, pattern)| {
@@ -257,18 +271,21 @@ fn expand_inner(data: &mut Dataset, mode: &str) -> Result<()> {
         let mut additions = std::mem::take(&mut initial_resources);
         for query in &queries {
             let QueryResults::Graph(triples) =
-                query.clone().on_queryable_dataset(&*data).execute()?
+                query.clone().on_queryable_dataset(&**data).execute()?
             else {
                 unreachable!("Inference rules are CONSTRUCT queries")
             };
             for triple in triples {
                 let triple = triple?;
-                additions.push(Quad::new(
-                    triple.subject,
-                    triple.predicate,
-                    triple.object,
-                    GraphName::DefaultGraph,
-                ));
+                additions.push(
+                    data,
+                    Quad::new(
+                        triple.subject,
+                        triple.predicate,
+                        triple.object,
+                        GraphName::DefaultGraph,
+                    ),
+                );
             }
         }
         if mode != "rdfs" {
@@ -305,12 +322,15 @@ fn expand_inner(data: &mut Dataset, mode: &str) -> Result<()> {
                             .collect();
                     }
                     for end in current {
-                        additions.push(Quad::new(
-                            crate::graph::subject(&start)?,
-                            property.clone(),
-                            end,
-                            GraphName::DefaultGraph,
-                        ));
+                        additions.push(
+                            data,
+                            Quad::new(
+                                crate::graph::subject(&start)?,
+                                property.clone(),
+                                end,
+                                GraphName::DefaultGraph,
+                            ),
+                        );
                     }
                 }
             }
@@ -358,20 +378,22 @@ fn expand_inner(data: &mut Dataset, mode: &str) -> Result<()> {
                         }
                     }
                     for other in candidates.into_iter().flatten() {
-                        additions.push(Quad::new(
-                            subject(member)?,
-                            iri(OWL, "sameAs"),
-                            other,
-                            GraphName::DefaultGraph,
-                        ));
+                        additions.push(
+                            data,
+                            Quad::new(
+                                subject(member)?,
+                                iri(OWL, "sameAs"),
+                                other,
+                                GraphName::DefaultGraph,
+                            ),
+                        );
                     }
                 }
             }
         }
-        let before = data.len();
-        data.extend(additions);
-        if data.len() == before {
+        if additions.0.is_empty() {
             return Ok(());
         }
+        data.extend(additions.0);
     }
 }
