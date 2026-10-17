@@ -14,6 +14,7 @@ import re
 import shlex
 import shutil
 import signal
+import subprocess
 import sys
 import tempfile
 import tomllib
@@ -74,11 +75,16 @@ def embedded_python_environment(python, environment):
 
 def initialize_project(project, python, environment):
     """Bare uv projects need a separate interpreter pin, not just a lower bound."""
-    run(
+    commands = [
         ["uv", "init", "--bare", "--no-workspace", "--vcs", "none", "--python", python, project],
-        environment,
-    )
-    run(["uv", "python", "pin", "--project", project, python], environment)
+        ["uv", "python", "pin", "--project", project, python],
+    ]
+    for arguments in commands:
+        if sys.platform == "win32":
+            # Windows project setup uses CreateProcess; LLVM instrumentation is still POSIX-only.
+            subprocess.run(list(map(str, arguments)), env=environment, check=True)
+        else:
+            run(arguments, environment)
 
 
 def parse_environment(text):
