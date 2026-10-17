@@ -1,0 +1,3 @@
+[env]
+# RocksDB needs aligned allocation; direct Cargo builds share the wheel minimum.
+MACOSX_DEPLOYMENT_TARGET = { value = "11.0", force = false }

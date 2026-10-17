@@ -10,7 +10,13 @@ route a Store through an in-memory Dataset to make those APIs appear supported.
 Store() creates an in-memory Oxigraph store. Store(path) opens RocksDB. The Rust
 persistence feature is optional for Rust builds; published Python wheels enable
 it, while the Python constructor still defaults to memory. Unsupported builds
-reject paths explicitly. close() releases the handle and rejects an active
+reject paths explicitly. Both macOS architectures require macOS 11 or later:
+RocksDB uses aligned allocation unavailable to the old Intel 10.12 target. Declare
+the minimum in Maturin's target tables for source builds and wheel tags, and in
+Cargo's build environment for direct Rust builds. CI consumes that project policy
+instead of maintaining its own target override. See
+[Maturin target configuration](https://www.maturin.rs/config#target-specific-maturin-options).
+close() releases the handle and rejects an active
 transaction. No namespace persistence or RDFLib Store plugin contract is claimed.
 
 Parsing and SPARQL Update use implicit transactions. An explicit Python context
