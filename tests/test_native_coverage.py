@@ -154,3 +154,32 @@ def test_embedded_python_rejects_an_invalid_runtime_prefix(monkeypatch):
     monkeypatch.setattr(module, "run", lambda *args, **kwargs: "relative-prefix\n")
     with pytest.raises(RuntimeError, match="absolute runtime prefix"):
         module.embedded_python_environment(Path("/venv/bin/python"), {})
+
+
+def test_native_uv_project_pins_the_requested_interpreter(tmp_path):
+    import json
+    import os
+    import subprocess
+    import sys
+
+    module = harness()
+    environment = dict(os.environ)
+    for name in ("VIRTUAL_ENV", "UV_PYTHON", "UV_PROJECT_ENVIRONMENT", "UV_PROJECT"):
+        environment.pop(name, None)
+    project = tmp_path / "isolated-project"
+    module.initialize_project(project, sys.executable, environment)
+    output = subprocess.check_output(
+        [
+            "uv",
+            "run",
+            "--project",
+            str(project),
+            "python",
+            "-c",
+            "import sys,json;print(json.dumps(list(sys.version_info[:2])))",
+        ],
+        env=environment,
+        text=True,
+    )
+    assert json.loads(output) == list(sys.version_info[:2])
+    assert (project / ".python-version").is_file()

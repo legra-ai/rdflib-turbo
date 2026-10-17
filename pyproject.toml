@@ -18,13 +18,20 @@ Repository = "https://github.com/legra-ai/rdflib-turbo"
 Issues = "https://github.com/legra-ai/rdflib-turbo/issues"
 
 [project.optional-dependencies]
-test = ["pytest>=8,<10", "pytest-cov>=7.1,<8", "ruff>=0.12"]
+test = [
+    "pytest>=8,<10",
+    "pytest-cov>=7.1,<8",
+    "ruff>=0.12",
+]
 
 [tool.maturin]
+profile = "release"
+locked = true
+editable-profile = "release"
 features = ["pyo3/extension-module"]
 python-source = "python"
 module-name = "rdflib_turbo._native"
-include = [{path = "requirements-coverage.in", format = "sdist"}, {path = "requirements-coverage.lock", format = "sdist"}, {path = "vendor/**/*", format = "sdist"}, {path = "tests/**/*", format = "sdist"}, {path = "docs/**/*", format = "sdist"}, {path = "scripts/**/*", format = "sdist"}, {path = ".github/**/*", format = "sdist"}, {path = "rust-toolchain.toml", format = "sdist"}]
+include = [{path = "uv.lock", format = "sdist"}, {path = "requirements-coverage.in", format = "sdist"}, {path = "requirements-coverage.lock", format = "sdist"}, {path = "vendor/**/*", format = "sdist"}, {path = "tests/**/*", format = "sdist"}, {path = "docs/**/*", format = "sdist"}, {path = "scripts/**/*", format = "sdist"}, {path = ".github/**/*", format = "sdist"}, {path = "rust-toolchain.toml", format = "sdist"}]
 exclude = ["**/target/**/*", "**/__pycache__/**/*"]
 
 [tool.pytest.ini_options]
@@ -43,3 +50,7 @@ branch = true
 [tool.coverage.report]
 fail_under = 100
 show_missing = true
+
+[dependency-groups]
+dev = ["mypy>=1.15,<2"]
+coverage = ["rdflib==7.6.0", "owlrl==7.6.2", "pyshacl==0.40.1", "pyshacl-turbo==0.2.4", "pytest==8.4.2", "pytest-cov==7.1.0", "ruff==0.17.0"]

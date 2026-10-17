@@ -30,6 +30,9 @@ jobs:
       version: ${{ steps.release.outputs.version }}
       revision: ${{ steps.release.outputs.revision }}
     steps:
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          version: "0.13.1"
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -37,7 +40,7 @@ jobs:
         with:
           python-version: '3.13'
       - id: release
-        run: python scripts/prepare_release.py
+        run: uv run --no-project python scripts/prepare_release.py
 
   sdist:
     needs: prepare
@@ -47,11 +50,13 @@ jobs:
         with:
           ref: ${{ needs.prepare.outputs.revision }}
       - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          version: "0.13.1"
       - uses: actions-rust-lang/setup-rust-toolchain@v2
         with:
           toolchain: 1.99.1
       - run: uv build --sdist --out-dir dist -C 'maturin.build-args=--locked'
-      - run: uvx --from twine==6.2.0 twine check --strict dist/*
+      - run: uv tool run --from twine==6.2.0 twine check --strict dist/*
       - uses: actions/upload-artifact@v7
         with:
           name: release-sdist
@@ -88,6 +93,8 @@ jobs:
         with:
           python-version: '3.11'
       - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          version: "0.13.1"
       - uses: actions-rust-lang/setup-rust-toolchain@v2
         with:
           toolchain: 1.99.1
@@ -103,22 +110,15 @@ jobs:
           tar -xzf source-dist/*.tar.gz --strip-components=1 -C source-build || exit 1
       - name: Build native manylinux wheel from source archive
         if: runner.os == 'Linux'
-        uses: PyO3/maturin-action@v1
-        with:
-          maturin-version: '1.15.0'
-          target: ${{ matrix.target }}
-          manylinux: '2_28'
-          container: ${{ matrix.container }}
-          working-directory: source-build
-          args: --release --locked --out ../dist --interpreter python3.11
+        run: sh scripts/build_manylinux.sh '${{ matrix.container }}' '${{ matrix.target }}' cp311-cp311
       - name: Build native wheel from source archive
         if: runner.os != 'Linux'
         env:
           MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deployment_target }}
         run: uv build --wheel --out-dir dist -C 'maturin.build-args=--locked --target ${{ matrix.target }} --compatibility pypi' source-dist/*.tar.gz
-      - run: uvx --from twine==6.2.0 twine check --strict dist/*
+      - run: uv tool run --from twine==6.2.0 twine check --strict dist/*
       - name: Test the installed wheel without source-tree imports
-        run: python scripts/test_wheel.py
+        run: uv run --no-project python scripts/test_wheel.py
       - uses: actions/upload-artifact@v7
         with:
           name: release-wheel-${{ matrix.target }}
@@ -139,6 +139,8 @@ jobs:
         with:
           ref: ${{ needs.prepare.outputs.revision }}
       - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          version: "0.13.1"
       - uses: actions-rust-lang/setup-rust-toolchain@v2
         with:
           toolchain: 1.99.1
@@ -151,8 +153,8 @@ jobs:
       - run: cargo clippy --locked -- -D warnings
       - name: Patched datatype parser regressions
         run: cargo test --locked -p oxsdatatypes --lib
-      - run: uvx ruff check python tests scripts
-      - run: uvx ruff format --check python tests scripts
+      - run: uv run --locked --extra test ruff check python tests scripts
+      - run: uv run --locked --extra test ruff format --check python tests scripts
 
   test:
     name: test
@@ -160,10 +162,13 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          version: "0.13.1"
       - name: Require all release checks
         env:
           RESULTS: ${{ toJSON(needs) }}
-        shell: python
+        shell: uv run --no-project python {0}
         run: |
           import json, os
           failures = [name for name, job in json.loads(os.environ['RESULTS']).items() if job['result'] != 'success']
@@ -180,7 +185,7 @@ jobs:
           pattern: release-*
           merge-multiple: true
           path: dist
-      - run: python scripts/release_packages.py check-build
+      - run: uv run --no-project python scripts/release_packages.py check-build
 
   publish:
     needs: [prepare, test]
@@ -197,6 +202,9 @@ jobs:
       RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
       RELEASE_REVISION: ${{ needs.prepare.outputs.revision }}
     steps:
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          version: "0.13.1"
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.revision }}
@@ -204,7 +212,7 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
-      - run: python scripts/tag_release.py
+      - run: uv run --no-project python scripts/tag_release.py
       - name: Create draft prerelease if absent
         run: |
           if gh release view "v$RELEASE_VERSION" >/dev/null 2>&1; then
@@ -217,14 +225,17 @@ jobs:
           pattern: release-*
           merge-multiple: true
           path: dist
-      - run: python scripts/release_packages.py stage
+      - run: uv run --no-project python scripts/release_packages.py stage
       - id: pending
-        run: python scripts/release_packages.py filter
-      - if: steps.pending.outputs.missing == 'true'
-        uses: pypa/gh-action-pypi-publish@release/v1
+        run: uv run --no-project python scripts/release_packages.py filter
+      - name: Attest the original tested archives
+        if: steps.pending.outputs.missing == 'true'
+        uses: astral-sh/attest-action@f589a42a7efb6fe400b4f400de60b4bc90390027
         with:
-          packages-dir: pending-packages/
-      - run: python scripts/release_packages.py verify
+          paths: pending-packages/*
+      - if: steps.pending.outputs.missing == 'true'
+        run: uv publish --trusted-publishing always pending-packages/*
+      - run: uv run --no-project python scripts/release_packages.py verify
       - run: gh release edit "v$RELEASE_VERSION" --draft=false
 
   publish-coverage:
@@ -240,6 +251,9 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          version: "0.13.1"
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.revision }}
@@ -250,7 +264,7 @@ jobs:
         with:
           name: native-rust-coverage
           path: coverage-site/reports
-      - run: python scripts/coverage_site.py --python coverage-site/reports/python-coverage.json --rust coverage-site/reports/summary.json --output coverage-site --project rdflib-turbo --revision "${{ needs.prepare.outputs.revision }}"
+      - run: uv run --no-project python scripts/coverage_site.py --python coverage-site/reports/python-coverage.json --rust coverage-site/reports/summary.json --output coverage-site --project rdflib-turbo --revision "${{ needs.prepare.outputs.revision }}"
       - uses: actions/upload-pages-artifact@v5
         with:
           path: coverage-site
