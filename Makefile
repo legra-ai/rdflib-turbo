@@ -23,3 +23,9 @@ test-rust-coverage:
 
 benchmark-companions:
 	$(MAKE) -C ../pyshacl-turbo benchmark-companions
+
+.PHONY: test-store-contract
+test-store-contract:
+	cargo test --locked --lib store_tests
+	cargo test --locked --manifest-path tests/store-contract/Cargo.toml --no-default-features
+	cargo test --locked --manifest-path tests/store-contract/Cargo.toml --features rdf-12,persistence

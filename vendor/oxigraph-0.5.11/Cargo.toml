@@ -43,7 +43,7 @@ rustdoc-args = [
 ]
 
 [features]
-exact-term-storage = ["oxrdf/rdf-10-string-identity"]
+exact-term-storage = ["oxrdf/rdf-10-string-identity", "spareval/exact-term-builtins"]
 default = ["rocksdb"]
 http-client = ["oxhttp"]
 http-client-native-tls = [

@@ -1,0 +1,25 @@
+[package]
+name = "turbo-store-contract"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.99.1"
+publish = false
+
+[features]
+default = ["exact"]
+exact = ["oxigraph/exact-term-storage"]
+persistence = ["oxigraph/rocksdb"]
+rdf-12 = ["oxigraph/rdf-12"]
+
+[dependencies]
+oxigraph = { path = "../../vendor/oxigraph-0.5.11", default-features = false }
+
+[dev-dependencies]
+tempfile = "3"
+
+[patch.crates-io]
+spareval = { path = "../../vendor/spareval-0.2.7" }
+oxrdf = { path = "../../vendor/oxrdf-0.3.4" }
+spargebra = { path = "../../vendor/spargebra-0.4.7" }
+sparopt = { path = "../../vendor/sparopt-0.3.7" }
+oxsdatatypes = { path = "../../vendor/oxsdatatypes-0.2.3" }
