@@ -1,6 +1,6 @@
 # ADR 0006: Preserve RDF terms before adopting a transactional Store
 
-Status: Accepted; storage prerequisite implemented, runtime adoption pending
+Status: Accepted; storage prerequisite and Store API implemented, Dataset/engine adoption pending
 
 ## Decision
 
@@ -56,5 +56,6 @@ Oxigraph buffers transaction changes in memory. This removes rollback copies of
 the base dataset; it does not promise bounded memory for an arbitrarily large
 transaction, every SPARQL query, inference closure or validation report. Measure
 actual installed wheels, base-store size, transaction delta and process RSS.
-Public persistence, transaction APIs and direct engine adapters remain follow-up
-work and must have their own regression and installed-wheel tests before release.
+ADR 0007 exposes a separately tested public Store/transaction API with optional
+persistent storage. Dataset integration and direct engine adapters remain follow-up
+work and require their own regression and installed-wheel tests before release.

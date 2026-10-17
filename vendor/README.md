@@ -24,3 +24,8 @@ in the companion pyshacl-turbo checkout.
   `rust-sources.json` records its own archive checksum and upstream revision.
   Both upstream license texts are retained. These new patches and spareval's
   `exact-term-builtins` patch originate here, not in the initial extraction.
+
+- `oxrocksdb-sys-0.5.11-notices/`: unmodified Apache, LevelDB and LZ4 library
+  notices for the registry dependency linked into persistent-capable wheels.
+  Its README records archive identity and bundled components. These are license
+  files only; Cargo.lock pins the unmodified registry crate.

@@ -3,11 +3,23 @@
 import subprocess
 import tempfile
 from pathlib import Path
+from zipfile import ZipFile
 
 root = Path(__file__).resolve().parents[1]
 wheels = list((root / "dist").glob("*.whl"))
 if len(wheels) != 1:
     raise ValueError("Expected exactly one built wheel")
+# Native persistence bundles RocksDB, LevelDB-derived code and the LZ4 library.
+# Check the actual artifact rather than assuming license-files globs were applied.
+with ZipFile(wheels[0]) as archive:
+    members = archive.namelist()
+    for name in ("LICENSE-APACHE", "LICENSE-LEVELDB", "LICENSE-LZ4"):
+        relative = f"vendor/oxrocksdb-sys-0.5.11-notices/{name}"
+        matches = [member for member in members if member.endswith(f"/licenses/{relative}")]
+        if len(matches) != 1:
+            raise RuntimeError(f"Wheel is missing bundled native license: {relative}")
+        if archive.read(matches[0]) != (root / relative).read_bytes():
+            raise RuntimeError(f"Bundled native license changed: {relative}")
 for version in ("3.11", "3.14"):
     with tempfile.TemporaryDirectory() as directory:
         project = Path(directory) / "project"
