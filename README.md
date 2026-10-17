@@ -49,6 +49,10 @@ custom functions and remote SERVICE execution are not provided. RDFLib conversio
 copy data and explicitly preserve caller blank-node identifiers. Query results are
 eagerly materialized. No performance or complete-conformance claim is made.
 
+The transactional-store work starts with an exact-term storage patch, tested
+against in-memory Oxigraph and optional RocksDB. Public persistence and transaction
+APIs are still pending; see [the storage decision](docs/adr/0006-exact-term-transactional-store.md).
+
 ## Inference and SHACL
 
 ```python

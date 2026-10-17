@@ -18,3 +18,9 @@ in the companion pyshacl-turbo checkout.
 - `oxsdatatypes-0.2.3/`: published Oxigraph datatype sources with one parser correction
   for `xsd:gMonthDay` February 29. See its `TURBO-PATCH.md` and original archive
   checksum in `rust-sources.json`. MIT and Apache license texts are retained.
+
+- `oxigraph-0.5.11/`: published crate with opt-in exact typed-literal storage
+  and SPARQL term identity patches. Its `TURBO-PATCH.md` describes the changes;
+  `rust-sources.json` records its own archive checksum and upstream revision.
+  Both upstream license texts are retained. These new patches and spareval's
+  `exact-term-builtins` patch originate here, not in the initial extraction.

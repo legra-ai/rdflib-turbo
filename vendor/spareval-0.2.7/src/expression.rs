@@ -3,7 +3,9 @@ use crate::ExpressionTriple;
 use crate::dataset::ExpressionTerm;
 use md5::{Digest, Md5};
 use oxiri::Iri;
-use oxrdf::vocab::{rdf, xsd};
+#[cfg(not(feature = "exact-term-builtins"))]
+use oxrdf::vocab::rdf;
+use oxrdf::vocab::xsd;
 #[cfg(feature = "sparql-12")]
 use oxrdf::{BaseDirection, NamedOrBlankNode};
 use oxrdf::{BlankNode, Literal, NamedNode, Term, Variable};
@@ -468,6 +470,32 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
             })
         }
         Expression::FunctionCall(function, parameters) => match function {
+            #[cfg(feature = "exact-term-builtins")]
+            Function::Str | Function::Datatype => {
+                // These functions inspect the RDF term, not its numeric value.
+                let value: ExpressionEvaluator<'a, C::Tuple, Term> = if let Some(evaluator) =
+                    try_build_internal_expression_evaluator(&parameters[0], context)?
+                {
+                    let externalize = context.build_externalize_term();
+                    Rc::new(move |tuple: &C::Tuple| externalize(evaluator(tuple)?))
+                } else {
+                    let evaluator = build_expression_evaluator(&parameters[0], context)?;
+                    Rc::new(move |tuple: &C::Tuple| Some(evaluator(tuple)?.into()))
+                };
+                let datatype = matches!(function, Function::Datatype);
+                Rc::new(move |tuple| match value(tuple)? {
+                    Term::Literal(value) => Some(if datatype {
+                        ExpressionTerm::NamedNode(value.datatype().into_owned())
+                    } else {
+                        ExpressionTerm::StringLiteral(value.value().to_owned())
+                    }),
+                    Term::NamedNode(value) if !datatype => {
+                        Some(ExpressionTerm::StringLiteral(value.into_string()))
+                    }
+                    _ => None,
+                })
+            }
+            #[cfg(not(feature = "exact-term-builtins"))]
             Function::Str => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
                 Rc::new(move |tuple| {
@@ -545,6 +573,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                     }))
                 })
             }
+            #[cfg(not(feature = "exact-term-builtins"))]
             Function::Datatype => {
                 let e = build_expression_evaluator(&parameters[0], context)?;
                 Rc::new(move |tuple| {

@@ -43,3 +43,9 @@ disabled and exact terms with Turbo's features enabled. The standalone manifest
 uses the same local oxrdf/spargebra/sparopt patches, with its own pinned lockfile.
 It is excluded from the main workspace to prevent feature unification from
 silently enabling the compatibility features during the default-mode test.
+
+The opt-in `exact-term-builtins` feature enables `exact-custom-function-terms`
+and evaluates STR and DATATYPE against original RDF terms when available. Numeric
+value expressions retain normal value semantics. Without the feature, the upstream
+builtin paths remain unchanged. The transactional Store enables this feature;
+see rdflib-turbo ADR 0006 and `src/store_tests.rs`.

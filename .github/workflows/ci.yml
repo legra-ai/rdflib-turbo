@@ -159,6 +159,8 @@ jobs:
         run: cargo test --locked -p oxsdatatypes --lib
       - name: Additive dataset transaction regressions
         run: cargo test --locked --manifest-path vendor/oxrdf-0.3.4/Cargo.toml --all-features --lib
+      - name: Exact-term transactional storage contracts
+        run: make test-store-contract
       - name: Native inference allocation budget
         shell: uv run --no-project --python 3.13 python {0}
         run: |

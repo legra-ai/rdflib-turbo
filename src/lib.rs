@@ -349,3 +349,6 @@ mod native_tests;
 
 #[cfg(all(test, feature = "allocation-profiling"))]
 mod allocation_tests;
+
+#[cfg(test)]
+mod store_tests;

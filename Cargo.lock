@@ -386,8 +386,6 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 [[package]]
 name = "oxigraph"
 version = "0.5.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f6632dd080bd07676f06e70254ff5862c9943e9483d700fa7258df73a3f9a6a"
 dependencies = [
  "dashmap",
  "getrandom 0.3.4",
@@ -396,13 +394,14 @@ dependencies = [
  "oxrdf",
  "oxrdfio",
  "oxsdatatypes",
+ "rand 0.8.8",
  "rand 0.9.5",
  "rustc-hash",
  "siphasher",
  "sparesults",
  "spareval",
  "spargebra",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
