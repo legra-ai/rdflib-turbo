@@ -172,7 +172,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     )?;
     module.add(
         "SHACL_ENGINE_REVISION",
-        "e565ab9fbc3c4587d736467f7cee18eaf28c30ce",
+        "7ece7c2b48b4c01abf6c4b7ba2e9b308c4e0fd14",
     )?;
     module.add(
         "SharedValidationFailure",
