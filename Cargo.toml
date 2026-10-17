@@ -1,6 +1,6 @@
 [package]
 name = "rdflib-turbo-native"
-version = "0.1.0-alpha.2"
+version = "0.2.0-alpha.1"
 edition = "2024"
 rust-version = "1.99.1"
 license = "MIT OR Apache-2.0"
@@ -14,6 +14,8 @@ name = "_native"
 crate-type = ["cdylib"]
 
 [dependencies]
+pyshacl-turbo-engine = { git = "https://github.com/legra-ai/pyshacl-turbo", rev = "e565ab9fbc3c4587d736467f7cee18eaf28c30ce" }
+serde = { version = "1", features = ["derive"] }
 oxigraph = { version = "=0.5.11", default-features = false }
 oxrdf = { version = "=0.3.4", features = ["rdf-10-string-identity"] }
 pyo3 = { version = "=0.29.3", features = ["abi3-py311"] }
@@ -23,6 +25,7 @@ spareval = { version = "=0.2.7", features = ["exact-custom-function-terms"] }
 thiserror = "2"
 
 [patch.crates-io]
+fancy-regex = { git = "https://github.com/legra-ai/pyshacl-turbo", rev = "e565ab9fbc3c4587d736467f7cee18eaf28c30ce" }
 oxrdf = { path = "vendor/oxrdf-0.3.4" }
 sparopt = { path = "vendor/sparopt-0.3.7" }
 spareval = { path = "vendor/spareval-0.2.7" }

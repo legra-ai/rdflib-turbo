@@ -17,7 +17,7 @@ Companion turbo projects: [pyshacl-turbo](https://github.com/legra-ai/pyshacl-tu
 [owlrl-turbo](https://github.com/legra-ai/owlrl-turbo).
 
 ```sh
-uv add rdflib-turbo==0.1.0a2
+uv add rdflib-turbo==0.2.0a1
 ```
 
 ```python
@@ -44,7 +44,7 @@ Graph-only serializers reject named-graph data rather than discarding contexts.
 
 This is **not a complete drop-in RDFLib replacement**. It uses the rdflib_turbo
 namespace and a deliberately small Dataset API. Graph/Store plugins, SPARQL Update,
-initial bindings, persistent storage, namespace extraction from parsed documents,
+initial bindings, persistent storage,
 custom functions and remote SERVICE execution are not provided. RDFLib conversions
 copy data and explicitly preserve caller blank-node identifiers. Query results are
 eagerly materialized. No performance or complete-conformance claim is made.
@@ -55,13 +55,16 @@ eagerly materialized. No performance or complete-conformance claim is made.
 from owlrl_turbo import expand
 from pyshacl_turbo import validate
 
-expanded = expand(data, inference="rdfs")
-# pyshacl-turbo currently requires this explicit copying conversion.
-conforms, report, text = validate(expanded.to_rdflib(), shacl_graph="shapes.ttl")
+expand(data, inference="rdfs", inplace=True)
+conforms, report, text = validate(data, shacl_graph="shapes.ttl")
 ```
 
-owlrl-turbo shares this native dataset runtime. pyshacl-turbo integration currently
-uses RDFLib conversion; no shared native SHACL handle is claimed. See
+The shared validation path requires this runtime's 0.2.0a1 release, owlrl-turbo
+0.1.0a3 or later, and the companion pyshacl-turbo shared-dataset release. Parsing,
+in-place inference and ordinary validation retain the same native data object.
+Only the validation report becomes an RDFLib graph. Rules stage changes privately
+and commit only after success when inplace=True is requested. See
+[the SHACL ownership ADR](docs/adr/0004-dataset-owned-shacl.md),
 [the runtime ADR](docs/adr/0001-shared-native-runtime.md) and
 [source provenance](vendor/README.md).
 

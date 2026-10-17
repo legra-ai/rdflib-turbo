@@ -10,6 +10,7 @@ use serde_json::{Value, json};
 mod graph;
 mod inference;
 mod path;
+mod shacl;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -123,7 +124,7 @@ impl NativeDataset {
         rdf_format: &str,
         base: Option<&str>,
         preserve_blank_nodes: bool,
-    ) -> PyResult<()> {
+    ) -> PyResult<Vec<(String, String)>> {
         let rdf_format = format(rdf_format)?;
         py.detach(|| {
             let mut parser = RdfParser::from_format(rdf_format);
@@ -135,15 +136,20 @@ impl NativeDataset {
                     .with_base_iri(base)
                     .map_err(|e| PyValueError::new_err(e.to_string()))?;
             }
-            let additions = parser
-                .for_slice(source.as_bytes())
+            let mut reader = parser.for_slice(source.as_bytes());
+            let additions = reader
+                .by_ref()
                 .collect::<std::result::Result<Vec<_>, _>>()
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
+            let prefixes = reader
+                .prefixes()
+                .map(|(p, n)| (p.to_owned(), n.to_owned()))
+                .collect();
             self.inner
                 .write()
                 .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?
                 .extend(additions);
-            Ok(())
+            Ok(prefixes)
         })
     }
 
@@ -282,6 +288,7 @@ impl NativeDataset {
 #[pymodule]
 fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeDataset>()?;
+    shacl::register(module)?;
     Ok(())
 }
 

@@ -9,7 +9,7 @@ from rdflib.query import Result
 
 from ._native import NativeDataset
 
-__version__ = "0.1.0a2"
+__version__ = "0.2.0a1"
 __all__ = ["Dataset"]
 
 
@@ -64,8 +64,13 @@ class Dataset:
             data = data.decode("utf-8")
         if not isinstance(data, str):
             raise TypeError("RDF data must be str or UTF-8 bytes")
-        self._native.load(data, format, publicID)
+        prefixes = self._native.load(data, format, publicID)
+        self._namespaces = tuple(dict((*self._namespaces, *prefixes)).items())
         return self
+
+    def namespaces(self):
+        """Return namespace bindings retained atomically from parsed documents."""
+        return iter(self._namespaces)
 
     def serialize(self, *, format="nquads"):
         """Serialize natively; graph-only formats reject named graph data."""
