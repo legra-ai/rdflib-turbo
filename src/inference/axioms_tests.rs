@@ -40,7 +40,9 @@ fn used_datatypes_receive_all_ancestor_types_and_disjointness_axioms() {
     ));
     for combined in [false, true] {
         let mut expanded = data.clone();
-        owl(&mut expanded, combined);
+        let mut transaction = expanded.insert_transaction();
+        owl(&mut transaction, combined);
+        transaction.commit();
         assert!(expanded.contains(QuadRef::new(
             iri("urn:datatype:", "unsignedByte").as_ref(),
             iri(RDF, "type").as_ref(),
@@ -59,6 +61,6 @@ fn used_datatypes_receive_all_ancestor_types_and_disjointness_axioms() {
             iri(RDF, "PlainLiteral").as_ref(),
             GraphNameRef::DefaultGraph
         )));
-        assert!(!resources(&data).is_empty());
+        assert!(resources(&data).next().is_some());
     }
 }

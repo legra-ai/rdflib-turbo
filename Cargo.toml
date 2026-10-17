@@ -13,6 +13,10 @@ publish = false
 name = "_native"
 crate-type = ["cdylib"]
 
+[features]
+# Test-binary allocation accounting; never enable in published wheels.
+allocation-profiling = []
+
 [dependencies]
 pyshacl-turbo-engine = { git = "https://github.com/legra-ai/pyshacl-turbo", rev = "7ece7c2b48b4c01abf6c4b7ba2e9b308c4e0fd14" }
 serde = { version = "1", features = ["derive"] }

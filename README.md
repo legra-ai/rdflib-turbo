@@ -80,6 +80,9 @@ Python dependencies with `uv add`; run Ruff, mypy and pytest through `uv run`.
 Build wheels and source distributions with `uv build`. The coverage and release
 harnesses create isolated uv projects and install the exact built wheels.
 
+The [native heap profiler and allocation budget](https://github.com/legra-ai/rdflib-turbo/blob/107a382acb42282069f5be3a58a51f687ef3e14e/docs/inference-memory.md) explain
+phase-level memory measurements and the inference insertion journal.
+
 The [shared companion-project benchmark suite](https://github.com/legra-ai/pyshacl-turbo/blob/main/benchmarks/companions.md)
 compares parsing, serialization, queries, inference, conversion costs and complete
 SHACL pipelines against the reference packages. With all three repositories as

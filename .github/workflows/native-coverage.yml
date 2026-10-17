@@ -39,6 +39,7 @@ jobs:
         with:
           toolchain: 1.99.1
           components: llvm-tools-preview
+          cache-key: vendor-${{ hashFiles('vendor/**') }}
       - run: cargo install cargo-llvm-cov --version 0.9.1 --locked
       - run: uv run --no-project python scripts/native_coverage.py --owlrl-source coverage-companion-owlrl
       - uses: actions/upload-artifact@v7

@@ -68,7 +68,7 @@ fn triple(s: impl Into<NamedOrBlankNode>, p: NamedNode, o: impl Into<Term>) -> Q
     Quad::new(s, p, o, GraphName::DefaultGraph)
 }
 
-pub(super) fn owl(data: &mut Dataset, combined: bool) {
+pub(super) fn owl(data: &mut oxrdf::dataset::InsertTransaction<'_>, combined: bool) {
     let datatypes: HashSet<NamedNode> = XSD_TYPES
         .iter()
         .map(|n| iri(XSD, n))
@@ -190,20 +190,17 @@ pub(super) fn owl(data: &mut Dataset, combined: bool) {
     data.extend(additions);
 }
 
-pub(super) fn resources(data: &Dataset) -> Vec<Quad> {
-    data.iter()
-        .flat_map(|q| {
-            let mut nodes = vec![q.subject.into_owned()];
-            match q.object {
-                TermRef::NamedNode(n) => nodes.push(n.into_owned().into()),
-                TermRef::BlankNode(n) => nodes.push(n.into_owned().into()),
-                TermRef::Literal(_) => {}
-            }
-            nodes
-                .into_iter()
-                .map(|node| triple(node, iri(RDF, "type"), iri(RDFS, "Resource")))
-        })
-        .collect()
+pub(super) fn resources(data: &Dataset) -> impl Iterator<Item = Quad> + '_ {
+    data.iter().flat_map(|q| {
+        let object = match q.object {
+            TermRef::NamedNode(n) => Some(n.into_owned().into()),
+            TermRef::BlankNode(n) => Some(n.into_owned().into()),
+            TermRef::Literal(_) => None,
+        };
+        std::iter::once(q.subject.into_owned())
+            .chain(object)
+            .map(|node| triple(node, iri(RDF, "type"), iri(RDFS, "Resource")))
+    })
 }
 
 #[cfg(test)]

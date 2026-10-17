@@ -10,6 +10,11 @@ from the same commit under MIT OR Apache-2.0. This repository owns the extracted
 implementation from this point forward; it has no Python dependency on pyshacl-turbo.
 No unpublished preparation-cache changes were copied.
 
+The rdflib-turbo runtime additionally patches oxrdf's dataset/interner with
+additive insertion transactions; see `oxrdf-0.3.4/TURBO-PATCH.md` and ADR 0005.
+The initial extraction provenance above does not imply this new patch is present
+in the companion pyshacl-turbo checkout.
+
 - `oxsdatatypes-0.2.3/`: published Oxigraph datatype sources with one parser correction
   for `xsd:gMonthDay` February 29. See its `TURBO-PATCH.md` and original archive
   checksum in `rust-sources.json`. MIT and Apache license texts are retained.

@@ -26,15 +26,6 @@ pub fn with_union(data: &Dataset) -> Dataset {
     union
 }
 
-pub fn commit_additions(data: &mut Dataset, before: &Dataset, after: &Dataset) {
-    data.extend(
-        after
-            .iter()
-            .filter(|q| !before.contains(*q))
-            .map(|q| q.into_owned()),
-    );
-}
-
 pub fn objects(store: &Dataset, node: &Term, predicate: &NamedNode) -> Result<Vec<Term>> {
     let Ok(node) = subject(node) else {
         return Ok(Vec::new());

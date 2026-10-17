@@ -39,6 +39,10 @@ use std::fmt;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::mem::take;
 
+#[cfg(test)]
+#[path = "dataset_transaction_tests.rs"]
+mod transaction_tests;
+
 /// An in-memory [RDF dataset](https://www.w3.org/TR/rdf11-concepts/#dfn-rdf-dataset).
 ///
 /// It can accommodate a fairly large number of quads (in the few millions).
@@ -108,6 +112,20 @@ pub struct Dataset {
 }
 
 impl Dataset {
+    /// Begins an additive transaction without cloning the dataset or its indexes.
+    ///
+    /// The guard permits reads and insertions only. Dropping it before `commit`
+    /// removes inserted quads from every index and releases newly interned terms,
+    /// including during unwinding. The journal contains compact interned keys.
+    pub fn insert_transaction(&mut self) -> InsertTransaction<'_> {
+        self.interner.begin_insertions();
+        InsertTransaction {
+            dataset: self,
+            inserted: Vec::new(),
+            committed: false,
+        }
+    }
+
     /// Creates a new dataset
     pub fn new() -> Self {
         Self::default()
@@ -2034,6 +2052,71 @@ fn generate_permutations<T: Copy>(items: impl IntoIterator<Item = T>) -> Vec<Vec
         current_output = new_output;
     }
     current_output
+}
+
+/// An additive transaction. There is deliberately no mutable dataset dereference:
+/// removals, clears and nested transactions cannot bypass the insertion journal.
+pub struct InsertTransaction<'a> {
+    dataset: &'a mut Dataset,
+    inserted: Vec<(
+        InternedNamedOrBlankNode,
+        InternedNamedNode,
+        InternedTerm,
+        InternedGraphName,
+    )>,
+    committed: bool,
+}
+
+impl InsertTransaction<'_> {
+    /// Inserts only a previously absent quad, recording its compact interned key.
+    pub fn insert<'a>(&mut self, quad: impl Into<QuadRef<'a>>) -> bool {
+        let encoded = self.dataset.encode_quad(quad.into());
+        if self.dataset.spog.contains(&encoded) {
+            return false;
+        }
+        self.inserted.push(encoded.clone());
+        self.dataset.insert_encoded(encoded);
+        true
+    }
+
+    /// Quads inserted by this transaction, excluding preexisting or duplicate quads.
+    pub fn inserted(&self) -> impl Iterator<Item = QuadRef<'_>> {
+        self.inserted
+            .iter()
+            .map(|(s, p, o, g)| self.dataset.decode_spog((s, p, o, g)))
+    }
+
+    /// Retains all insertions. Dropping the journal does not copy the dataset.
+    pub fn commit(mut self) {
+        self.committed = true;
+    }
+}
+
+impl std::ops::Deref for InsertTransaction<'_> {
+    type Target = Dataset;
+
+    fn deref(&self) -> &Dataset {
+        self.dataset
+    }
+}
+
+impl Extend<Quad> for InsertTransaction<'_> {
+    fn extend<T: IntoIterator<Item = Quad>>(&mut self, iter: T) {
+        for quad in iter {
+            self.insert(&quad);
+        }
+    }
+}
+
+impl Drop for InsertTransaction<'_> {
+    fn drop(&mut self) {
+        if !self.committed {
+            for quad in self.inserted.drain(..).rev() {
+                self.dataset.remove_encoded(quad);
+            }
+        }
+        self.dataset.interner.finish_insertions(self.committed);
+    }
 }
 
 #[cfg(feature = "rdfc-10")]

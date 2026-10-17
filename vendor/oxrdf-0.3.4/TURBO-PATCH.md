@@ -23,3 +23,14 @@ Regressions: `tests/test_literal_identity.py`, `tests/test_dash_literals.py`,
 `crates/engine/tests/pipeline.rs::plain_and_typed_strings_survive_dataset_round_trip`,
 and `literal::tests::test_explicit_string_identity`. The unmodified upstream
 simple-literal equality test remains active when the feature is disabled.
+
+## Additive dataset transactions
+
+`Dataset::insert_transaction` journals only new compact interned quad keys and
+new interner entries. Its read-only dataset view and explicit insert/extend API
+prevent unjournaled removals or clears. Commit retains insertions; guard drop
+rolls back all indexes and newly interned terms, including during unwinding.
+Snapshots cloned from its read view are independent. This local API is used by
+native inference to preserve atomic failure without copying the existing six
+indexes. See `dataset_transaction_tests.rs` and runtime ADR 0005. Original crate
+archive hashes and licenses remain unchanged as source provenance.
