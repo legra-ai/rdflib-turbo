@@ -1,3 +1,5 @@
+use oxigraph::sparql::QueryResults;
+
 use super::*;
 use crate::graph::{RDF, iri};
 

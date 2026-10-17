@@ -28,7 +28,7 @@ test = [
 profile = "release"
 locked = true
 editable-profile = "release"
-features = ["pyo3/extension-module"]
+features = ["pyo3/extension-module", "persistence"]
 python-source = "python"
 module-name = "rdflib_turbo._native"
 include = [{path = "uv.lock", format = "sdist"}, {path = "requirements-coverage.in", format = "sdist"}, {path = "requirements-coverage.lock", format = "sdist"}, {path = "vendor/**/*", format = "sdist"}, {path = "tests/**/*", format = "sdist"}, {path = "docs/**/*", format = "sdist"}, {path = "scripts/**/*", format = "sdist"}, {path = ".github/**/*", format = "sdist"}, {path = "rust-toolchain.toml", format = "sdist"}]

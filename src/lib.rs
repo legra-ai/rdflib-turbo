@@ -3,7 +3,7 @@ use std::sync::RwLock;
 
 use oxigraph::io::{RdfFormat, RdfParser, RdfSerializer};
 use oxigraph::model::*;
-use oxigraph::sparql::{QueryResults, SparqlEvaluator};
+use oxigraph::sparql::SparqlEvaluator;
 use pyo3::exceptions::{PyNotImplementedError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use serde_json::{Value, json};
@@ -12,6 +12,7 @@ mod graph;
 mod inference;
 mod path;
 mod shacl;
+mod store;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -272,42 +273,7 @@ impl NativeDataset {
                 .on_queryable_dataset(view)
                 .execute()
                 .map_err(|e| error(e.into()))?;
-            match result {
-                QueryResults::Boolean(value) => Ok(("ASK".into(), json!(value).to_string())),
-                QueryResults::Solutions(solutions) => {
-                    let variables: Vec<_> = solutions
-                        .variables()
-                        .iter()
-                        .map(|v| v.as_str().to_owned())
-                        .collect();
-                    let mut rows = Vec::new();
-                    for solution in solutions {
-                        let solution = solution.map_err(|e| error(e.into()))?;
-                        let row: serde_json::Map<_, _> = solution
-                            .iter()
-                            .map(|(v, t)| (v.as_str().to_owned(), term(t)))
-                            .collect();
-                        rows.push(row);
-                    }
-                    Ok((
-                        "SELECT".into(),
-                        json!({"variables":variables,"rows":rows}).to_string(),
-                    ))
-                }
-                QueryResults::Graph(triples) => {
-                    let mut output = Dataset::new();
-                    for triple in triples {
-                        let triple = triple.map_err(|e| error(e.into()))?;
-                        output.insert(&Quad::new(
-                            triple.subject,
-                            triple.predicate,
-                            triple.object,
-                            GraphName::DefaultGraph,
-                        ));
-                    }
-                    Ok((graph_kind.into(), serialize(&output, RdfFormat::NQuads)?))
-                }
-            }
+            store::output::query_output(result, graph_kind).map_err(error)
         })
     }
 
@@ -341,6 +307,7 @@ impl NativeDataset {
 fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeDataset>()?;
     shacl::register(module)?;
+    store::register(module)?;
     Ok(())
 }
 
