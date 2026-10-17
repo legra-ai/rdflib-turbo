@@ -1,28 +1,23 @@
 # rdflib-turbo
 
+[![PyPI](https://img.shields.io/pypi/v/rdflib-turbo)](https://pypi.org/project/rdflib-turbo/)
+
+[![Tests and wheels](https://github.com/legra-ai/rdflib-turbo/actions/workflows/ci.yml/badge.svg)](https://github.com/legra-ai/rdflib-turbo/actions/workflows/ci.yml)
+
 [![Python line coverage](https://legra-ai.github.io/rdflib-turbo/python-lines.svg)](https://legra-ai.github.io/rdflib-turbo/)
 [![Python branch coverage](https://legra-ai.github.io/rdflib-turbo/python-branches.svg)](https://legra-ai.github.io/rdflib-turbo/)
 [![Rust line coverage](https://legra-ai.github.io/rdflib-turbo/rust-lines.svg)](https://legra-ai.github.io/rdflib-turbo/)
 [![Rust region coverage](https://legra-ai.github.io/rdflib-turbo/rust-regions.svg)](https://legra-ai.github.io/rdflib-turbo/)
 [![Rust function coverage](https://legra-ai.github.io/rdflib-turbo/rust-functions.svg)](https://legra-ai.github.io/rdflib-turbo/)
 
-Coverage badges update from successful main-branch CI measurements, including the
-daily scheduled run. Python lines and branches are separate; Rust badges measure
-owned native source exercised by Rust and Python integration tests.
-Rust branch coverage and dependency/vendored-patch coverage are not measured by these badges.
-
-[![PyPI](https://img.shields.io/pypi/v/rdflib-turbo)](https://pypi.org/project/rdflib-turbo/)
-[![Tests and wheels](https://github.com/legra-ai/rdflib-turbo/actions/workflows/ci.yml/badge.svg)](https://github.com/legra-ai/rdflib-turbo/actions/workflows/ci.yml)
-
-Companion turbo projects: [pyshacl-turbo](https://github.com/legra-ai/pyshacl-turbo),
-[rdflib-turbo](https://github.com/legra-ai/rdflib-turbo) and
-[owlrl-turbo](https://github.com/legra-ai/owlrl-turbo).
-
 Functional alpha of a native RDF dataset runtime for Python, built on Oxigraph
 and exact-term compatibility work extracted from pyshacl-turbo.
 
+Companion turbo projects: [pyshacl-turbo](https://github.com/legra-ai/pyshacl-turbo) and
+[owlrl-turbo](https://github.com/legra-ai/owlrl-turbo).
+
 ```sh
-pip install rdflib-turbo==0.1.0a2
+uv add rdflib-turbo==0.1.0a2
 ```
 
 ```python
@@ -76,6 +71,12 @@ Copyright 2026 DataRoad Inc, Delaware, USA, trading as Legra.
 
 ## Development
 
+Development uses native uv project commands and the committed `uv.lock`.
+Run `make dev` to sync the project and test tools, then `make check`. Add or update
+Python dependencies with `uv add`; run Ruff, mypy and pytest through `uv run`.
+Build wheels and source distributions with `uv build`. The coverage and release
+harnesses create isolated uv projects and install the exact built wheels.
+
 The [shared companion-project benchmark suite](https://github.com/legra-ai/pyshacl-turbo/blob/main/benchmarks/companions.md)
 compares parsing, serialization, queries, inference, conversion costs and complete
 SHACL pipelines against the reference packages. With all three repositories as
@@ -86,13 +87,19 @@ Use `make dev` and `make check`. The initial alpha is published only by the
 verified GitHub Actions workflow; see [release instructions](docs/releasing.md).
 
 ```sh
-uv venv
-uv pip install maturin pytest ruff
-uv run maturin develop --release
-uv run pytest
+make dev
+uv run --locked --extra test ruff check python tests scripts
+uv run --locked --extra test pytest
 cargo fmt --check
 cargo clippy -- -D warnings
 ```
 
-CI requires 100% measured Python package line and branch coverage. This does
-not measure Rust coverage, full API compatibility or standards conformance.
+### Coverage
+
+Coverage badges update from successful main-branch CI measurements, including the
+daily scheduled run. Python lines and branches are separate; Rust badges measure
+owned native source exercised by Rust and Python integration tests.
+Rust branch coverage and dependency/vendored-patch coverage are not measured by these badges.
+
+CI requires 100% measured Python package line and branch coverage. Coverage is
+separate from full API compatibility and standards conformance.

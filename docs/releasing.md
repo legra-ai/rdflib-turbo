@@ -29,3 +29,10 @@ Configure the initial pending trusted publisher in PyPI with:
 
 The pypi GitHub environment permits main only. The first successful upload
 creates the PyPI project. A pending publisher alone does not reserve its name.
+
+
+Source distributions and wheels are built with `uv build`, including native
+manylinux builds inside the platform containers. Publication uses `uv publish`
+with the existing trusted publisher and PEP 740 attestations for the original
+tested archives. Normal development uses `uv sync --locked --extra test` and
+`uv run --locked --extra test`; no pip interface or tox environment is used.

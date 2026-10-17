@@ -1,2 +1,2 @@
 #!/bin/sh
-python3 scripts/commit_policy.py "$1" || exit 1
+uv run --no-project python scripts/commit_policy.py "$1" || exit 1

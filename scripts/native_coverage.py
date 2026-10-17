@@ -14,6 +14,7 @@ import re
 import shlex
 import shutil
 import signal
+import subprocess
 import sys
 import tempfile
 import tomllib
@@ -70,6 +71,20 @@ def embedded_python_environment(python, environment):
     if not Path(prefix).is_absolute():
         raise RuntimeError("Python did not report an absolute runtime prefix")
     return {**environment, "PYTHONHOME": prefix}
+
+
+def initialize_project(project, python, environment):
+    """Bare uv projects need a separate interpreter pin, not just a lower bound."""
+    commands = [
+        ["uv", "init", "--bare", "--no-workspace", "--vcs", "none", "--python", python, project],
+        ["uv", "python", "pin", "--project", project, python],
+    ]
+    for arguments in commands:
+        if sys.platform == "win32":
+            # Windows project setup uses CreateProcess; LLVM instrumentation is still POSIX-only.
+            subprocess.run(list(map(str, arguments)), env=environment, check=True)
+        else:
+            run(arguments, environment)
 
 
 def parse_environment(text):
@@ -251,6 +266,9 @@ def main():
     environment = dict(os.environ)
     environment.pop("PYTHONPATH", None)
     environment.pop("VIRTUAL_ENV", None)
+    environment.pop("UV_PYTHON", None)
+    environment.pop("UV_PROJECT_ENVIRONMENT", None)
+    environment.pop("UV_PROJECT", None)
     if (
         run(["cargo", "llvm-cov", "--version"], environment, capture=True).strip()
         != f"cargo-llvm-cov {TOOL_VERSION}"
@@ -276,13 +294,19 @@ def main():
     for name in ("build", "rust", "python", "owlrl"):
         (profiles / name).mkdir(parents=True)
     environment["LLVM_PROFILE_FILE"] = str(profiles / "build/%p-%m.profraw")
-    venv = profiles / "venv"
-    run(["uv", "venv", "--python", args.python, venv], environment)
+    project_environment = profiles / "project"
+    initialize_project(project_environment, args.python, environment)
+    venv = project_environment / ".venv"
     python = venv / "bin/python"
     lock = root / (
         "requirements-test.lock" if project == "pyshacl-turbo" else "requirements-coverage.lock"
     )
-    run(["uv", "pip", "install", "--python", python, "-r", lock, "maturin==1.15.0"], environment)
+    run(
+        ["uv", "add", "--project", project_environment, "--no-sync", "--requirements", lock],
+        environment,
+    )
+    run(["uv", "sync", "--project", project_environment, "--locked"], environment)
+    project_run = ["uv", "run", "--project", project_environment, "--locked", "--no-sync"]
     environment["PYO3_PYTHON"] = str(python)
     artifacts = run(
         ["cargo", "test", "--workspace", "--locked", "--no-run", "--message-format=json"],
@@ -311,19 +335,31 @@ def main():
         )
     wheels = target / "wheels" / uuid.uuid4().hex
     run(
-        [venv / "bin/maturin", "build", "--locked", "--interpreter", python, "--out", wheels],
+        [
+            "uv",
+            "build",
+            "--wheel",
+            "--python",
+            python,
+            "--out-dir",
+            wheels,
+            "--config-setting",
+            "maturin.build-args=--locked --profile dev",
+        ],
         environment,
     )
     wheel_files = list(wheels.glob("*.whl"))
     if len(wheel_files) != 1:
         raise RuntimeError("Expected exactly one instrumented wheel")
     wheel = wheel_files[0]
-    run(["uv", "pip", "install", "--python", python, "--no-deps", wheel], environment)
+    run(["uv", "add", "--project", project_environment, "--no-sync", wheel], environment)
+    run(["uv", "sync", "--project", project_environment, "--locked"], environment)
     module = project.replace("-", "_") + "._native"
     loaded = Path(
         run(
             [
-                python,
+                *project_run,
+                "python",
                 "-I",
                 "-c",
                 f"import importlib; print(importlib.import_module({module!r}).__file__)",
@@ -356,7 +392,8 @@ def main():
     result["stages"]["rust"], _ = export(llvm, [profiles / "rust"], objects, output / "rust", root)
     run(
         [
-            python,
+            *project_run,
+            "python",
             "-I",
             "-m",
             "pytest",
@@ -377,10 +414,23 @@ def main():
     require_python_execution(result["stages"]["python"], binding)
     stages = [profiles / "rust", profiles / "python"]
     if owlrl:
-        run(["uv", "pip", "install", "--python", python, "--no-deps", owlrl], environment)
+        companion_wheels = profiles / "companion-wheels"
+        run(
+            ["uv", "build", "--wheel", owlrl, "--python", python, "--out-dir", companion_wheels],
+            environment,
+        )
+        companion_files = list(companion_wheels.glob("*.whl"))
+        if len(companion_files) != 1:
+            raise RuntimeError("Expected exactly one companion wheel")
+        run(
+            ["uv", "add", "--project", project_environment, "--no-sync", companion_files[0]],
+            environment,
+        )
+        run(["uv", "sync", "--project", project_environment, "--locked"], environment)
         run(
             [
-                python,
+                *project_run,
+                "python",
                 "-I",
                 "-m",
                 "pytest",
@@ -414,6 +464,7 @@ def main():
         ],
         capture=True,
     )
+    result["environment_lock_sha256"] = digest(project_environment / "uv.lock")
     (output / "summary.json").write_text(json.dumps(result, indent=2) + "\n")
     write_markdown(result, output / "summary.md")
     summary = os.environ.get("GITHUB_STEP_SUMMARY")

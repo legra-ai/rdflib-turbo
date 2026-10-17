@@ -1,21 +1,18 @@
-"""Development and CI must exercise the declared pytest version range."""
+"""Installed test tooling must respect the project's published pytest contract."""
 
-import shlex
 import tomllib
+from importlib.metadata import version
 from pathlib import Path
 
+from packaging.requirements import Requirement
+from packaging.version import Version
 
-def test_make_dev_uses_the_declared_pytest_requirement():
+
+def test_installed_pytest_satisfies_the_declared_test_extra():
     root = Path(__file__).resolve().parents[1]
     metadata = tomllib.loads((root / "pyproject.toml").read_text())
-    expected = next(
-        requirement
-        for requirement in metadata["project"]["optional-dependencies"]["test"]
-        if requirement.startswith("pytest>")
-    )
-    commands = next(
-        line
-        for line in (root / "Makefile").read_text().splitlines()
-        if line.strip().startswith("uv pip install ")
-    )
-    assert expected in shlex.split(commands)
+    requirements = [
+        Requirement(value) for value in metadata["project"]["optional-dependencies"]["test"]
+    ]
+    expected = next(requirement for requirement in requirements if requirement.name == "pytest")
+    assert Version(version("pytest")) in expected.specifier
