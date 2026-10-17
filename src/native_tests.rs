@@ -1,7 +1,6 @@
 use oxigraph::sparql::QueryResults;
 
 use super::*;
-use crate::graph::{RDF, iri};
 
 #[test]
 fn failure_after_an_inference_round_rolls_back_all_axioms_and_derived_facts() {
