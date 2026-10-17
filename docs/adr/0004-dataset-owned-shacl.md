@@ -30,3 +30,10 @@ new runtime release. This alpha does not claim the entire RDFLib API.
 The embedded engine adds code/dependencies to the native wheel. Benchmarks must
 measure actual installed wheels, import overhead and whole-process RSS; sharing
 one data object is not a promise of lower memory for every workload.
+
+Canonical engine changes must update this runtime's immutable dependency pin and
+reported engine revision together. Coordinated benchmark source pins must select
+that consumer revision; a newer pyshacl wheel cannot share an older embedded
+engine. Keep the fingerprint check strict and test the actual wheel combination.
+The installed-wheel revision regression also checks the reported revision against
+the declared Cargo source, preventing metadata from silently drifting from code.
