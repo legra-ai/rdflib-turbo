@@ -67,9 +67,12 @@ def test_union_inference_streams_graphs_and_writes_only_new_facts(destination):
         assert store.query(f"ASK {{ {pattern} }}").askAnswer
         graph = "" if destination is None else f"GRAPH <{destination}>"
         assert not store.query(f"ASK {{ {graph} {{ <urn:a> a <urn:Child> }} }}").askAnswer
-        count = len(store)
+        # RDFS initializes resources from the terms present at each invocation.
+        # Preserve that existing compatibility behavior on repeated calls too.
+        expected = Dataset().parse(data=store.serialize(), format="nquads")
+        expected.infer(inference="rdfs", destination=destination)
         store.infer(inference="rdfs", destination=destination)
-        assert len(store) == count
+        assert set(store.serialize().splitlines()) == set(expected.serialize().splitlines())
 
 
 @pytest.mark.parametrize("mode,destination", [("invalid", None), ("rdfs", "not an iri")])
@@ -109,3 +112,32 @@ def test_persistent_inference_reopens_with_exact_literals(tmp_path):
     with Store(tmp_path / "db") as store:
         result = store.query("SELECT (STR(?o) AS ?lexical) WHERE { <urn:a> <urn:q> ?o }")
         assert str(next(iter(result)).lexical) == "01"
+
+
+@pytest.mark.parametrize("destination", [None, "urn:inferred"])
+def test_union_lists_treat_duplicate_edges_as_one_and_keep_exact_keys(destination):
+    data = (
+        PREFIX
+        + """
+:g1 {
+    :chain owl:propertyChainAxiom :head .
+    :head rdf:first :p ; rdf:rest :tail .
+    :tail rdf:first :q ; rdf:rest rdf:nil .
+    _:Class owl:hasKey :keys . :keys rdf:first :id ; rdf:rest rdf:nil .
+    :a a _:Class ; :id "01" ; :p :b . :b :q :c .
+}
+:g2 {
+    :head rdf:first :p ; rdf:rest :tail .
+    :tail rdf:first :q ; rdf:rest rdf:nil .
+    :keys rdf:first :id ; rdf:rest rdf:nil .
+    :b a _:Class ; :id "01" . :c a _:Class ; :id "1" .
+}
+"""
+    )
+    with Store() as store:
+        store.parse(data=data, format="trig").infer(inference="owlrl", destination=destination)
+        graph = "" if destination is None else f"GRAPH <{destination}>"
+        assert store.query(f"ASK {{ {graph} {{ <urn:a> <urn:chain> <urn:c> }} }}").askAnswer
+        same = "<http://www.w3.org/2002/07/owl#sameAs>"
+        assert store.query(f"ASK {{ {graph} {{ <urn:a> {same} <urn:b> }} }}").askAnswer
+        assert not store.query(f"ASK {{ {graph} {{ <urn:a> {same} <urn:c> }} }}").askAnswer
