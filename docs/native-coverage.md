@@ -9,7 +9,8 @@ hard-coded into the README.
 
 Install Rust 1.99.1's llvm-tools-preview component and cargo-llvm-cov 0.9.1, then
 run `make test-rust-coverage` with the sibling owlrl-turbo checkout present.
-The standalone command is `python scripts/native_coverage.py --owlrl-source ../owlrl-turbo`.
+The standalone command is
+`uv run --no-project --python 3.13 python scripts/native_coverage.py --owlrl-source ../owlrl-turbo`.
 It uses pinned coverage dependencies and a fresh venv, builds and verifies an
 instrumented wheel, runs Rust/native Python/OWL-RL Python tests and merges actual
 counters. Normal development extensions are not replaced.
