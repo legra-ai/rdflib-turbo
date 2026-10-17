@@ -97,6 +97,12 @@ impl NativeStore {
         .map_err(error)
     }
 
+    #[pyo3(signature = (mode, destination=None))]
+    fn infer(&self, py: Python<'_>, mode: String, destination: Option<String>) -> PyResult<()> {
+        py.detach(|| self.mutate(Operation::Infer(mode, destination)))
+            .map_err(error)
+    }
+
     fn update(&self, py: Python<'_>, source: String) -> PyResult<()> {
         py.detach(|| self.mutate(Operation::Update(source)))
             .map_err(error)
@@ -169,6 +175,16 @@ impl NativeTransaction {
                     format,
                     base,
                 })
+                .map(|_| ())
+        })
+        .map_err(error)
+    }
+
+    #[pyo3(signature = (mode, destination=None))]
+    fn infer(&self, py: Python<'_>, mode: String, destination: Option<String>) -> PyResult<()> {
+        py.detach(|| {
+            self.session
+                .execute(Operation::Infer(mode, destination))
                 .map(|_| ())
         })
         .map_err(error)

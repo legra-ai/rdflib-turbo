@@ -85,3 +85,46 @@ fn transaction_commands_can_move_between_caller_threads() {
     session.finish(true).unwrap();
     assert_eq!(store.len().unwrap(), 1);
 }
+
+#[test]
+fn inference_uses_pending_writes_and_the_same_commit_boundary() {
+    let control = control();
+    let store = control.lock().unwrap().read().unwrap();
+    for commit in [false, true] {
+        let session = Session::start(control.clone()).unwrap();
+        session.execute(Operation::Update("INSERT DATA { GRAPH <urn:g> { <urn:a> a <urn:C> . <urn:C> <http://www.w3.org/2000/01/rdf-schema#subClassOf> <urn:D> } }".into())).unwrap();
+        session
+            .execute(Operation::Infer("rdfs".into(), Some("urn:inferred".into())))
+            .unwrap();
+        let Reply::Query(_, result) = session
+            .execute(Operation::Query(
+                "ASK { GRAPH <urn:inferred> { <urn:a> a <urn:D> } }".into(),
+                false,
+            ))
+            .unwrap()
+        else {
+            panic!("query reply")
+        };
+        assert!(result.contains("true"));
+        assert!(store.is_empty().unwrap());
+        session.finish(commit).unwrap();
+        assert_eq!(store.is_empty().unwrap(), !commit);
+    }
+}
+
+#[test]
+fn invalid_inference_aborts_all_prior_changes_and_releases_the_writer() {
+    let control = control();
+    let store = control.lock().unwrap().read().unwrap();
+    for (mode, destination) in [("invalid", None), ("rdfs", Some("not an iri"))] {
+        let session = Session::start(control.clone()).unwrap();
+        session.execute(insert()).unwrap();
+        assert!(
+            session
+                .execute(Operation::Infer(mode.into(), destination.map(String::from)))
+                .is_err()
+        );
+        assert!(store.is_empty().unwrap());
+        assert!(session.finish(true).is_err());
+    }
+}

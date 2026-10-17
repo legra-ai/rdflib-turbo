@@ -2,13 +2,14 @@ use std::collections::HashSet;
 
 use oxigraph::model::*;
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
-use oxrdf::dataset::InsertTransaction;
 
-use crate::graph::{RDF, iri, objects, subject, subjects};
-use crate::path::rdf_list;
 use crate::{Error, Result};
 
 mod axioms;
+mod backend;
+mod traversal;
+
+use backend::Graph;
 
 const OWL: &str = "http://www.w3.org/2002/07/owl#";
 
@@ -230,33 +231,36 @@ pub fn expand_into(data: &mut Dataset, mode: &str, destination: GraphName) -> Re
 struct Pending(HashSet<Quad>);
 
 impl Pending {
-    fn push(&mut self, data: &Dataset, quad: Quad) {
-        if !data.contains(&quad) {
+    fn push(&mut self, data: &impl Graph, quad: Quad) -> Result<()> {
+        if !data.contains(&quad)? {
             self.0.insert(quad);
         }
+        Ok(())
     }
 }
 
-fn expand_inner(data: &mut InsertTransaction<'_>, mode: &str) -> Result<()> {
+fn expand_inner(data: &mut impl Graph, mode: &str) -> Result<()> {
     match mode {
         "none" | "" => return Ok(()),
         "rdfs" | "owlrl" | "both" => {}
         _ => return Err(Error::Unsupported(format!("inference: {mode}"))),
     }
+    // bounded: the fixed RDFS/OWL rule tables above.
     let mut rules = Vec::new();
     if mode != "owlrl" {
         rules.extend_from_slice(RDFS_RULES);
     }
     if mode != "rdfs" {
         rules.extend_from_slice(OWL_RULES);
-        axioms::owl(data, mode == "both");
+        axioms::owl(data, mode == "both")?;
     }
     let mut initial_resources = Pending::default();
     if mode != "owlrl" {
         for quad in axioms::resources(data) {
-            initial_resources.push(data, quad);
+            initial_resources.push(data, quad?)?;
         }
     }
+    // bounded: one prepared query per built-in rule.
     let queries = rules
         .iter()
         .map(|(template, pattern)| {
@@ -270,9 +274,7 @@ fn expand_inner(data: &mut InsertTransaction<'_>, mode: &str) -> Result<()> {
     loop {
         let mut additions = std::mem::take(&mut initial_resources);
         for query in &queries {
-            let QueryResults::Graph(triples) =
-                query.clone().on_queryable_dataset(&**data).execute()?
-            else {
+            let QueryResults::Graph(triples) = data.query(query.clone())? else {
                 unreachable!("Inference rules are CONSTRUCT queries")
             };
             for triple in triples {
@@ -285,115 +287,34 @@ fn expand_inner(data: &mut InsertTransaction<'_>, mode: &str) -> Result<()> {
                         triple.object,
                         GraphName::DefaultGraph,
                     ),
-                );
+                )?;
             }
         }
         if mode != "rdfs" {
             // Lists can themselves be inferred, so discover them each round.
-            for quad in data
-                .iter()
-                .filter(|q| q.predicate == iri(OWL, "propertyChainAxiom").as_ref())
-            {
-                let Term::NamedNode(property) = Term::from(quad.subject.into_owned()) else {
-                    return Err(Error::Invalid(
-                        "Property chain predicate must be an IRI".into(),
-                    ));
-                };
-                let chain = rdf_list(data, &quad.object.into_owned())?;
-                if chain.is_empty() {
-                    continue;
-                }
-                let starts: Vec<Term> =
-                    data.iter().map(|q| q.subject.into_owned().into()).collect();
-                for start in starts {
-                    let mut current = vec![start.clone()];
-                    for step in &chain {
-                        let Term::NamedNode(step) = step else {
-                            return Err(Error::Invalid(
-                                "Property chain members must be IRIs".into(),
-                            ));
-                        };
-                        current = current
-                            .iter()
-                            .map(|n| objects(data, n, step))
-                            .collect::<Result<Vec<_>>>()?
-                            .into_iter()
-                            .flatten()
-                            .collect();
-                    }
-                    for end in current {
-                        additions.push(
-                            data,
-                            Quad::new(
-                                crate::graph::subject(&start)?,
-                                property.clone(),
-                                end,
-                                GraphName::DefaultGraph,
-                            ),
-                        );
-                    }
-                }
-            }
-            for quad in data
-                .iter()
-                .filter(|q| q.predicate == iri(OWL, "hasKey").as_ref())
-            {
-                let keys = rdf_list(data, &quad.object.into_owned())?;
-                // The reference reasoner treats an empty key as inactive.
-                if keys.is_empty() {
-                    continue;
-                }
-                let keys = keys
-                    .into_iter()
-                    .map(|key| match key {
-                        Term::NamedNode(key) => Ok(key),
-                        _ => Err(Error::Invalid("Key properties must be IRIs".into())),
-                    })
-                    .collect::<Result<Vec<_>>>()?;
-                let class = quad.subject.into_owned().into();
-                let members: HashSet<_> = subjects(data, &iri(RDF, "type"), Some(&class))?
-                    .into_iter()
-                    .collect();
-                for member in &members {
-                    let mut candidates: Option<HashSet<Term>> = None;
-                    for key in &keys {
-                        // Each key must share at least one exact RDF value.
-                        // Query indexes with terms directly: interpolating a
-                        // blank-node class into SPARQL makes it a variable.
-                        let mut matches = HashSet::new();
-                        for value in objects(data, member, key)? {
-                            matches.extend(
-                                subjects(data, key, Some(&value))?
-                                    .into_iter()
-                                    .filter(|n| n != member && members.contains(n)),
-                            );
-                        }
-                        if let Some(candidates) = &mut candidates {
-                            candidates.retain(|n| matches.contains(n));
-                        } else {
-                            candidates = Some(matches);
-                        }
-                        if candidates.as_ref().is_some_and(HashSet::is_empty) {
-                            break;
-                        }
-                    }
-                    for other in candidates.into_iter().flatten() {
-                        additions.push(
-                            data,
-                            Quad::new(
-                                subject(member)?,
-                                iri(OWL, "sameAs"),
-                                other,
-                                GraphName::DefaultGraph,
-                            ),
-                        );
-                    }
-                }
-            }
+            traversal::chains(data, &mut additions)?;
+            traversal::keys(data, &mut additions)?;
         }
         if additions.0.is_empty() {
             return Ok(());
         }
-        data.extend(additions.0);
+        for quad in additions.0 {
+            data.insert(quad);
+        }
     }
+}
+
+/// Expand directly over the active transaction's union, without copying its base.
+pub(crate) fn expand_transaction(
+    transaction: &mut oxigraph::store::Transaction<'_>,
+    mode: &str,
+    destination: GraphName,
+) -> Result<()> {
+    expand_inner(
+        &mut backend::TransactionGraph {
+            transaction,
+            destination,
+        },
+        mode,
+    )
 }

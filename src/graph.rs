@@ -25,34 +25,3 @@ pub fn with_union(data: &Dataset) -> Dataset {
     );
     union
 }
-
-pub fn objects(store: &Dataset, node: &Term, predicate: &NamedNode) -> Result<Vec<Term>> {
-    let Ok(node) = subject(node) else {
-        return Ok(Vec::new());
-    };
-    Ok(store
-        .quads_for_pattern(
-            Some(node.as_ref()),
-            Some(predicate.as_ref()),
-            None,
-            Some(GraphNameRef::DefaultGraph),
-        )
-        .map(|q| q.object.into_owned())
-        .collect())
-}
-
-pub fn subjects(
-    store: &Dataset,
-    predicate: &NamedNode,
-    object: Option<&Term>,
-) -> Result<Vec<Term>> {
-    Ok(store
-        .quads_for_pattern(
-            None,
-            Some(predicate.as_ref()),
-            object.map(Term::as_ref),
-            Some(GraphNameRef::DefaultGraph),
-        )
-        .map(|q| q.subject.into_owned().into())
-        .collect())
-}

@@ -10,7 +10,6 @@ use serde_json::{Value, json};
 
 mod graph;
 mod inference;
-mod path;
 mod shacl;
 mod store;
 

@@ -14,6 +14,7 @@ pub(super) enum Operation {
         base: Option<String>,
     },
     Update(String),
+    Infer(String, Option<String>),
     Query(String, bool),
     Dump(RdfFormat),
 }
@@ -41,6 +42,18 @@ impl Operation {
                 for quad in parser.for_slice(source.as_bytes()) {
                     transaction.insert(&quad.map_err(invalid)?);
                 }
+                Ok(Reply::Done)
+            }
+            Self::Infer(mode, destination) => {
+                if !matches!(mode.as_str(), "rdfs" | "owlrl" | "both") {
+                    return Err(Error::Invalid(format!("Unknown inference mode: {mode}")));
+                }
+                let destination = destination
+                    .map(oxigraph::model::NamedNode::new)
+                    .transpose()
+                    .map_err(invalid)?
+                    .map_or(oxigraph::model::GraphName::DefaultGraph, Into::into);
+                crate::inference::expand_transaction(transaction, &mode, destination)?;
                 Ok(Reply::Done)
             }
             Self::Update(source) => {

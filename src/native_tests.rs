@@ -1,7 +1,6 @@
 use oxigraph::sparql::QueryResults;
 
 use super::*;
-use crate::graph::{RDF, iri};
 
 #[test]
 fn failure_after_an_inference_round_rolls_back_all_axioms_and_derived_facts() {
@@ -60,22 +59,6 @@ fn graph_helpers_preserve_context_and_exact_subject_identity() {
             .to_string()
             .contains("Expected a shape")
     );
-    assert_eq!(
-        graph::objects(&data, &named, &predicate).unwrap(),
-        vec![object.clone()]
-    );
-    assert!(
-        graph::objects(&data, &literal, &predicate)
-            .unwrap()
-            .is_empty()
-    );
-    assert_eq!(
-        graph::subjects(&data, &predicate, Some(&object))
-            .unwrap()
-            .len(),
-        2
-    );
-    assert_eq!(graph::subjects(&data, &predicate, None).unwrap().len(), 2);
     let mut before = data.clone();
     before.insert(&Quad::new(
         NamedNode::new("urn:n").unwrap(),
@@ -91,45 +74,6 @@ fn graph_helpers_preserve_context_and_exact_subject_identity() {
         NamedNodeRef::new_unchecked("urn:o"),
         GraphNameRef::DefaultGraph
     )));
-}
-
-#[test]
-fn rdf_lists_validate_every_link_and_reject_ambiguous_or_cyclic_structure() {
-    let head: Term = NamedNode::new("urn:head").unwrap().into();
-    assert!(
-        path::rdf_list(&Dataset::new(), &iri(RDF, "nil").into())
-            .unwrap()
-            .is_empty()
-    );
-    let valid = dataset(
-        "<urn:head> <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <urn:a>; <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil> .",
-    );
-    assert_eq!(
-        path::rdf_list(&valid, &head).unwrap(),
-        vec![Term::from(NamedNode::new("urn:a").unwrap())]
-    );
-    for source in [
-        "<urn:head> <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <urn:a> .",
-        "<urn:head> <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <urn:a>, <urn:b>; <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil> .",
-        "<urn:head> <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <urn:a>; <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <urn:a>, <urn:b> .",
-    ] {
-        assert!(
-            path::rdf_list(&dataset(source), &head)
-                .unwrap_err()
-                .to_string()
-                .contains("Malformed RDF list")
-        );
-    }
-    let cycle = dataset(
-        "<urn:head> <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <urn:a>; <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <urn:head> .",
-    );
-    assert!(
-        path::rdf_list(&cycle, &head)
-            .unwrap_err()
-            .to_string()
-            .contains("Cyclic RDF list")
-    );
-    assert!(path::rdf_list(&valid, &Literal::new_simple_literal("head").into()).is_err());
 }
 
 #[test]

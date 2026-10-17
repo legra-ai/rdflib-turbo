@@ -6,7 +6,9 @@ use std::collections::HashSet;
 
 use oxigraph::model::*;
 
-use super::OWL;
+use super::backend::Graph;
+use super::{OWL, Pending};
+use crate::Result;
 use crate::graph::{RDF, RDFS, XSD, iri};
 
 const XSD_TYPES: &[&str] = &[
@@ -68,43 +70,45 @@ fn triple(s: impl Into<NamedOrBlankNode>, p: NamedNode, o: impl Into<Term>) -> Q
     Quad::new(s, p, o, GraphName::DefaultGraph)
 }
 
-pub(super) fn owl(data: &mut oxrdf::dataset::InsertTransaction<'_>, combined: bool) {
+pub(super) fn owl(data: &mut impl Graph, combined: bool) -> Result<()> {
+    // bounded: the fixed XSD/RDF datatype vocabulary below.
     let datatypes: HashSet<NamedNode> = XSD_TYPES
         .iter()
         .map(|n| iri(XSD, n))
         .chain([iri(RDFS, "Literal")])
         .chain(["XMLLiteral", "HTML", "langString", "PlainLiteral"].map(|n| iri(RDF, n)))
         .collect();
+    // bounded: a subset of the fixed datatype vocabulary.
     let mut used = HashSet::new();
-    let mut typed = Vec::new();
-    for q in data.iter() {
-        if let TermRef::Literal(literal) = q.object
-            && (literal.has_explicit_datatype() || literal.language().is_some())
-            && datatypes.contains(&literal.datatype().into_owned())
-        {
-            used.insert(literal.datatype().into_owned());
-            // Generalized RDF triples with literal subjects cannot be stored
-            // in oxrdf::Dataset. Track datatype use without inventing nodes.
-            typed.push((None, literal.datatype().into_owned()));
-            if q.predicate == iri(OWL, "sameAs").as_ref() {
-                typed.push((
-                    Some(q.subject.into_owned()),
+    let mut additions = Pending::default();
+    for q in data.quads(None, None, None) {
+        let q = q?;
+        let typed = match &q.object {
+            Term::Literal(literal)
+                if (literal.has_explicit_datatype() || literal.language().is_some())
+                    && datatypes.contains(&literal.datatype().into_owned()) =>
+            {
+                Some((
+                    q.predicate == iri(OWL, "sameAs"),
                     literal.datatype().into_owned(),
-                ));
+                ))
             }
-        }
-        if q.predicate == iri(RDF, "type").as_ref()
-            && let TermRef::NamedNode(datatype) = q.object
-            && datatypes.contains(&datatype.into_owned())
-        {
-            used.insert(datatype.into_owned());
-            typed.push((Some(q.subject.into_owned()), datatype.into_owned()));
-        }
-    }
-    let mut additions = Vec::new();
-    for (node, datatype) in typed {
-        if let Some(node) = &node {
-            additions.push(triple(node.clone(), iri(RDF, "type"), datatype.clone()));
+            Term::NamedNode(datatype)
+                if q.predicate == iri(RDF, "type") && datatypes.contains(datatype) =>
+            {
+                Some((true, datatype.clone()))
+            }
+            _ => None,
+        };
+        let Some((has_subject, datatype)) = typed else {
+            continue;
+        };
+        used.insert(datatype.clone());
+        if has_subject {
+            additions.push(
+                data,
+                triple(q.subject.clone(), iri(RDF, "type"), datatype.clone()),
+            )?;
         }
         let mut parent = datatype
             .as_str()
@@ -113,18 +117,20 @@ pub(super) fn owl(data: &mut oxrdf::dataset::InsertTransaction<'_>, combined: bo
         while let Some(name) = parent {
             let datatype = iri(XSD, name);
             used.insert(datatype.clone());
-            if let Some(node) = &node {
-                additions.push(triple(node.clone(), iri(RDF, "type"), datatype));
+            if has_subject {
+                additions.push(data, triple(q.subject.clone(), iri(RDF, "type"), datatype))?;
             }
             parent = datatype_parent(name);
         }
     }
-    additions.extend(
+    // bounded: only the fixed datatype and schema axioms below.
+    let mut fixed = Vec::new();
+    fixed.extend(
         datatypes
             .into_iter()
             .map(|datatype| triple(datatype, iri(RDF, "type"), iri(RDFS, "Datatype"))),
     );
-    additions.extend(
+    fixed.extend(
         ["Thing", "Nothing"].map(|n| triple(iri(OWL, n), iri(RDF, "type"), iri(OWL, "Class"))),
     );
     for (ns, names) in [
@@ -140,7 +146,7 @@ pub(super) fn owl(data: &mut oxrdf::dataset::InsertTransaction<'_>, combined: bo
             ][..],
         ),
     ] {
-        additions.extend(
+        fixed.extend(
             names
                 .iter()
                 .map(|n| triple(iri(ns, n), iri(RDF, "type"), iri(OWL, "AnnotationProperty"))),
@@ -148,6 +154,7 @@ pub(super) fn owl(data: &mut oxrdf::dataset::InsertTransaction<'_>, combined: bo
     }
     // The reference emits one directed statement per disjoint top-level pair,
     // only when both datatypes occur. PlainLiteral overlaps string and XMLLiteral.
+    // bounded: eleven explicitly enumerated datatypes.
     let disjoint: Vec<_> = [
         "anyURI",
         "base64Binary",
@@ -170,7 +177,7 @@ pub(super) fn owl(data: &mut oxrdf::dataset::InsertTransaction<'_>, combined: bo
                 && !(left == &iri(XSD, "string") && right == &iri(RDF, "PlainLiteral"))
                 && left != &iri(RDF, "PlainLiteral")
             {
-                additions.push(triple(
+                fixed.push(triple(
                     left.clone(),
                     iri(OWL, "disjointWith"),
                     right.clone(),
@@ -184,23 +191,40 @@ pub(super) fn owl(data: &mut oxrdf::dataset::InsertTransaction<'_>, combined: bo
             (iri(RDFS, "Class"), iri(OWL, "Class")),
             (iri(OWL, "DataRange"), iri(RDFS, "Datatype")),
         ] {
-            additions.push(triple(left, iri(OWL, "equivalentClass"), right));
+            fixed.push(triple(left, iri(OWL, "equivalentClass"), right));
         }
     }
-    data.extend(additions);
+    for quad in fixed {
+        additions.push(data, quad)?;
+    }
+    for quad in additions.0 {
+        data.insert(quad);
+    }
+    Ok(())
 }
 
-pub(super) fn resources(data: &Dataset) -> impl Iterator<Item = Quad> + '_ {
-    data.iter().flat_map(|q| {
-        let object = match q.object {
-            TermRef::NamedNode(n) => Some(n.into_owned().into()),
-            TermRef::BlankNode(n) => Some(n.into_owned().into()),
-            TermRef::Literal(_) => None,
-        };
-        std::iter::once(q.subject.into_owned())
-            .chain(object)
-            .map(|node| triple(node, iri(RDF, "type"), iri(RDFS, "Resource")))
-    })
+pub(super) fn resources(data: &impl Graph) -> impl Iterator<Item = Result<Quad>> + '_ {
+    data.quads(None, None, None)
+        .flat_map(|q| {
+            let q = match q {
+                Ok(q) => q,
+                Err(error) => return [Some(Err(error)), None],
+            };
+            let object: Option<NamedOrBlankNode> = match q.object {
+                Term::NamedNode(n) => Some(n.into()),
+                Term::BlankNode(n) => Some(n.into()),
+                Term::Literal(_) => None,
+            };
+            [
+                Some(Ok(triple(
+                    q.subject,
+                    iri(RDF, "type"),
+                    iri(RDFS, "Resource"),
+                ))),
+                object.map(|node| Ok(triple(node, iri(RDF, "type"), iri(RDFS, "Resource")))),
+            ]
+        })
+        .flatten()
 }
 
 #[cfg(test)]
