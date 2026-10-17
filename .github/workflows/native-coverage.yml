@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: legra-ai/owlrl-turbo
-          ref: 5ba4b346a93f1f89e4230d9acdc8b4fb1343af4e
+          ref: bca9a39dceec6cf15a2e11539485024f47299c9b
           path: coverage-companion-owlrl
       - uses: actions/setup-python@v7
         with:
