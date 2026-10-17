@@ -223,3 +223,65 @@ fn datatype_builtin_keeps_the_declared_numeric_subtype() {
         Term::NamedNode(NamedNode::new("http://www.w3.org/2001/XMLSchema#byte").unwrap())
     );
 }
+
+#[test]
+fn term_builtins_preserve_constant_lexical_forms() {
+    let store = Store::new().unwrap();
+    assert_eq!(
+        query_value(
+            &store,
+            "SELECT (STR(\"01\"^^<http://www.w3.org/2001/XMLSchema#byte>) AS ?v) WHERE {}",
+            "v"
+        ),
+        Term::Literal(Literal::new_simple_literal("01"))
+    );
+    assert_eq!(
+        query_value(
+            &store,
+            "SELECT (DATATYPE(\"01\"^^<http://www.w3.org/2001/XMLSchema#byte>) AS ?v) WHERE {}",
+            "v"
+        ),
+        Term::NamedNode(NamedNode::new("http://www.w3.org/2001/XMLSchema#byte").unwrap())
+    );
+}
+
+#[test]
+fn transaction_queries_read_uncommitted_changes_without_exposing_them() {
+    let store = Store::new().unwrap();
+    let mut transaction = store.start_transaction().unwrap();
+    transaction.insert(&quad(literal("01", "integer")));
+    let QueryResults::Solutions(mut rows) = SparqlEvaluator::new()
+        .parse_query("SELECT ?o WHERE { ?s ?p ?o }")
+        .unwrap()
+        .on_transaction(&transaction)
+        .execute()
+        .unwrap()
+    else {
+        panic!("SELECT")
+    };
+    assert_eq!(
+        rows.next().unwrap().unwrap().get("o"),
+        Some(&Term::Literal(literal("01", "integer")))
+    );
+    assert!(rows.next().is_none());
+    drop(rows);
+    assert_eq!(store.len().unwrap(), 0);
+    drop(transaction);
+    assert_eq!(store.len().unwrap(), 0);
+}
+
+#[test]
+fn large_and_invalid_literals_survive_named_graph_storage() {
+    let store = Store::new().unwrap();
+    let graph = GraphName::NamedNode(node("graph"));
+    for value in [
+        literal("00000000000000000000000001", "integer"),
+        literal("invalid", "boolean"),
+    ] {
+        let quad = Quad::new(node("s"), node("p"), value.clone(), graph.clone());
+        store.insert(&quad).unwrap();
+        assert!(store.contains(&quad).unwrap());
+        assert!(store.iter().any(|entry| entry.unwrap() == quad));
+    }
+    assert_eq!(store.len().unwrap(), 2);
+}
