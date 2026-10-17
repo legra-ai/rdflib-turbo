@@ -18,12 +18,21 @@ else
     printf 'Cannot provision the native uv manylinux build image\n' >&2
     exit 1
 fi
+if mkdir -p dist target; then
+    :
+else
+    printf 'Cannot create wheel output and target directories\n' >&2
+    exit 1
+fi
 if docker run --rm \
-    --volume "$PWD:/io" \
-    --workdir /io/source-build \
+    --volume "$PWD/source-build:/build" \
+    --volume "$PWD/dist:/dist" \
+    --volume "$PWD/target:/target" \
+    --volume "$PWD/scripts/build_manylinux_inner.sh:/build-wheel.sh:ro" \
+    --workdir /build \
     --env CARGO_BUILD_WARNINGS=deny \
-    --env CARGO_TARGET_DIR=/io/target \
-    "$image" sh /io/scripts/build_manylinux_inner.sh "$target" "$python_abi"; then
+    --env CARGO_TARGET_DIR=/target \
+    "$image" sh /build-wheel.sh "$target" "$python_abi"; then
     :
 else
     printf 'uv manylinux wheel build failed\n' >&2

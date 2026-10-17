@@ -29,3 +29,8 @@ publishing job. Version preparation must update uv.lock alongside pyproject.toml
 References:
 - https://docs.astral.sh/uv/concepts/projects/sync/
 - https://docs.astral.sh/uv/guides/publish/
+
+The manylinux container mounts only the extracted source archive, target cache,
+wheel output and a read-only build driver. It does not mount the parent checkout.
+Cargo searches ancestor directories for configuration; exposing the checkout
+would leak repository-only hook opt-ins into dependency builds from the archive.
