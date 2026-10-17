@@ -70,7 +70,18 @@ def embedded_python_environment(python, environment):
     ).strip()
     if not Path(prefix).is_absolute():
         raise RuntimeError("Python did not report an absolute runtime prefix")
-    return {**environment, "PYTHONHOME": prefix}
+    configured = {**environment, "PYTHONHOME": prefix}
+    if sys.platform == "linux":
+        library = run(
+            [python, "-I", "-c", "import sysconfig; print(sysconfig.get_config_var('LIBDIR'))"],
+            environment,
+            capture=True,
+        ).strip()
+        if not Path(library).is_absolute():
+            raise RuntimeError("Python did not report an absolute library directory")
+        previous = environment.get("LD_LIBRARY_PATH")
+        configured["LD_LIBRARY_PATH"] = library + (os.pathsep + previous if previous else "")
+    return configured
 
 
 def initialize_project(project, python, environment):

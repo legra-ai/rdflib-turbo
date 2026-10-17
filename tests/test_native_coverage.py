@@ -156,6 +156,37 @@ def test_embedded_python_rejects_an_invalid_runtime_prefix(monkeypatch):
         module.embedded_python_environment(Path("/venv/bin/python"), {})
 
 
+@pytest.mark.parametrize("previous", [None, "/existing/lib"])
+def test_embedded_python_linux_loader_uses_the_selected_interpreters_library(monkeypatch, previous):
+    module = harness()
+    monkeypatch.setattr(module.sys, "platform", "linux")
+    prefix = "/selected/python"
+    library = "/selected/python/lib"
+    monkeypatch.setattr(
+        module,
+        "run",
+        lambda args, env, capture=False: library if "sysconfig" in args[-1] else prefix,
+    )
+    original = {} if previous is None else {"LD_LIBRARY_PATH": previous}
+    configured = module.embedded_python_environment("/selected/python/bin/python", original)
+    assert configured["LD_LIBRARY_PATH"] == library + (f":{previous}" if previous else "")
+    assert original == ({} if previous is None else {"LD_LIBRARY_PATH": previous})
+
+
+def test_embedded_python_rejects_an_invalid_library_directory(monkeypatch):
+    module = harness()
+    monkeypatch.setattr(module.sys, "platform", "linux")
+    monkeypatch.setattr(
+        module,
+        "run",
+        lambda args, env, capture=False: (
+            "relative" if "sysconfig" in args[-1] else "/selected/python"
+        ),
+    )
+    with pytest.raises(RuntimeError, match="absolute library directory"):
+        module.embedded_python_environment("/selected/python/bin/python", {})
+
+
 def test_native_uv_project_pins_the_requested_interpreter(tmp_path):
     import json
     import os
