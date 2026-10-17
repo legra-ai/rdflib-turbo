@@ -19,8 +19,9 @@ call. Named-graph unions remain private evaluation views. Tests prohibit Python
 data copying/conversion during validation, cover concurrent reuse, later data
 mutation, exact blank-node identity, and failures after staged rule insertions.
 
-Retain parsed namespace metadata atomically alongside document data at the
-Python boundary. No failed parse updates namespace bindings. Inference and copy
+Retain parsed namespace metadata alongside document data under the same native
+lock. Validation reads bindings under its data read lock, rather than accepting
+a separately captured Python metadata snapshot. No failed parse updates namespace bindings. Inference and copy
 preserve those bindings, preventing report-message differences caused by a lost
 prefix. The public native dataset class and inference API remain compatible
 with owlrl-turbo's dataset argument; its package constraint must permit this

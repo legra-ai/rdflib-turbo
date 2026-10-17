@@ -30,7 +30,6 @@ struct Settings {
     abort_on_first: bool,
     focus_nodes: Vec<String>,
     use_shapes: Vec<String>,
-    namespaces: Vec<(String, String)>,
 }
 
 impl Default for Settings {
@@ -45,7 +44,6 @@ impl Default for Settings {
             abort_on_first: defaults.abort_on_first,
             focus_nodes: Vec::new(),
             use_shapes: Vec::new(),
-            namespaces: Vec::new(),
         }
     }
 }
@@ -71,7 +69,7 @@ impl Settings {
             abort_on_first: self.abort_on_first,
             focus_nodes: nodes(self.focus_nodes)?,
             use_shapes: nodes(self.use_shapes)?,
-            namespaces: self.namespaces,
+            namespaces: Vec::new(),
         })
     }
 }
@@ -126,7 +124,7 @@ impl SharedShapes {
     ) -> PyResult<Output> {
         let object = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(settings)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        let options = serde_json::from_value::<Settings>(serde_json::Value::Object(object))
+        let mut options = serde_json::from_value::<Settings>(serde_json::Value::Object(object))
             .map_err(|e| PyValueError::new_err(e.to_string()))?
             .options()?;
         py.detach(|| {
@@ -135,6 +133,7 @@ impl SharedShapes {
                     .inner
                     .read()
                     .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
+                options.namespaces = data.namespaces.clone();
                 return output(
                     self.inner
                         .validate_readonly(&data, options)
@@ -147,6 +146,7 @@ impl SharedShapes {
                     .write()
                     .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
                 let mut working = data.clone();
+                options.namespaces = working.namespaces.clone();
                 let result = output(self.inner.validate(&mut working, options).map_err(error)?)?;
                 *data = working;
                 Ok(result)
@@ -156,6 +156,7 @@ impl SharedShapes {
                     .read()
                     .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?
                     .clone();
+                options.namespaces = working.namespaces.clone();
                 output(self.inner.validate(&mut working, options).map_err(error)?)
             }
         })

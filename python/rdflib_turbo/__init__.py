@@ -40,7 +40,6 @@ class Dataset:
 
     def __init__(self):
         self._native = NativeDataset()
-        self._namespaces = ()
 
     def __len__(self):
         return len(self._native)
@@ -48,7 +47,6 @@ class Dataset:
     def copy(self):
         result = Dataset()
         result._native = self._native.copy()
-        result._namespaces = self._namespaces
         return result
 
     def parse(self, source=None, *, data=None, format="turtle", publicID=None):
@@ -64,13 +62,12 @@ class Dataset:
             data = data.decode("utf-8")
         if not isinstance(data, str):
             raise TypeError("RDF data must be str or UTF-8 bytes")
-        prefixes = self._native.load(data, format, publicID)
-        self._namespaces = tuple(dict((*self._namespaces, *prefixes)).items())
+        self._native.load(data, format, publicID)
         return self
 
     def namespaces(self):
         """Return namespace bindings retained atomically from parsed documents."""
-        return iter(self._namespaces)
+        return iter(self._native.namespaces())
 
     def serialize(self, *, format="nquads"):
         """Serialize natively; graph-only formats reject named graph data."""
@@ -114,13 +111,15 @@ class Dataset:
             source = graph.serialize(format="nt")
             rdf_format = "nt"
         result._native.load(source, rdf_format, None, True)
-        result._namespaces = tuple(graph.namespaces())
+        result._native.bind_namespaces(
+            [(prefix, str(namespace)) for prefix, namespace in graph.namespaces()]
+        )
         return result
 
     def to_rdflib(self):
         """Copy to an RDFLib Dataset without literal normalization."""
         result = RDFLibDataset()
-        for prefix, namespace in self._namespaces:
+        for prefix, namespace in self.namespaces():
             result.bind(prefix, namespace)
         for s, p, o, g in json.loads(self._native.quads_json()):
             target = result.default_graph if g is None else result.graph(_term(g))

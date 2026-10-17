@@ -20,6 +20,13 @@ def test_namespace_loading_is_atomic_and_survives_copies():
     with pytest.raises(ValueError):
         data.parse(data="@prefix broken: <urn:broken:> . broken:s broken:p")
     assert (data.serialize(), tuple(data.namespaces())) == before
+    data.parse(data="@prefix ex: <urn:updated:> .")
+    assert dict(data.namespaces())["ex"] == "urn:updated:"
+    assert len(data) == 1
+    snapshot = tuple(data.namespaces())
+    with pytest.raises(ValueError):
+        data._native.bind_namespaces([("invalid", "not an IRI")])
+    assert tuple(data.namespaces()) == snapshot
 
 
 def test_shared_validation_reports_without_serializing_or_copying_dataset(monkeypatch):
@@ -37,6 +44,7 @@ def test_shared_validation_reports_without_serializing_or_copying_dataset(monkey
     assert data._native is identity
     assert not conforms and "Conforms: False" in text
     assert not warnings
+    assert "Focus Node: ex:s" in text
     graph = Graph().parse(data=report, format="nt")
     assert len(graph) > 1
     assert isomorphic(

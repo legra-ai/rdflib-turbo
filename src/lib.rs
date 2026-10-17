@@ -1,3 +1,4 @@
+use std::ops::{Deref, DerefMut};
 use std::sync::RwLock;
 
 use oxigraph::io::{RdfFormat, RdfParser, RdfSerializer};
@@ -82,9 +83,40 @@ fn term(term: &Term) -> Value {
 }
 
 /// One runtime-owned exact-term dataset. Locks cover whole native operations.
+#[derive(Clone, Default)]
+struct DatasetState {
+    data: Dataset,
+    namespaces: Vec<(String, String)>,
+}
+
+impl DatasetState {
+    fn bind(&mut self, entries: Vec<(String, String)>) {
+        for (prefix, namespace) in entries {
+            if let Some((_, value)) = self.namespaces.iter_mut().find(|(key, _)| key == &prefix) {
+                *value = namespace;
+            } else {
+                self.namespaces.push((prefix, namespace));
+            }
+        }
+    }
+}
+
+impl Deref for DatasetState {
+    type Target = Dataset;
+    fn deref(&self) -> &Dataset {
+        &self.data
+    }
+}
+
+impl DerefMut for DatasetState {
+    fn deref_mut(&mut self) -> &mut Dataset {
+        &mut self.data
+    }
+}
+
 #[pyclass(frozen)]
 struct NativeDataset {
-    inner: RwLock<Dataset>,
+    inner: RwLock<DatasetState>,
 }
 
 #[pymethods]
@@ -92,7 +124,7 @@ impl NativeDataset {
     #[new]
     fn new() -> Self {
         Self {
-            inner: RwLock::new(Dataset::new()),
+            inner: RwLock::new(DatasetState::default()),
         }
     }
 
@@ -124,7 +156,7 @@ impl NativeDataset {
         rdf_format: &str,
         base: Option<&str>,
         preserve_blank_nodes: bool,
-    ) -> PyResult<Vec<(String, String)>> {
+    ) -> PyResult<()> {
         let rdf_format = format(rdf_format)?;
         py.detach(|| {
             let mut parser = RdfParser::from_format(rdf_format);
@@ -145,12 +177,34 @@ impl NativeDataset {
                 .prefixes()
                 .map(|(p, n)| (p.to_owned(), n.to_owned()))
                 .collect();
-            self.inner
+            let mut state = self
+                .inner
                 .write()
-                .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?
-                .extend(additions);
-            Ok(prefixes)
+                .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
+            state.extend(additions);
+            state.bind(prefixes);
+            Ok(())
         })
+    }
+
+    fn namespaces(&self) -> PyResult<Vec<(String, String)>> {
+        Ok(self
+            .inner
+            .read()
+            .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?
+            .namespaces
+            .clone())
+    }
+
+    fn bind_namespaces(&self, entries: Vec<(String, String)>) -> PyResult<()> {
+        for (_, namespace) in &entries {
+            NamedNode::new(namespace.as_str()).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        }
+        self.inner
+            .write()
+            .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?
+            .bind(entries);
+        Ok(())
     }
 
     fn dump(&self, py: Python<'_>, rdf_format: &str) -> PyResult<String> {

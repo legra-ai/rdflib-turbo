@@ -142,6 +142,8 @@ fn poisoned_dataset_locks_fail_every_public_native_operation() {
             native.quads_json(py).unwrap_err(),
             native.query(py, "ASK {}", false).unwrap_err(),
             native.infer(py, "owlrl", None).unwrap_err(),
+            native.namespaces().unwrap_err(),
+            native.bind_namespaces(Vec::new()).unwrap_err(),
         ];
         for failure in failures {
             assert!(failure.is_instance_of::<PyRuntimeError>(py));
