@@ -104,10 +104,18 @@ def inventory(directory, version):
     platforms = [
         "manylinux_2_28_x86_64",
         "manylinux_2_28_aarch64",
-        "macosx_10_12_x86_64",
-        "macosx_11_0_arm64",
         "win_amd64",
     ]
+    project = tomllib.loads(
+        (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8")
+    )
+    targets = project["tool"]["maturin"]["target"]
+    for triple, architecture in [
+        ("x86_64-apple-darwin", "x86_64"),
+        ("aarch64-apple-darwin", "arm64"),
+    ]:
+        minimum = targets[triple]["macos-deployment-target"].replace(".", "_")
+        platforms.append(f"macosx_{minimum}_{architecture}")
     if len(packages) != 6 or len(sdists) != 1 or len(wheels) != 5:
         raise ValueError("Expected one source archive and five platform wheels")
     for platform in platforms:
