@@ -348,3 +348,6 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
 
 #[cfg(test)]
 mod native_tests;
+
+#[cfg(all(test, feature = "allocation-profiling"))]
+mod allocation_tests;

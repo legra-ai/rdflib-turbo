@@ -94,7 +94,7 @@ pub(crate) struct SharedShapes {
 impl SharedShapes {
     #[new]
     #[pyo3(signature = (source, advanced, namespaces, numeric_booleans=true))]
-    fn new(
+    pub(crate) fn new(
         py: Python<'_>,
         source: &str,
         advanced: bool,
@@ -115,7 +115,7 @@ impl SharedShapes {
         .map_err(error)
     }
 
-    fn validate(
+    pub(crate) fn validate(
         &self,
         py: Python<'_>,
         dataset: &NativeDataset,
