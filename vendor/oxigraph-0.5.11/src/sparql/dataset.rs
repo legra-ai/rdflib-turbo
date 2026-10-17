@@ -1,4 +1,4 @@
-#[cfg(feature = "rdf-12")]
+#[cfg(all(feature = "rdf-12", not(feature = "exact-term-storage")))]
 use crate::storage::numeric_encoder::EncodedTriple;
 use crate::storage::numeric_encoder::{
     Decoder, EncodedTerm, StrHash, StrHashHasher, StrLookup, insert_term,

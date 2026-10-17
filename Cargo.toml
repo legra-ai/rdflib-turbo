@@ -25,7 +25,7 @@ oxrdf = { version = "=0.3.4", features = ["rdf-10-string-identity"] }
 pyo3 = { version = "=0.29.3", features = ["abi3-py311"] }
 serde_json = "1"
 spargebra = "=0.4.7"
-spareval = { version = "=0.2.7", features = ["exact-custom-function-terms"] }
+spareval = { version = "=0.2.7", features = ["exact-custom-function-terms", "exact-term-builtins"] }
 thiserror = "2"
 
 [patch.crates-io]

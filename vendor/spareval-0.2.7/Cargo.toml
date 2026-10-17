@@ -37,6 +37,7 @@ rustdoc-args = [
 ]
 
 [features]
+exact-term-builtins = ["exact-custom-function-terms"]
 calendar-ext = ["sep-0002"]
 default = []
 undefined-functions-as-expression-errors = []

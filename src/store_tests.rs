@@ -90,3 +90,136 @@ fn select_and_construct_keep_literal_lexical_identity() {
         Term::Literal(value)
     );
 }
+
+fn query_value(store: &Store, query: &str, variable: &str) -> Term {
+    let QueryResults::Solutions(mut rows) = SparqlEvaluator::new()
+        .parse_query(query)
+        .unwrap()
+        .on_store(store)
+        .execute()
+        .unwrap()
+    else {
+        panic!("SELECT")
+    };
+    let value = rows.next().unwrap().unwrap().get(variable).unwrap().clone();
+    assert!(rows.next().is_none());
+    value
+}
+
+#[test]
+fn numeric_value_equality_keeps_distinct_rdf_terms() {
+    let store = Store::new().unwrap();
+    store.insert(&quad(literal("01", "integer"))).unwrap();
+    store.insert(&quad(literal("1", "integer"))).unwrap();
+    assert_eq!(
+        query_value(
+            &store,
+            "SELECT (COUNT(?o) AS ?n) WHERE { ?s ?p ?o FILTER(?o = 1) }",
+            "n"
+        ),
+        Term::Literal(literal("2", "integer"))
+    );
+    assert_eq!(
+        query_value(
+            &store,
+            "SELECT (COUNT(DISTINCT ?o) AS ?n) WHERE { ?s ?p ?o }",
+            "n"
+        ),
+        Term::Literal(literal("2", "integer"))
+    );
+    assert_eq!(
+        query_value(&store, "SELECT (SUM(?o) AS ?n) WHERE { ?s ?p ?o }", "n"),
+        Term::Literal(literal("2", "integer"))
+    );
+}
+
+#[test]
+fn computed_numeric_bindings_join_by_exact_term_identity() {
+    let store = Store::new().unwrap();
+    store.insert(&quad(literal("01", "integer"))).unwrap();
+    store.insert(&quad(literal("1", "integer"))).unwrap();
+    assert_eq!(
+        query_value(
+            &store,
+            "SELECT (COUNT(*) AS ?n) WHERE { BIND(1 AS ?o) ?s ?p ?o }",
+            "n"
+        ),
+        Term::Literal(literal("1", "integer"))
+    );
+}
+
+#[test]
+fn effective_boolean_value_decodes_exact_stored_literals() {
+    let store = Store::new().unwrap();
+    for value in [
+        literal("01", "integer"),
+        literal("0", "integer"),
+        literal("1", "boolean"),
+        literal("false", "boolean"),
+    ] {
+        store.insert(&quad(value)).unwrap();
+    }
+    assert_eq!(
+        query_value(
+            &store,
+            "SELECT (COUNT(*) AS ?n) WHERE { ?s ?p ?o FILTER(?o) }",
+            "n"
+        ),
+        Term::Literal(literal("2", "integer"))
+    );
+}
+
+#[test]
+fn term_builtins_keep_lexical_form_and_declared_datatype() {
+    let store = Store::new().unwrap();
+    store.insert(&quad(literal("01", "byte"))).unwrap();
+    assert_eq!(
+        query_value(&store, "SELECT (STR(?o) AS ?s) WHERE { ?s0 ?p ?o }", "s"),
+        Term::Literal(Literal::new_simple_literal("01"))
+    );
+}
+
+#[test]
+fn plain_and_explicit_string_terms_remain_distinct() {
+    let store = Store::new().unwrap();
+    store
+        .insert(&quad(Literal::new_simple_literal("value")))
+        .unwrap();
+    store.insert(&quad(literal("value", "string"))).unwrap();
+    assert_eq!(store.len().unwrap(), 2);
+    assert_eq!(
+        query_value(
+            &store,
+            "SELECT (COUNT(DISTINCT ?o) AS ?n) WHERE { ?s ?p ?o }",
+            "n"
+        ),
+        Term::Literal(literal("2", "integer"))
+    );
+}
+
+#[test]
+fn sparql_updates_delete_only_the_exact_spelling() {
+    let store = Store::new().unwrap();
+    SparqlEvaluator::new().parse_update("PREFIX xsd:<http://www.w3.org/2001/XMLSchema#> INSERT DATA { <urn:s> <urn:p> \"01\"^^xsd:integer, \"1\"^^xsd:integer }").unwrap().on_store(&store).execute().unwrap();
+    assert_eq!(store.len().unwrap(), 2);
+    SparqlEvaluator::new().parse_update("PREFIX xsd:<http://www.w3.org/2001/XMLSchema#> DELETE DATA { <urn:s> <urn:p> \"1\"^^xsd:integer }").unwrap().on_store(&store).execute().unwrap();
+    assert_eq!(store.len().unwrap(), 1);
+    assert_eq!(
+        store.iter().next().unwrap().unwrap().object,
+        Term::Literal(literal("01", "integer"))
+    );
+}
+
+#[test]
+fn datatype_builtin_keeps_the_declared_numeric_subtype() {
+    let store = Store::new().unwrap();
+    store.insert(&quad(literal("01", "byte"))).unwrap();
+    assert_eq!(
+        query_value(
+            &store,
+            "SELECT (DATATYPE(?o) AS ?d) WHERE { ?s ?p ?o }",
+            "d"
+        ),
+        Term::NamedNode(NamedNode::new("http://www.w3.org/2001/XMLSchema#byte").unwrap())
+    );
+}
