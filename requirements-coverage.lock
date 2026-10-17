@@ -28,7 +28,7 @@ pyparsing==3.3.3
     # via rdflib
 pyshacl==0.40.1
 pyshacl-turbo==0.2.4
-pytest==8.4.2
+pytest==9.1.1
     # via pytest-cov
 pytest-cov==7.1.0
 rdflib==7.6.0
