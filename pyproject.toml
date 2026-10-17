@@ -28,11 +28,18 @@ test = [
 profile = "release"
 locked = true
 editable-profile = "release"
-features = ["pyo3/extension-module"]
+features = ["pyo3/extension-module", "persistence"]
 python-source = "python"
 module-name = "rdflib_turbo._native"
-include = [{path = "uv.lock", format = "sdist"}, {path = "requirements-coverage.in", format = "sdist"}, {path = "requirements-coverage.lock", format = "sdist"}, {path = "vendor/**/*", format = "sdist"}, {path = "tests/**/*", format = "sdist"}, {path = "docs/**/*", format = "sdist"}, {path = "scripts/**/*", format = "sdist"}, {path = ".github/**/*", format = "sdist"}, {path = "rust-toolchain.toml", format = "sdist"}]
+include = [{path = ".cargo/config.toml", format = "sdist"}, {path = "uv.lock", format = "sdist"}, {path = "requirements-coverage.in", format = "sdist"}, {path = "requirements-coverage.lock", format = "sdist"}, {path = "vendor/**/*", format = "sdist"}, {path = "tests/**/*", format = "sdist"}, {path = "docs/**/*", format = "sdist"}, {path = "scripts/**/*", format = "sdist"}, {path = ".github/**/*", format = "sdist"}, {path = "rust-toolchain.toml", format = "sdist"}]
 exclude = ["**/target/**/*", "**/__pycache__/**/*"]
+
+# Apply the same SDK minimum to user source builds and wheel tags, not just CI.
+[tool.maturin.target.x86_64-apple-darwin]
+macos-deployment-target = "11.0"
+
+[tool.maturin.target.aarch64-apple-darwin]
+macos-deployment-target = "11.0"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

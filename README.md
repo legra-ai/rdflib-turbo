@@ -43,15 +43,48 @@ Default-graph querying is standard; request default_union=True for a union view.
 Graph-only serializers reject named-graph data rather than discarding contexts.
 
 This is **not a complete drop-in RDFLib replacement**. It uses the rdflib_turbo
-namespace and a deliberately small Dataset API. Graph/Store plugins, SPARQL Update,
-initial bindings, persistent storage,
-custom functions and remote SERVICE execution are not provided. RDFLib conversions
+namespace and deliberately small Dataset and Store APIs. RDFLib Graph/Store
+plugins, initial bindings, custom functions and remote SERVICE execution are not
+provided. Dataset has inference/SHACL integration; Store has persistence,
+SPARQL Update and explicit transactions. RDFLib conversions
 copy data and explicitly preserve caller blank-node identifiers. Query results are
 eagerly materialized. No performance or complete-conformance claim is made.
 
-The transactional-store work starts with an exact-term storage patch, tested
-against in-memory Oxigraph and optional RocksDB. Public persistence and transaction
-APIs are still pending; see [the storage decision](docs/adr/0006-exact-term-transactional-store.md).
+## Transactional storage
+
+```python
+from rdflib_turbo import Store
+
+with Store() as store:                 # In-memory default
+    with store.transaction() as tx:
+        tx.parse(data='<urn:alice> <urn:name> "Alice" .')
+        tx.update('INSERT DATA { <urn:alice> <urn:active> true }')
+        assert len(tx) == 2             # Sees this transaction's writes
+        assert len(store) == 0          # Readers see committed state
+    assert len(store) == 2               # Committed at normal scope exit
+
+with Store("./database") as store:     # Persistent RocksDB directory
+    store.update('INSERT DATA { <urn:alice> <urn:name> "Alice" }')
+```
+
+Exceptions abort the transaction. A native operation failure also aborts it if its
+exception is caught inside the scope. Transaction handles become unusable after
+exit. Parsing and updates outside a scope are individually atomic. Another writer
+or close on the same handle fails immediately while a transaction is active.
+Store queries use the default graph unless default_union=True is requested.
+Named graphs and exact literal spelling/datatype identity survive commit and reopen.
+
+Python wheels include RocksDB support; Store() still defaults to memory. Rust-only
+builds enable persistence with `--features persistence`. Closing a store releases
+its database handle. Stores do not yet expose namespace bindings, inference, SHACL
+or an RDFLib Store plugin. Engine adapters that borrow the native transaction are
+next; this API does not copy stored data into Dataset for validation or reasoning.
+
+Oxigraph buffers the transaction delta in memory. The base dataset is not copied
+for rollback; transaction changes, parsed input documents and materialized query
+or serialization results can still be large. See the
+[storage decision](docs/adr/0006-exact-term-transactional-store.md) and
+[transaction ownership contract](docs/adr/0007-store-api-and-scoped-transactions.md).
 
 ## Inference and SHACL
 
@@ -72,7 +105,8 @@ and commit only after success when inplace=True is requested. See
 [the runtime ADR](docs/adr/0001-shared-native-runtime.md) and
 [source provenance](vendor/README.md).
 
-Requires Python 3.11+. Source builds require Rust 1.98.0. Both project code and
+Requires Python 3.11+. macOS wheels require macOS 11 or later on Intel and ARM64.
+Source builds require Rust 1.99.1, a C++20 compiler and libclang. Both project code and
 extracted inference code are MIT OR Apache-2.0; vendored sources retain licenses.
 Copyright 2026 DataRoad Inc, Delaware, USA, trading as Legra.
 
