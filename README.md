@@ -46,7 +46,7 @@ This is **not a complete drop-in RDFLib replacement**. It uses the rdflib_turbo
 namespace and deliberately small Dataset and Store APIs. RDFLib Graph/Store
 plugins, initial bindings, custom functions and remote SERVICE execution are not
 provided. Dataset has inference/SHACL integration; Store has persistence,
-SPARQL Update and explicit transactions. RDFLib conversions
+SPARQL Update, direct inference and explicit transactions. RDFLib conversions
 copy data and explicitly preserve caller blank-node identifiers. Query results are
 eagerly materialized. No performance or complete-conformance claim is made.
 
@@ -76,9 +76,23 @@ Named graphs and exact literal spelling/datatype identity survive commit and reo
 
 Python wheels include RocksDB support; Store() still defaults to memory. Rust-only
 builds enable persistence with `--features persistence`. Closing a store releases
-its database handle. Stores do not yet expose namespace bindings, inference, SHACL
-or an RDFLib Store plugin. Engine adapters that borrow the native transaction are
-next; this API does not copy stored data into Dataset for validation or reasoning.
+its database handle. Store and transaction inference use the existing rdfs, owlrl
+and both compatibility modes directly on the native transaction:
+
+```python
+with Store() as store:
+    with store.transaction() as tx:
+        tx.parse(data="<urn:Child> <http://www.w3.org/2000/01/rdf-schema#subClassOf> <urn:Parent> . <urn:alice> a <urn:Child> .")
+        tx.infer(inference="rdfs", destination="urn:inferred")
+        assert tx.query("ASK { GRAPH <urn:inferred> { <urn:alice> a <urn:Parent> } }").askAnswer
+```
+
+Inference reads the union of graph contexts and writes only new facts to the
+requested destination (the default graph when omitted). It sees pending updates;
+errors abort the entire transaction. Standalone store.infer(...) is atomic.
+See the [direct inference contract](docs/adr/0008-direct-transaction-inference.md).
+Stores do not yet expose namespace bindings, SHACL or an RDFLib Store plugin.
+The SHACL adapter remains next; stored data is never copied into Dataset for inference.
 
 Oxigraph buffers the transaction delta in memory. The base dataset is not copied
 for rollback; transaction changes, parsed input documents and materialized query
