@@ -9,3 +9,7 @@ The native inference implementation and RDF/list helpers in src are extracted
 from the same commit under MIT OR Apache-2.0. This repository owns the extracted
 implementation from this point forward; it has no Python dependency on pyshacl-turbo.
 No unpublished preparation-cache changes were copied.
+
+- `oxsdatatypes-0.2.3/`: published Oxigraph datatype sources with one parser correction
+  for `xsd:gMonthDay` February 29. See its `TURBO-PATCH.md` and original archive
+  checksum in `rust-sources.json`. MIT and Apache license texts are retained.

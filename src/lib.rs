@@ -284,3 +284,6 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeDataset>()?;
     Ok(())
 }
+
+#[cfg(test)]
+mod native_tests;

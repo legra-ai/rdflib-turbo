@@ -14,9 +14,9 @@ It uses pinned coverage dependencies and a fresh venv, builds and verifies an
 instrumented wheel, runs Rust/native Python/OWL-RL Python tests and merges actual
 counters. Normal development extensions are not replaced.
 
-The current Rust test target contains zero standalone test cases; its initial
-Rust-only coverage is zero. The native and OWL-RL Python suites exercise different
-parts of this shared implementation. Their percentages must not be summed.
+The initial baseline had zero standalone Rust test cases. Standalone tests now
+exercise graph helpers, inference boundaries, error propagation and lock poisoning.
+The native and OWL-RL Python suites exercise different parts of this shared implementation. Their percentages must not be summed.
 Reports retain all three stages and the combined result. CI pins the companion
 source revision explicitly; OWL-RL's own coverage job tests its current source.
 
@@ -33,3 +33,18 @@ badges. External PyO3 bootstrap mapping diagnostics remain visible in CI logs;
 the owned-source denominator must still match the complete mapping. Python
 coverage retains its 100% line/branch requirement. No numerical Rust floor is
 invented for this first baseline. Badge values round down to a tenth.
+
+
+Standalone native tests now cover internal graph helpers, malformed declarations,
+inference atomicity and boundary failures alongside public Python integration.
+Remaining unexecuted regions stay in the denominator. Examples include errors
+from serializing valid RDF into an in-memory byte vector, parsing built-in query
+constants and impossible result variants after query-kind validation. These are
+not assigned synthetic hits. The HTML report is the per-revision gap inventory;
+a high aggregate percentage does not establish exhaustive behavioral coverage.
+
+The Rust test executables embed the selected Python distribution. Their runtime
+uses that interpreter's absolute base prefix, separately from the wheel-test
+venv, so relocatable Python installations load the matching standard library.
+The shared datatype parser correction and required upstream tests are recorded
+in the datatype-parser ADR and vendored patch note.

@@ -149,6 +149,8 @@ jobs:
           components: rustfmt
       - run: cargo +nightly-2026-10-16 fmt --check
       - run: cargo clippy --locked -- -D warnings
+      - name: Patched datatype parser regressions
+        run: cargo test --locked -p oxsdatatypes --lib
       - run: uvx ruff check python tests scripts
       - run: uvx ruff format --check python tests scripts
 
