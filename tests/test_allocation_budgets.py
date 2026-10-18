@@ -62,3 +62,7 @@ def test_failed_budget_stops_remaining_processes(budgets, monkeypatch):
     with pytest.raises(RuntimeError, match="budget exceeded"):
         budgets.run_budgets({})
     assert len(calls) == 1
+
+
+def test_native_boolean_membership_budget_is_required(budgets):
+    assert "store::read_input_tests::native_boolean_membership_avoids_result_rows" in budgets.TESTS

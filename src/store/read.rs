@@ -40,22 +40,7 @@ pub(super) fn start(
     if mask == 0
         && let (Some(subject), Some(predicate), Some(object)) = (subject, predicate, object)
     {
-        let subject = PreparedTerm::new(subject, Position::Subject)?;
-        let predicate = PreparedTerm::new(predicate, Position::Predicate)?;
-        let object = PreparedTerm::new(object, Position::Object)?;
-        let graph = graph
-            .map(|source| PreparedTerm::new(source, Position::Subject))
-            .transpose()?;
-        let found = store
-            .contains(QuadRef::new(
-                subject.subject_ref(),
-                predicate.predicate_ref(),
-                object.term_ref(),
-                graph.as_ref().map_or(GraphNameRef::DefaultGraph, |value| {
-                    value.subject_ref().into()
-                }),
-            ))
-            .map_err(runtime)?;
+        let found = contains_exact(store, subject, predicate, object, graph)?;
         // bounded: an exact quad lookup returns zero or one placeholder row.
         return Ok((
             if found {
@@ -69,6 +54,31 @@ pub(super) fn start(
     let cursor = open(store, subject, predicate, object, graph, mask)?;
     let (rows, finished) = cursor.batch()?;
     Ok((rows, if finished { None } else { Some(cursor) }))
+}
+
+pub(super) fn contains_exact(
+    store: &Store,
+    subject: TermView<'_>,
+    predicate: TermView<'_>,
+    object: TermView<'_>,
+    graph: Option<TermView<'_>>,
+) -> Result<bool> {
+    let subject = PreparedTerm::new(subject, Position::Subject)?;
+    let predicate = PreparedTerm::new(predicate, Position::Predicate)?;
+    let object = PreparedTerm::new(object, Position::Object)?;
+    let graph = graph
+        .map(|source| PreparedTerm::new(source, Position::Subject))
+        .transpose()?;
+    store
+        .contains(QuadRef::new(
+            subject.subject_ref(),
+            predicate.predicate_ref(),
+            object.term_ref(),
+            graph.as_ref().map_or(GraphNameRef::DefaultGraph, |value| {
+                value.subject_ref().into()
+            }),
+        ))
+        .map_err(runtime)
 }
 
 fn open(

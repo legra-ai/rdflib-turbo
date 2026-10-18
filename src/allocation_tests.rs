@@ -120,6 +120,7 @@ fn inference_heap_budget() {
         data.infer(py, "owlrl", None).unwrap();
         let peak = PEAK.load(Relaxed);
         let retained = LIVE.load(Relaxed);
+        println!("INFERENCE_HEAP peak_bytes={peak} retained_bytes={retained}");
         assert!(
             peak < retained * 2,
             "Inference heap budget exceeded: peak={peak}, retained={retained}"
@@ -188,4 +189,61 @@ fn failed_parse_releases_staged_terms() {
             .unwrap();
         assert_eq!(data.__len__().unwrap(), 2);
     });
+}
+
+/// Six ordered indexes share each quad record instead of copying wide keys.
+#[test]
+#[ignore = "global live counters require this test to run alone"]
+fn shared_index_retained_budget() {
+    let baseline = LIVE.load(Relaxed);
+    let mut data = oxrdf::Dataset::new();
+    for index in 0..10_000 {
+        data.insert(&Quad::new(
+            NamedNode::new_unchecked(format!("urn:s{index}")),
+            NamedNode::new_unchecked("urn:p"),
+            Literal::new_simple_literal(format!("value{index}")),
+            GraphName::DefaultGraph,
+        ));
+    }
+    let retained = LIVE.load(Relaxed).saturating_sub(baseline);
+    println!("INDEX_RETAINED bytes={retained} quads={}", data.len());
+    assert_eq!(data.len(), 10_000);
+    assert!(
+        retained < 5_000_000,
+        "Six-index retained allocation budget exceeded: {retained}"
+    );
+    std::hint::black_box(&data);
+}
+
+#[test]
+#[ignore = "global allocation counters require isolated execution"]
+fn scoped_query_binding_does_not_copy_graph_lexical() {
+    let subject = NamedNode::new_unchecked("urn:s");
+    let graph = NamedNode::new_unchecked(format!("urn:g{}", "x".repeat(64 * 1024)));
+    let mut data = Dataset::new();
+    data.insert(&Quad::new(
+        subject.clone(),
+        NamedNode::new_unchecked("urn:p"),
+        Literal::new_simple_literal("value"),
+        graph.clone(),
+    ));
+    let source = &data;
+    let subject = spareval::QueryableDataset::internalize_term(&source, subject.into()).unwrap();
+    let graph = spareval::QueryableDataset::internalize_term(&source, graph.into()).unwrap();
+    let (rows, allocated) = measure_allocated(|| {
+        spareval::QueryableDataset::internal_quads_for_pattern(
+            &source,
+            Some(&subject),
+            None,
+            None,
+            Some(Some(&graph)),
+        )
+        .count()
+    });
+    println!("SCOPED_BINDING allocated_bytes={allocated} rows={rows}");
+    assert_eq!(rows, 1);
+    assert!(
+        allocated < 8 * 1024,
+        "Scoped query copied graph lexical storage: {allocated}"
+    );
 }

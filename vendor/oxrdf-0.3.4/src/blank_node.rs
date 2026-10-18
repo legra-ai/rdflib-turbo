@@ -147,6 +147,19 @@ enum BlankNodeRefContent<'a> {
 }
 
 impl<'a> BlankNodeRef<'a> {
+    /// Retains the numeric identity associated with an interned canonical label.
+    pub(crate) fn from_numeric_id(id: u128, label: &'a str) -> Self {
+        assert_eq!(
+            IdStr::new(id).as_str(),
+            label,
+            "Noncanonical numeric blank-node label"
+        );
+        Self(BlankNodeRefContent::Anonymous {
+            id: id.to_ne_bytes(),
+            str: label,
+        })
+    }
+
     /// Creates a blank node from a unique identifier.
     ///
     /// The blank node identifier must be valid according to N-Triples, Turtle, and SPARQL grammars.

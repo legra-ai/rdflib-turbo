@@ -58,3 +58,16 @@ multi-FROM datasets use this path. Feature-off upstream behavior is unchanged.
 Native Graph/StoreDataset regressions retain two identical projected bindings
 from two distinct triples while collapsing copies of the same triple across
 contexts. See rdflib-turbo ADR 0008.
+
+CONSTRUCT result deduplication now stores query-local exact term identities and
+compact three-integer keys instead of retaining an owned copy of every triple.
+Variable terms use the QueryableDataset sameTerm equality contract; template
+constants keep bounded external identities, including variable/constant equality.
+Constants and generated blanks do not require dataset internalization. Existing
+validation, blank/quoted bypass and cache clearing remain intact. See rdflib-turbo
+ADR 0028, persistent construct regressions and the unchanged inference heap budget.
+
+The Dataset adapter delegates validated statement filters to the lifetime-safe
+Dataset pattern iterator, eliminating copied graph bindings and unrelated graph
+decoding. Preserve the SPARQL named-only wildcard graph rule separately. Exact
+scope/kind/lifetime tests and the large-binding allocation budget cover ADR 0029.

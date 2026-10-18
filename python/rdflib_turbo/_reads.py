@@ -74,6 +74,25 @@ def scoped_rows(store, pattern, context, positions=(0, 1, 2)):
 class ProjectedReads:
     """Avoid constructing unused RDF terms for ordinary graph projections."""
 
+    def __contains__(self, pattern):
+        if (
+            type(self).triples is not ProjectedReads.triples
+            or type(self).__getattribute__ is not object.__getattribute__
+            or "triples" in self.__dict__
+            or not isinstance(self.store.backend, Store)
+            or isinstance(pattern[1], Path)
+            or pattern[0] is None
+            or pattern[1] is None
+            or pattern[2] is None
+        ):
+            return super().__contains__(pattern)
+        return self.store.backend._native.contains_terms(
+            encode(pattern[0]),
+            encode(pattern[1]),
+            encode(pattern[2]),
+            encode_graph(self.store, self),
+        )
+
     def triples(self, pattern):
         if isinstance(pattern[1], Path) or not isinstance(self.store.backend, Store):
             yield from super().triples(pattern)

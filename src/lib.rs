@@ -319,3 +319,6 @@ mod allocation_tests;
 
 #[cfg(test)]
 mod store_tests;
+
+#[cfg(test)]
+mod construct_tests;

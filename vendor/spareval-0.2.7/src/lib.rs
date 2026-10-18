@@ -1434,3 +1434,6 @@ mod tests {
         assert!(result.is_none());
     }
 }
+
+#[cfg(test)]
+mod construct_tests;

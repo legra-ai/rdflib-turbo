@@ -56,6 +56,27 @@ impl NativeStore {
         .map_err(error)
     }
 
+    #[pyo3(signature = (subject, predicate, object, graph))]
+    fn contains_terms(
+        &self,
+        py: Python<'_>,
+        subject: read_input::TermTuple,
+        predicate: read_input::TermTuple,
+        object: read_input::TermTuple,
+        graph: Option<read_input::TermTuple>,
+    ) -> PyResult<bool> {
+        py.detach(|| {
+            read::contains_exact(
+                &self.snapshot()?,
+                read_input::term_view(&subject),
+                read_input::term_view(&predicate),
+                read_input::term_view(&object),
+                read_input::view(&graph),
+            )
+        })
+        .map_err(error)
+    }
+
     fn read_pattern(
         &self,
         py: Python<'_>,

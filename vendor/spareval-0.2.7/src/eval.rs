@@ -589,7 +589,16 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                     )?,
                 })
             })
-            .collect();
+            .collect::<Vec<_>>();
+        let mut constant_ids = FxHashMap::default();
+        for triple in &template {
+            for value in [&triple.subject, &triple.predicate, &triple.object] {
+                if let TripleTemplateValue::Constant(term) = value {
+                    let next_id = constant_ids.len();
+                    constant_ids.entry(term.clone()).or_insert(next_id);
+                }
+            }
+        }
         let from = match encode_initial_bindings(&self.dataset, &variables, substitutions) {
             Ok(from) => from,
             Err(e) => return (Err(e), stats),
@@ -601,6 +610,8 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                 template,
                 buffered_results: Vec::default(),
                 already_emitted_results: FxHashSet::default(),
+                seen_terms: FxHashMap::default(),
+                constant_ids,
                 bnodes: Vec::default(),
             })),
             stats,
@@ -4016,7 +4027,11 @@ struct ConstructIterator<'a, D: QueryableDataset<'a>> {
     iter: InternalTuplesIterator<'a, D::InternalTerm>,
     template: Vec<TripleTemplate>,
     buffered_results: Vec<Result<Triple, QueryEvaluationError>>,
-    already_emitted_results: FxHashSet<Triple>,
+    already_emitted_results: FxHashSet<[usize; 3]>,
+    // Bounded by three terms per retained result; cleared with the existing result cache.
+    seen_terms: FxHashMap<D::InternalTerm, usize>,
+    // Bounded by the CONSTRUCT template constants, never by result count.
+    constant_ids: FxHashMap<Term, usize>,
     bnodes: Vec<BlankNode>,
 }
 
@@ -4034,27 +4049,49 @@ impl<'a, D: QueryableDataset<'a>> Iterator for ConstructIterator<'a, D> {
                     Err(error) => return Some(Err(error)),
                 };
                 for template in &self.template {
-                    if let (Some(subject), Some(predicate), Some(object)) = (
-                        get_triple_template_value(
+                    let (Some(internal_subject), Some(internal_predicate), Some(internal_object)) = (
+                        get_internal_triple_template_value(
                             &template.subject,
                             &tuple,
                             &mut self.bnodes,
                             &self.eval.dataset,
-                        )
-                        .and_then(|t| t.try_into().ok()),
-                        get_triple_template_value(
+                        ),
+                        get_internal_triple_template_value(
                             &template.predicate,
                             &tuple,
                             &mut self.bnodes,
                             &self.eval.dataset,
-                        )
-                        .and_then(|t| t.try_into().ok()),
-                        get_triple_template_value(
+                        ),
+                        get_internal_triple_template_value(
                             &template.object,
                             &tuple,
                             &mut self.bnodes,
                             &self.eval.dataset,
                         ),
+                    ) else {
+                        continue;
+                    };
+                    let key = (internal_subject, internal_predicate, internal_object);
+                    if let (Some(&subject), Some(&predicate), Some(&object)) = (
+                        key.0.id(&self.seen_terms, &self.constant_ids),
+                        key.1.id(&self.seen_terms, &self.constant_ids),
+                        key.2.id(&self.seen_terms, &self.constant_ids),
+                    ) {
+                        if self
+                            .already_emitted_results
+                            .contains(&[subject, predicate, object])
+                        {
+                            continue;
+                        }
+                    }
+                    if let (Some(subject), Some(predicate), Some(object)) = (
+                        key.0
+                            .externalize(&self.eval.dataset)
+                            .and_then(|t| t.try_into().ok()),
+                        key.1
+                            .externalize(&self.eval.dataset)
+                            .and_then(|t| t.try_into().ok()),
+                        key.2.externalize(&self.eval.dataset),
                     ) {
                         let triple = Triple {
                             subject,
@@ -4067,16 +4104,52 @@ impl<'a, D: QueryableDataset<'a>> Iterator for ConstructIterator<'a, D> {
                         let new_triple = triple.subject.is_blank_node()
                             || triple.object.is_blank_node()
                             || triple.object.is_triple()
-                            || self.already_emitted_results.insert(triple.clone());
+                            || {
+                                let subject = key.0.assign_id(
+                                    &triple.subject.clone().into(),
+                                    &mut self.seen_terms,
+                                    &self.constant_ids,
+                                );
+                                let predicate = key.1.assign_id(
+                                    &triple.predicate.clone().into(),
+                                    &mut self.seen_terms,
+                                    &self.constant_ids,
+                                );
+                                let object = key.2.assign_id(
+                                    &triple.object,
+                                    &mut self.seen_terms,
+                                    &self.constant_ids,
+                                );
+                                self.already_emitted_results
+                                    .insert([subject, predicate, object])
+                            };
                         #[cfg(not(feature = "sparql-12"))]
-                        let new_triple = triple.subject.is_blank_node()
-                            || triple.object.is_blank_node()
-                            || self.already_emitted_results.insert(triple.clone());
+                        let new_triple =
+                            triple.subject.is_blank_node() || triple.object.is_blank_node() || {
+                                let subject = key.0.assign_id(
+                                    &triple.subject.clone().into(),
+                                    &mut self.seen_terms,
+                                    &self.constant_ids,
+                                );
+                                let predicate = key.1.assign_id(
+                                    &triple.predicate.clone().into(),
+                                    &mut self.seen_terms,
+                                    &self.constant_ids,
+                                );
+                                let object = key.2.assign_id(
+                                    &triple.object,
+                                    &mut self.seen_terms,
+                                    &self.constant_ids,
+                                );
+                                self.already_emitted_results
+                                    .insert([subject, predicate, object])
+                            };
                         if new_triple {
                             self.buffered_results.push(Ok(triple));
                             if self.already_emitted_results.len() > 1024 * 1024 {
                                 // We don't want to have a too big memory impact
                                 self.already_emitted_results.clear();
+                                self.seen_terms.clear();
                             }
                         }
                     }
@@ -4161,6 +4234,79 @@ impl TripleTemplateValue {
                 Self::Variable(encode_variable(variables, variable))
             }
             NamedNodePattern::NamedNode(term) => Self::Constant(term.clone().into()),
+        }
+    }
+}
+
+enum ConstructTerm<'t, T> {
+    Internal(T),
+    Constant(&'t Term),
+    External(Term),
+}
+
+impl<T: Clone + Eq + Hash> ConstructTerm<'_, T> {
+    fn id<'a>(
+        &self,
+        terms: &'a FxHashMap<T, usize>,
+        constants: &'a FxHashMap<Term, usize>,
+    ) -> Option<&'a usize> {
+        match self {
+            Self::Internal(term) => terms.get(term),
+            Self::Constant(term) => constants.get(*term),
+            Self::External(term) => constants.get(term),
+        }
+    }
+
+    fn assign_id(
+        self,
+        external: &Term,
+        terms: &mut FxHashMap<T, usize>,
+        constants: &FxHashMap<Term, usize>,
+    ) -> usize {
+        match self {
+            Self::Internal(term) => {
+                if let Some(&id) = terms.get(&term) {
+                    return id;
+                }
+                let id = constants
+                    .get(external)
+                    .copied()
+                    .unwrap_or(constants.len() + terms.len());
+                terms.insert(term, id);
+                id
+            }
+            Self::Constant(term) => *constants
+                .get(term)
+                .expect("CONSTRUCT constant has an identity"),
+            Self::External(_) => {
+                unreachable!("generated blanks and quoted triples bypass result identity caching")
+            }
+        }
+    }
+
+    fn externalize<'a, D: QueryableDataset<'a, InternalTerm = T>>(
+        &self,
+        dataset: &EvalDataset<'a, D>,
+    ) -> Option<Term> {
+        match self {
+            Self::Internal(term) => dataset.externalize_term(term.clone()).ok(),
+            Self::Constant(term) => Some((*term).clone()),
+            Self::External(term) => Some(term.clone()),
+        }
+    }
+}
+
+fn get_internal_triple_template_value<'a, 't, D: QueryableDataset<'a>>(
+    selector: &'t TripleTemplateValue,
+    tuple: &InternalTuple<D::InternalTerm>,
+    bnodes: &mut Vec<BlankNode>,
+    dataset: &EvalDataset<'a, D>,
+) -> Option<ConstructTerm<'t, D::InternalTerm>> {
+    match selector {
+        TripleTemplateValue::Constant(term) => Some(ConstructTerm::Constant(term)),
+        TripleTemplateValue::Variable(v) => tuple.get(*v).cloned().map(ConstructTerm::Internal),
+        _ => {
+            get_triple_template_value(selector, tuple, bnodes, dataset).map(ConstructTerm::External)
         }
     }
 }
