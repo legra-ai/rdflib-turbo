@@ -5,7 +5,7 @@ import sys
 
 from .native_coverage import embedded_python_environment, run
 
-# bounded: these ten regression budgets each require an isolated test process.
+# bounded: these eleven regression budgets each require an isolated test process.
 TESTS = (
     "allocation_tests::inference_heap_budget",
     "allocation_tests::shared_index_retained_budget",
@@ -17,6 +17,7 @@ TESTS = (
     "store::read_input_tests::native_read_filter_binding_does_not_copy_large_input_lexical",
     "store::read::tests::exact_membership_allocates_only_one_result_row",
     "store::read_input_tests::native_boolean_membership_avoids_result_rows",
+    "store::read_input_tests::native_raw_membership_avoids_rows_and_lexical_copies",
 )
 COMMAND = ["cargo", "test", "--locked", "--release", "--features", "allocation-profiling"]
 

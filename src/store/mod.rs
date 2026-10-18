@@ -1,4 +1,5 @@
 //! Native storage and transaction handles, owned by this extension only.
+mod input_terms;
 mod operations;
 pub(crate) mod output;
 mod pattern;
@@ -72,6 +73,27 @@ impl NativeStore {
                 read_input::term_view(&predicate),
                 read_input::term_view(&object),
                 read_input::view(&graph),
+            )
+        })
+        .map_err(error)
+    }
+
+    fn contains_pattern<'py>(
+        &self,
+        py: Python<'py>,
+        pattern: &Bound<'py, PyAny>,
+        context: &Bound<'py, PyAny>,
+        inputs: Py<input_terms::NativeInputTerms>,
+    ) -> PyResult<bool> {
+        let staged = inputs.bind(py).get().stage(py, pattern, context)?;
+        let pinned = staged.pin(py)?;
+        py.detach(|| {
+            read::contains_exact(
+                &self.snapshot()?,
+                pinned.subject.view(),
+                pinned.predicate.view(),
+                pinned.object.view(),
+                pinned.graph.as_ref().map(input_terms::PinnedTerm::view),
             )
         })
         .map_err(error)
@@ -305,6 +327,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<term_output::NativeTermFactories>()?;
     module.add_class::<term_output::NativeReadCursor>()?;
     module.add_class::<NativeStore>()?;
+    module.add_class::<input_terms::NativeInputTerms>()?;
     module.add_class::<NativeTransaction>()?;
     Ok(())
 }

@@ -19,3 +19,6 @@
 # Windows
 *.bat text eol=crlf
 *.cmd text eol=crlf
+
+# Preserve the checksum-verified published archive bytes when staging and checking out.
+* -text

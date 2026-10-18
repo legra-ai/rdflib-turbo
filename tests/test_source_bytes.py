@@ -6,6 +6,8 @@ import subprocess
 import tomllib
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -77,3 +79,37 @@ def test_standalone_persistence_contract_uses_vendored_backend():
     package = next(package for package in packages if package["name"] == "oxrocksdb-sys")
     assert package["version"] == "0.5.11"
     assert "source" not in package, "Contract lockfile still selects the registry backend"
+
+
+@pytest.mark.parametrize("autocrlf", ["false", "true"])
+def test_nested_vendor_attributes_preserve_staged_and_checked_out_bytes(tmp_path, autocrlf):
+    repository = tmp_path / "repository"
+    repository.mkdir()
+
+    def git(*arguments):
+        return subprocess.run(
+            ["git", "-C", str(repository), *arguments],
+            cwd=tmp_path,
+            capture_output=True,
+            check=True,
+        ).stdout
+
+    git("init", "--quiet")
+    git("config", "core.autocrlf", autocrlf)
+    git("config", "core.eol", "crlf")
+    # bounded: the real two-level attribute hierarchy and one representative CRLF file.
+    for relative in [".gitattributes", "vendor/oxrocksdb-sys-0.5.11/lz4/.gitattributes"]:
+        target = repository / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((ROOT / relative).read_bytes())
+    relative = "vendor/oxrocksdb-sys-0.5.11/lz4/build/VS2022/_build.bat"
+    target = repository / relative
+    target.parent.mkdir(parents=True)
+    original = b"@echo off\r\necho preserve published bytes\r\n"
+    target.write_bytes(original)
+    git("add", ".")
+    assert git("show", f":{relative}") == original, "git add normalized published bytes"
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    git("checkout-index", "--all", f"--prefix={checkout.as_posix()}/")
+    assert (checkout / relative).read_bytes() == original
