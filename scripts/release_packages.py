@@ -13,6 +13,8 @@ from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import urlopen
 
+CPYTHON_VERSIONS = ("3.11", "3.12", "3.13", "3.14", "3.15")
+
 
 def digest(path):
     with path.open("rb") as source:
@@ -99,8 +101,8 @@ def read_bundle(bundle, version, revision, output):
 
 def inventory(directory, version):
     packages = sorted(directory.iterdir())
-    wheels = [path for path in packages if path.suffix == ".whl"]
-    sdists = [path for path in packages if path.name == f"rdflib_turbo-{version}.tar.gz"]
+    if any(not path.is_file() for path in packages):
+        raise ValueError("Every release archive must be a regular file")
     platforms = [
         "manylinux_2_28_x86_64",
         "manylinux_2_28_aarch64",
@@ -116,13 +118,18 @@ def inventory(directory, version):
     ]:
         minimum = targets[triple]["macos-deployment-target"].replace(".", "_")
         platforms.append(f"macosx_{minimum}_{architecture}")
-    if len(packages) != 6 or len(sdists) != 1 or len(wheels) != 5:
-        raise ValueError("Expected one source archive and five platform wheels")
-    for platform in platforms:
-        if not any(
-            path.name == f"rdflib_turbo-{version}-cp311-abi3-{platform}.whl" for path in wheels
-        ):
-            raise ValueError(f"Missing platform wheel: {platform}")
+    expected = {f"rdflib_turbo-{version}.tar.gz"}
+    for python in CPYTHON_VERSIONS:
+        tag = "cp" + python.replace(".", "")
+        expected.update(
+            f"rdflib_turbo-{version}-{tag}-{tag}-{platform}.whl" for platform in platforms
+        )
+    actual = {path.name for path in packages}
+    if actual != expected:
+        raise ValueError(
+            f"Release inventory mismatch; missing: {sorted(expected - actual)}; "
+            f"unexpected: {sorted(actual - expected)}"
+        )
     return packages
 
 
@@ -146,7 +153,7 @@ def main():
     if command == "check-build":
         version = tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"]
         inventory(Path("dist"), version)
-        print("Verified one source archive and all five release wheel filenames")
+        print("Verified one source archive and all twenty-five CPython platform wheels")
         return
     version = os.environ["RELEASE_VERSION"]
     if command == "stage":

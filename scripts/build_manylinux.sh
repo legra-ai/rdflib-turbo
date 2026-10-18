@@ -1,12 +1,12 @@
 #!/bin/sh
 # Host entry: build the already-verified source archive in a manylinux container.
-if [ "$#" -ne 3 ]; then
-    printf 'Usage: build_manylinux.sh CONTAINER TARGET PYTHON_ABI\n' >&2
+if [ "$#" -lt 3 ]; then
+    printf 'Usage: build_manylinux.sh CONTAINER TARGET PYTHON_ABI [PYTHON_ABI ...]\n' >&2
     exit 2
 fi
 container=$1
 target=$2
-python_abi=$3
+shift 2 || exit 1
 if [ ! -f source-build/pyproject.toml ] || [ ! -f source-build/Cargo.lock ]; then
     printf 'Extract the verified source distribution into source-build first\n' >&2
     exit 1
@@ -32,7 +32,7 @@ if docker run --rm \
     --workdir /build \
     --env CARGO_BUILD_WARNINGS=deny \
     --env CARGO_TARGET_DIR=/target \
-    "$image" sh /build-wheel.sh "$target" "$python_abi"; then
+    "$image" sh /build-wheel.sh "$target" "$@"; then
     :
 else
     printf 'uv manylinux wheel build failed\n' >&2

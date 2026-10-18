@@ -36,3 +36,13 @@ manylinux builds inside the platform containers. Publication uses `uv publish`
 with the existing trusted publisher and PEP 740 attestations for the original
 tested archives. Normal development uses `uv sync --locked --extra test` and
 `uv run --locked --extra test`; no pip interface or tox environment is used.
+
+Release wheels target CPython 3.11, 3.12, 3.13, 3.14 and 3.15 separately on each
+of the five existing platforms. Each platform job unpacks the tested source
+archive once and reuses its native build cache across all interpreters. Every
+wheel is installed and tested under its matching interpreter, including checks
+of the loaded package/native bytes and 100% Python line and branch coverage.
+The final inventory requires exactly 25 interpreter/platform wheels and one
+source archive. ABI3, mismatched, missing and additional archives fail the gate.
+A previously published version's original archive bundle remains immutable;
+a changed inventory belongs to a new release version.

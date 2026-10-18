@@ -34,3 +34,26 @@ Snapshots cloned from its read view are independent. This local API is used by
 native inference to preserve atomic failure without copying the existing six
 indexes. See `dataset_transaction_tests.rs` and runtime ADR 0005. Original crate
 archive hashes and licenses remain unchanged as source provenance.
+
+## Shared immutable index records
+
+The six Dataset BTreeSet indexes now reference one immutable interned quad record
+through Arc rather than retaining six wide tuple copies. Index-specific wrappers
+preserve the original comparator orders. Canonical GSPO probes borrow a stack
+record; other range bounds are temporary. The insertion journal shares the same
+record, and rollback removes all references before releasing interner entries.
+Clones own independent trees and interners; canonicalization creates new mapped
+records instead of mutating ordered keys. See runtime ADR 0026, the shared-index
+vendor regressions and the required retained-heap allocation budget. Original
+upstream archive and license bytes remain preserved as provenance.
+
+Numeric blank-node decoding retains the encoded identity explicitly, including
+zero, instead of reparsing its label. The maximum numeric range successor carries
+into the next ordering region rather than saturating to the same lower bound.
+Public constructor equality is unchanged. Dataset endpoint regressions cover
+both zero identities, maximum/adjacent IDs, every pattern mask and exact lookup.
+
+Dataset pattern iterators encode filters before returning so they borrow only
+Dataset-owned terms. Fixed graph patterns select existing graph-scoped indexes
+before decoding candidates; global patterns retain their original selection.
+Lifetime, candidate-visit and observed-order regressions accompany ADR 0029.

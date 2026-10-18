@@ -37,18 +37,80 @@ terms are Python RDFLib objects. Native operations release Python's GIL. A lock
 covers each complete native read or write. Parsing and inference commit only on
 success. Parsing separate documents gives blank nodes separate scopes.
 
-Supported format names: turtle, nt, nquads, trig, xml, n3, json-ld. Input is UTF-8
-text, bytes or a local path; source URLs and file objects are not implemented.
+Supported native format names: turtle, nt, nquads, trig, xml, n3, json-ld.
+Dataset and Store accept UTF-8 text, bytes or a local path; their source URL and
+file-object inputs are not implemented.
 Default-graph querying is standard; request default_union=True for a union view.
 Graph-only serializers reject named-graph data rather than discarding contexts.
 
 This is **not a complete drop-in RDFLib replacement**. It uses the rdflib_turbo
-namespace and deliberately small Dataset and Store APIs. RDFLib Graph/Store
-plugins, initial bindings, custom functions and remote SERVICE execution are not
-provided. Dataset has inference/SHACL integration; Store has persistence,
-SPARQL Update, direct inference and explicit transactions. RDFLib conversions
+namespace. Dataset has inference/SHACL integration; Store has persistence,
+SPARQL Update, direct inference and explicit transactions. The unreleased Graph
+and StoreDataset APIs add RDFLib facades over that native Store. Arbitrary RDFLib
+storage plugins, initial query bindings, custom functions and remote SERVICE
+execution are not provided. RDFLib conversions
 copy data and explicitly preserve caller blank-node identifiers. Query results are
 eagerly materialized. No performance or complete-conformance claim is made.
+
+## RDFLib Graph and dataset facades
+
+Graph and StoreDataset are currently unreleased source APIs. Import them explicitly
+from rdflib_turbo; importing rdflib continues to select the original RDFLib classes.
+
+| API | Data owner and intended use |
+|---|---|
+| Dataset | Native dataset with the shared companion inference and SHACL adapters |
+| Store | Native memory or persistent storage, SPARQL Update and scoped transactions |
+| Graph | RDFLib Graph facade over one native Store graph |
+| StoreDataset | RDFLib Dataset facade with default and named views of one native Store |
+
+```python
+from rdflib import Literal, URIRef
+from rdflib_turbo import Graph, StoreDataset
+
+alice, name = URIRef("urn:alice"), URIRef("urn:name")
+graph = Graph()
+graph.add((alice, name, Literal("Alice")))
+assert list(graph.objects(alice, name)) == [Literal("Alice")]
+assert graph.query('ASK { <urn:alice> <urn:name> "Alice" }').askAnswer
+
+dataset = StoreDataset()
+dataset.default_graph.add((alice, name, Literal("default")))
+named = dataset.graph(URIRef("urn:people"))
+with dataset.transaction() as pending:
+    pending.graph(URIRef("urn:people")).add((alice, name, Literal("Alice")))
+    assert len(named) == 0              # Other views see committed state
+assert list(named.objects(alice, name)) == [Literal("Alice")]
+```
+
+These facades reuse RDFLib terms, namespace management, serializers and graph
+utility algorithms. Statements, pattern matching, counts and SPARQL remain in
+native storage; no reference Memory graph or Python SPARQL evaluator runs.
+Ordinary scoped Graph iteration reads bounded native batches. Dataset-wide and
+explicit-transaction iteration, query results and serialization can still
+materialize larger results.
+
+StoreDataset graph views share their native backend and namespace bindings.
+Queries use the default graph unless StoreDataset(default_union=True) is selected;
+a named Graph query uses its own graph as the query's default graph. Dataset-level
+queries can address named graphs with GRAPH. Graph(store=store, identifier=...)
+and StoreDataset(store=store) also accept an existing native Store, including a
+persistent Store. Namespace bindings are facade metadata and are not persisted.
+
+Use Graph.transaction() or StoreDataset.transaction() as a context manager.
+Pending views see the same transaction's writes; normal exit commits statements
+and namespace changes together, while exceptions abort them. Native operation
+failures abort even when caught inside the scope. Nested transactions and manual
+commit()/rollback() on the RDFLib adapter are unsupported. Parsing is atomic and
+uses RDFLib input-source handling followed by the native parser; parser-specific
+keyword options are rejected.
+
+SPARQL requires query/update strings and the native processor. Prepared RDFLib
+queries, nonempty initBindings, alternate processors and scoped named-Graph
+SPARQL Update are rejected. Use StoreDataset.update() for dataset updates,
+including explicit GRAPH clauses. Quoted graphs and arbitrary RDFLib store
+plugins are unsupported. See the [facade decision](docs/adr/0009-native-rdflib-graph-facade.md)
+and [bounded read contract](docs/adr/0011-bounded-typed-scoped-reads.md).
 
 ## Transactional storage
 
@@ -91,7 +153,9 @@ Inference reads the union of graph contexts and writes only new facts to the
 requested destination (the default graph when omitted). It sees pending updates;
 errors abort the entire transaction. Standalone store.infer(...) is atomic.
 See the [direct inference contract](docs/adr/0008-direct-transaction-inference.md).
-Stores do not yet expose namespace bindings, SHACL or an RDFLib Store plugin.
+The low-level Store has no namespace-binding or SHACL API. Graph and StoreDataset
+provide namespace management through their RDFLibStore adapter, without
+registering a named RDFLib storage plugin.
 The SHACL adapter remains next; stored data is never copied into Dataset for inference.
 
 Oxigraph buffers the transaction delta in memory. The base dataset is not copied
@@ -109,6 +173,11 @@ from pyshacl_turbo import validate
 expand(data, inference="rdfs", inplace=True)
 conforms, report, text = validate(data, shacl_graph="shapes.ttl")
 ```
+
+This shared companion path uses Dataset, not Graph or StoreDataset. Store-backed
+facades can invoke direct inference through their native store.backend, including
+inside a transaction, but do not yet have companion SHACL adapters. Converting
+them through Dataset.from_rdflib is explicitly rejected to prevent copying input.
 
 The shared validation path requires this runtime's 0.2.0a1 release, owlrl-turbo
 0.1.0a3 or later, and the companion pyshacl-turbo shared-dataset release. Parsing,

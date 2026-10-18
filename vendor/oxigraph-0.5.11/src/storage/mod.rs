@@ -21,12 +21,14 @@ use std::{io, thread};
 mod binary_encoder;
 mod error;
 mod memory;
+mod memory_counts;
 pub mod numeric_encoder;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 mod rocksdb;
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
 mod rocksdb_wrapper;
 pub mod small_string;
+pub(crate) mod term_text;
 
 pub const DEFAULT_BULK_LOAD_BATCH_SIZE: usize = 1_000_000;
 
@@ -102,6 +104,14 @@ impl Storage {
                 StorageKind::RocksDb(storage) => StorageReaderKind::RocksDb(storage.snapshot()),
                 StorageKind::Memory(storage) => StorageReaderKind::Memory(storage.snapshot()),
             },
+        }
+    }
+
+    pub fn graph_len(&self, graph: &EncodedTerm) -> Result<usize, StorageError> {
+        match &self.kind {
+            StorageKind::Memory(storage) => Ok(storage.graph_len(graph)),
+            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+            StorageKind::RocksDb(_) => count_graph(&self.snapshot(), graph),
         }
     }
 
@@ -331,6 +341,26 @@ impl Iterator for DecodingGraphIterator<'_> {
     }
 }
 
+impl StorageReader<'_> {
+    pub(crate) fn get_term_text(&self, key: &StrHash) -> Result<term_text::TermText, StorageError> {
+        let text = match &self.kind {
+            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+            StorageReaderKind::RocksDb(reader) => {
+                reader.get_str(key)?.map(term_text::TermText::owned)
+            }
+            StorageReaderKind::Memory(reader) => {
+                reader.get_shared_str(key).map(term_text::TermText::shared)
+            }
+        };
+        text.ok_or_else(|| {
+            CorruptionError::new(format!(
+                "Not able to find the string with id {key:?} in the string store"
+            ))
+            .into()
+        })
+    }
+}
+
 impl StrLookup for StorageReader<'_> {
     fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
         match &self.kind {
@@ -457,6 +487,14 @@ enum StorageReadableTransactionKind<'a> {
     expect(clippy::unnecessary_wraps)
 )]
 impl StorageReadableTransaction<'_> {
+    pub fn graph_len(&self, graph: &EncodedTerm) -> Result<usize, StorageError> {
+        match &self.kind {
+            StorageReadableTransactionKind::Memory(transaction) => Ok(transaction.graph_len(graph)),
+            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+            StorageReadableTransactionKind::RocksDb(_) => count_graph(&self.reader(), graph),
+        }
+    }
+
     pub fn reader(&self) -> StorageReader<'_> {
         StorageReader {
             kind: match &self.kind {
@@ -588,6 +626,16 @@ impl StorageReadableTransaction<'_> {
             }
         }
     }
+}
+
+#[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+fn count_graph(reader: &StorageReader<'_>, graph: &EncodedTerm) -> Result<usize, StorageError> {
+    let mut count = 0_usize;
+    for quad in reader.quads_for_pattern(None, None, None, Some(graph)) {
+        quad?;
+        count = count.checked_add(1).expect("graph cardinality overflow");
+    }
+    Ok(count)
 }
 
 #[must_use]

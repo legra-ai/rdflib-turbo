@@ -37,6 +37,7 @@ rustdoc-args = [
 ]
 
 [features]
+rdf-set-union = []
 exact-term-builtins = ["exact-custom-function-terms"]
 calendar-ext = ["sep-0002"]
 default = []

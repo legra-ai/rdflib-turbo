@@ -216,14 +216,17 @@ impl InternedBlankNode {
     }
 
     pub fn decode_from(self, interner: &Interner) -> BlankNodeRef<'_> {
-        BlankNodeRef::new_unchecked(match self {
-            Self::Number { id } => &interner.string_for_blank_node_id[&id],
-            Self::Other { id } => interner.resolve(id),
-        })
+        match self {
+            Self::Number { id } => {
+                BlankNodeRef::from_numeric_id(id, &interner.string_for_blank_node_id[&id])
+            }
+            Self::Other { id } => BlankNodeRef::new_unchecked(interner.resolve(id)),
+        }
     }
 
     pub fn next(self) -> Self {
         match self {
+            Self::Number { id: u128::MAX } => Self::Other { id: Key::first() },
             Self::Number { id } => Self::Number {
                 id: id.saturating_add(1),
             },

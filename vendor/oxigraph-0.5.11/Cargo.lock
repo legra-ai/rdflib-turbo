@@ -1058,8 +1058,6 @@ dependencies = [
 [[package]]
 name = "oxrdf"
 version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4be15186205eb60ddbdc2fb47cb25df472c7f399bbe119b68c0972b6b6dd46ea"
 dependencies = [
  "hex",
  "oxilangtag",
@@ -1099,8 +1097,6 @@ dependencies = [
 [[package]]
 name = "oxrocksdb-sys"
 version = "0.5.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01fcf5ae1e1295a612bef72fc64cd81e1ac3d1bd3243ef84d330f2962a8335e1"
 dependencies = [
  "bindgen",
  "cc",
@@ -1110,8 +1106,6 @@ dependencies = [
 [[package]]
 name = "oxsdatatypes"
 version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c17c2ae62ac34fda465f6331105906c0e17b4e088dac3249e1f229b962062503"
 dependencies = [
  "js-sys",
  "thiserror 1.0.69",
@@ -1683,8 +1677,6 @@ dependencies = [
 [[package]]
 name = "spareval"
 version = "0.2.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85b51144836ff9ca2f792b7a2422c4170ff04460d86cd8f2f764cf53e339cbec"
 dependencies = [
  "hex",
  "json-event-parser",
@@ -1706,8 +1698,6 @@ dependencies = [
 [[package]]
 name = "spargebra"
 version = "0.4.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bef3c186ffb9bf2dde7c5edd5528583f309fcb819b5773cf0e313194a990304f"
 dependencies = [
  "oxilangtag",
  "oxiri",
@@ -1720,8 +1710,6 @@ dependencies = [
 [[package]]
 name = "sparopt"
 version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "973ee503ab3d6c3de66b4b459233cd5b22b44dad0fb7b8d0931daf73d2ede935"
 dependencies = [
  "oxrdf",
  "rand",
@@ -2211,3 +2199,8 @@ name = "zmij"
 version = "1.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8848ee67ecc8aedbaf3e4122217aff892639231befc6a1b58d29fff4c2cabaa"
+
+[[patch.unused]]
+name = "fancy-regex"
+version = "0.19.2"
+source = "git+https://github.com/legra-ai/pyshacl-turbo?rev=c0c3e595b157a04ff8100fff6b30b9a8b3972761#c0c3e595b157a04ff8100fff6b30b9a8b3972761"
