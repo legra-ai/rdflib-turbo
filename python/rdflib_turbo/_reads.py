@@ -4,10 +4,11 @@ from rdflib import BNode, Literal, URIRef
 from rdflib.paths import Path
 
 from ._literal import restore
-from ._native import NativeTermFactories
+from ._native import NativeInputTerms, NativeTermFactories
 from .store import Store
 
 _TERM_FACTORIES = NativeTermFactories(URIRef, BNode, restore, str.__new__, True)
+_INPUT_TERMS = NativeInputTerms(URIRef, BNode, Literal)
 
 
 def encode(value):
@@ -86,12 +87,7 @@ class ProjectedReads:
             or pattern[2] is None
         ):
             return super().__contains__(pattern)
-        return self.store.backend._native.contains_terms(
-            encode(pattern[0]),
-            encode(pattern[1]),
-            encode(pattern[2]),
-            encode_graph(self.store, self),
-        )
+        return self.store.backend._native.contains_pattern(pattern, self, _INPUT_TERMS)
 
     def triples(self, pattern):
         if isinstance(pattern[1], Path) or not isinstance(self.store.backend, Store):

@@ -25,15 +25,16 @@ def test_exact_presence_and_absence_never_enter_row_transport(monkeypatch):
     class BooleanReads:
         read_pattern = staticmethod(forbid)
 
-        def contains_terms(self, *args):
-            calls.append(args)
-            return original.contains_terms(*args)
+        def contains_pattern(self, pattern, context, inputs):
+            calls.append((pattern, context))
+            return original.contains_pattern(pattern, context, inputs)
 
     monkeypatch.setattr(graph.store.backend, "_native", BooleanReads())
     assert TRIPLE in graph
     assert ABSENT not in graph
     assert len(calls) == 2
-    assert calls[0] == (*map(encode, TRIPLE), None)
+    assert calls[0][0] is TRIPLE
+    assert calls[0][1] is graph
 
 
 @pytest.mark.parametrize("identifier", [URIRef("urn:g"), URIRef("relative/g"), BNode("g")])
@@ -234,7 +235,7 @@ def test_failed_native_boolean_read_propagates_without_row_retry(monkeypatch):
     class BrokenRead:
         read_pattern = staticmethod(forbid)
 
-        def contains_terms(self, *args):
+        def contains_pattern(self, *args):
             raise RuntimeError("lookup failed")
 
     monkeypatch.setattr(graph.store.backend, "_native", BrokenRead())

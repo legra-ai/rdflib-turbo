@@ -1,6 +1,6 @@
 //! Committed read filters borrow caller-pinned Python text during native lookup.
 use pyo3::prelude::*;
-use pyo3::types::PyString;
+use pyo3::types::{PyModule, PyString};
 
 use super::{NativeStore, term_output::NativeTermFactories};
 
@@ -108,6 +108,68 @@ fn native_boolean_membership_avoids_result_rows() {
             assert!(
                 bytes < size_of::<super::read::Row>(),
                 "Boolean membership allocated a row or copied lexical input: {bytes} bytes"
+            );
+        }
+    });
+}
+
+#[test]
+#[ignore = "global allocation counters require this test to run alone with --test-threads=1"]
+fn native_raw_membership_avoids_rows_and_lexical_copies() {
+    Python::initialize();
+    Python::attach(|py| {
+        let native = NativeStore::new(py, None).unwrap();
+        // bounded: one deliberately large URI; every Python input is prebuilt outside accounting.
+        let value = "x".repeat(4 * 1024 * 1024);
+        native
+            .insert_terms(
+                py,
+                ("uri".into(), "urn:s".into(), None, None),
+                ("uri".into(), "urn:p".into(), None, None),
+                ("uri".into(), value.clone(), None, None),
+                None,
+            )
+            .unwrap();
+        let lexical = PyString::new(py, &value);
+        assert_eq!(lexical.to_str().unwrap().len(), value.len());
+        // This configurable descriptor classifies plain strings as IRIs. The installed
+        // Python regressions separately exercise the ordinary RDFLib descriptor/classes.
+        let string = py.get_type::<PyString>().unbind();
+        let inputs = Py::new(
+            py,
+            super::input_terms::NativeInputTerms::new(
+                py,
+                string.clone_ref(py),
+                string.clone_ref(py),
+                string,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let store = PyModule::new(py, "input_store").unwrap();
+        store.add("default_identifier", "urn:default").unwrap();
+        let context = PyModule::new(py, "input_context").unwrap();
+        context.add("store", store).unwrap();
+        context.add("identifier", "urn:default").unwrap();
+        let native = Py::new(py, native).unwrap();
+        for (subject, expected) in [("urn:s", true), ("urn:missing", false)] {
+            let pattern = (subject, "urn:p", lexical.clone())
+                .into_pyobject(py)
+                .unwrap();
+            let arguments = (pattern, context.clone(), inputs.clone_ref(py))
+                .into_pyobject(py)
+                .unwrap();
+            let (result, bytes) = crate::allocation_tests::measure_allocated(|| {
+                native
+                    .bind(py)
+                    .call_method1("contains_pattern", arguments)
+                    .unwrap()
+            });
+            assert_eq!(result.extract::<bool>().unwrap(), expected);
+            println!("RAW_MEMBERSHIP found={expected} rust_heap={bytes}");
+            assert!(
+                bytes < size_of::<super::read::Row>(),
+                "Raw membership allocated rows or copied lexical input: {bytes} bytes"
             );
         }
     });
