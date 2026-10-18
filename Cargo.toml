@@ -9,6 +9,10 @@ repository = "https://github.com/legra-ai/rdflib-turbo"
 authors = ["DataRoad Inc, Delaware, USA, trading as Legra"]
 publish = false
 
+[package.metadata.version-info]
+pre_bump_hooks = ["uv run --no-project python scripts/sync_version.py {{version}}"]
+additional_files = ["pyproject.toml", "uv.lock"]
+
 [lib]
 name = "_native"
 crate-type = ["cdylib"]

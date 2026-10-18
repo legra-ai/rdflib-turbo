@@ -5,11 +5,6 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
-    inputs:
-      publish:
-        description: Publish the tested alpha to PyPI
-        type: boolean
-        default: false
   schedule:
     - cron: '23 4 * * *'
 
@@ -27,7 +22,9 @@ jobs:
     name: prepare
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.release.outputs.version }}
+      version: ${{ steps.versions.outputs.version }}
+      cargo-version: ${{ steps.versions.outputs.cargo-version }}
+      release: ${{ steps.release.outputs.release }}
       revision: ${{ steps.release.outputs.revision }}
     steps:
       - uses: astral-sh/setup-uv@v10.3.0
@@ -39,8 +36,30 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          toolchain: 1.99.1
+      - uses: actions/create-github-app-token@v3
+        id: writer
+        if: github.ref == 'refs/heads/main'
+        with:
+          app-id: ${{ secrets.RELEASE_WRITER_APP_ID }}
+          private-key: ${{ secrets.RELEASE_WRITER_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
       - id: release
-        run: uv run --no-project python scripts/prepare_release.py
+        uses: legra-ai/github-actions/.github/actions/prepare-cargo-release@4225546e92bf7ca66814a00070db2193051473eb
+        with:
+          token: ${{ steps.writer.outputs.token }}
+          tag-format: pep440
+      - name: Check out the prepared release revision
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.release.outputs.revision }}
+      - id: versions
+        env:
+          PREPARED_VERSION: ${{ steps.release.outputs.version }}
+        run: uv run --no-project python scripts/release_version.py
 
   sdist:
     needs: prepare
@@ -204,7 +223,7 @@ jobs:
 
   publish:
     needs: [prepare, test]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.publish
+    if: github.ref == 'refs/heads/main' && needs.prepare.outputs.release == 'true'
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -216,6 +235,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
       RELEASE_REVISION: ${{ needs.prepare.outputs.revision }}
+      CARGO_RELEASE_VERSION: ${{ needs.prepare.outputs.cargo-version }}
     steps:
       - uses: astral-sh/setup-uv@v10.3.0
         with:
@@ -227,14 +247,12 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
-      - run: uv run --no-project python scripts/tag_release.py
-      - name: Create draft prerelease if absent
-        run: |
-          if gh release view "v$RELEASE_VERSION" >/dev/null 2>&1; then
-            printf 'Restoring existing release artifacts\n'
-          else
-            gh release create "v$RELEASE_VERSION" --verify-tag --title "v$RELEASE_VERSION" --notes-file docs/release-notes.md --draft --prerelease || exit 1
-          fi
+      - uses: legra-ai/github-actions/.github/actions/tag-tested-release@4225546e92bf7ca66814a00070db2193051473eb
+        with:
+          version: ${{ needs.prepare.outputs.cargo-version }}
+          revision: ${{ needs.prepare.outputs.revision }}
+          tag-format: pep440
+      - run: uv run --no-project python scripts/release_packages.py draft
       - uses: actions/download-artifact@v8
         with:
           pattern: release-*
