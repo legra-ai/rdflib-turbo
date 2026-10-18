@@ -199,3 +199,57 @@ def test_package_license_metadata():
     rust = tomllib.loads((root / "Cargo.toml").read_text())["package"]
     assert python["version"] == rust["version"].replace("-alpha.", "a")
     assert python["license"] == rust["license"]
+
+
+@pytest.mark.parametrize("status", [401, 403, 429, 500])
+def test_draft_creation_never_treats_api_errors_as_absence(release, monkeypatch, status):
+    result = release.subprocess.CompletedProcess([], 1, "", f"HTTP {status}")
+    monkeypatch.setattr(release.subprocess, "run", lambda *args, **kwargs: result)
+    with pytest.raises(RuntimeError, match=str(status)):
+        release.ensure_draft("0.2.0a2", "a" * 40, "0.2.0-alpha.2", "owner/repo")
+
+
+@pytest.mark.parametrize(
+    "cargo,python,prerelease", [("0.2.0-alpha.2", "0.2.0a2", True), ("0.2.0", "0.2.0", False)]
+)
+def test_draft_creation_uses_exact_source_and_candidate_status(
+    release, monkeypatch, cargo, python, prerelease
+):
+    commands = []
+
+    def run(command, **kwargs):
+        commands.append(command)
+        return release.subprocess.CompletedProcess(
+            [], 1 if len(commands) == 1 else 0, "", "HTTP 404"
+        )
+
+    monkeypatch.setattr(release.subprocess, "run", run)
+    release.ensure_draft(python, "a" * 40, cargo, "owner/repo")
+    assert commands[0] == ["gh", "api", f"repos/owner/repo/releases/tags/v{python}"]
+    assert commands[1] == [
+        "gh",
+        "release",
+        "create",
+        f"v{python}",
+        "--verify-tag",
+        "--target",
+        "a" * 40,
+        "--title",
+        f"v{python}",
+        "--notes-file",
+        "docs/release-notes.md",
+        "--draft",
+        *(["--prerelease"] if prerelease else []),
+    ]
+
+
+def test_existing_release_is_reused_without_mutation(release, monkeypatch):
+    commands = []
+
+    def run(command, **kwargs):
+        commands.append(command)
+        return release.subprocess.CompletedProcess([], 0, '{"draft": true}', "")
+
+    monkeypatch.setattr(release.subprocess, "run", run)
+    release.ensure_draft("0.2.0a2", "a" * 40, "0.2.0-alpha.2", "owner/repo")
+    assert len(commands) == 1

@@ -133,6 +133,37 @@ def inventory(directory, version):
     return packages
 
 
+def ensure_draft(version, revision, cargo_version, repository):
+    tag = f"v{version}"
+    result = subprocess.run(
+        ["gh", "api", f"repos/{repository}/releases/tags/{tag}"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        print("Restoring existing release artifacts")
+        return
+    if "HTTP 404" not in result.stderr:
+        raise RuntimeError(result.stderr or result.stdout)
+    command = [
+        "gh",
+        "release",
+        "create",
+        tag,
+        "--verify-tag",
+        "--target",
+        revision,
+        "--title",
+        tag,
+        "--notes-file",
+        "docs/release-notes.md",
+        "--draft",
+    ]
+    if "-" in cargo_version:
+        command.append("--prerelease")
+    subprocess.run(command, check=True)
+
+
 def stage(version, revision):
     tag = f"v{version}"
     bundle = Path("release-packages.zip")
@@ -156,7 +187,14 @@ def main():
         print("Verified one source archive and all twenty-five CPython platform wheels")
         return
     version = os.environ["RELEASE_VERSION"]
-    if command == "stage":
+    if command == "draft":
+        ensure_draft(
+            version,
+            os.environ["RELEASE_REVISION"],
+            os.environ["CARGO_RELEASE_VERSION"],
+            os.environ["GITHUB_REPOSITORY"],
+        )
+    elif command == "stage":
         stage(version, os.environ["RELEASE_REVISION"])
     elif command in ("filter", "verify"):
         packages = inventory(Path("release-packages"), version)
