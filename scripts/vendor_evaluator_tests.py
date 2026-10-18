@@ -41,7 +41,7 @@ def run(root):
         if features:
             arguments.extend(["--features", features])
         listing = subprocess.run(
-            [*arguments, "--", "--list"], cwd=root, check=True, capture_output=True, text=True
+            [*arguments, "--", "--list"], cwd=root, check=True, stdout=subprocess.PIPE, text=True
         ).stdout
         available = {
             line.removesuffix(": test") for line in listing.splitlines() if line.endswith(": test")

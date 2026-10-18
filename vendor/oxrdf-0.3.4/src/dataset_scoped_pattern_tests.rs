@@ -77,7 +77,7 @@ fn iterator_retains_dataset_terms_after_temporary_patterns_drop() {
 #[test]
 fn scoped_result_order_matches_existing_global_index_filtering() {
     // bounded: the fixed exact-term fixture, not caller-sized application input.
-    let data = Dataset::from_iter(super::shared_tests::fixture());
+    let data = Dataset::from_iter(shared_tests::fixture());
     let targets: Vec<_> = data.iter().step_by(37).map(QuadRef::into_owned).collect();
     for target in &targets {
         for mask in 0..8 {

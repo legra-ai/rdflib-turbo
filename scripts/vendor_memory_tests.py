@@ -14,7 +14,8 @@ REQUIRED_TESTS = (
 
 def patch_arguments(root):
     configuration = tomllib.loads((root / "Cargo.toml").read_text())
-    arguments = []
+    # Match CI's warning policy for standalone vendor test crates as well.
+    arguments = ["--config", 'build.warnings="deny"']
     for package, patch in configuration["patch"]["crates-io"].items():
         for key, value in patch.items():
             if key == "path":
@@ -38,7 +39,7 @@ def run(root):
         "storage::memory",
     ]
     listed = subprocess.run(
-        [*arguments, "--", "--list"], cwd=root, check=True, capture_output=True, text=True
+        [*arguments, "--", "--list"], cwd=root, check=True, stdout=subprocess.PIPE, text=True
     ).stdout
     available = {
         line.removesuffix(": test") for line in listed.splitlines() if line.endswith(": test")
