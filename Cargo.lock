@@ -226,7 +226,7 @@ checksum = "00d174d5400e5e8fd687ad1049e2f578285fa914201b1af7e8b112a4546bd826"
 [[package]]
 name = "fancy-regex"
 version = "0.19.2"
-source = "git+https://github.com/legra-ai/pyshacl-turbo?rev=bcd5f5af503ae1b9b8e06b23451ae13d5a741e31#bcd5f5af503ae1b9b8e06b23451ae13d5a741e31"
+source = "git+https://github.com/legra-ai/pyshacl-turbo?rev=c0c3e595b157a04ff8100fff6b30b9a8b3972761#c0c3e595b157a04ff8100fff6b30b9a8b3972761"
 dependencies = [
  "bit-set",
  "regex-automata",
@@ -849,8 +849,8 @@ dependencies = [
 
 [[package]]
 name = "pyshacl-turbo-engine"
-version = "0.3.1"
-source = "git+https://github.com/legra-ai/pyshacl-turbo?rev=bcd5f5af503ae1b9b8e06b23451ae13d5a741e31#bcd5f5af503ae1b9b8e06b23451ae13d5a741e31"
+version = "0.3.2"
+source = "git+https://github.com/legra-ai/pyshacl-turbo?rev=c0c3e595b157a04ff8100fff6b30b9a8b3972761#c0c3e595b157a04ff8100fff6b30b9a8b3972761"
 dependencies = [
  "bigdecimal",
  "fancy-regex",
