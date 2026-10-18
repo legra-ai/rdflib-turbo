@@ -1,4 +1,4 @@
-# ADR 0031: Inspect raw membership terms before native lookup
+# ADR 0032: Inspect raw membership terms before native lookup
 
 Status: Accepted
 
