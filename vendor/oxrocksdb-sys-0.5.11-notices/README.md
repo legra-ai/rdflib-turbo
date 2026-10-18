@@ -13,3 +13,11 @@ not a fork of the registry dependency. Cargo.lock retains the source checksum.
 The Python package license-files configuration includes these texts in source
 archives and wheels. scripts/test_wheel.py verifies their presence and exact bytes
 in each built wheel before running the installed-artifact tests.
+
+The vendored source's local `lz4/.gitattributes` patch appends `* -text` after
+upstream conversion rules. This preserves the checksum-verified published
+archive bytes through both `git add` and checkout, including CRLF Windows
+scripts and project files. Those files keep their original published hashes;
+only the patched attributes file has an updated local manifest checksum.
+`tests/test_source_bytes.py` verifies both staged blobs and checkout bytes with
+the real nested attribute hierarchy under both autocrlf settings.
