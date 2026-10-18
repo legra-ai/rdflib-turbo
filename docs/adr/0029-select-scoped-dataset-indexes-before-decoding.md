@@ -10,8 +10,8 @@ prebuilt 64 KiB graph identifier caused about 66 KiB of allocation per lookup.
 Encode the four optional filters before returning an iterator. Resolve retained
 filter references from the Dataset's own interner so iterator output borrows only
 the Dataset, independently of caller filter lifetimes. Unknown terms return an
-empty iterator. For a fixed graph, delegate to the existing GraphView pattern
-dispatcher and its scoped indexes. Preserve global selection when no graph is
+empty iterator. For a fixed graph, dispatch the encoded filters directly to the
+existing GraphView scoped index helpers. Preserve global selection when no graph is
 specified. No whole Dataset clone, caller-owned reference or second relation is
 retained.
 
@@ -28,8 +28,10 @@ allocation budget rejects copying a large graph binding and joins the required C
 inventory. Actual patched Dataset/evaluator feature-mode suites exercise these
 contracts.
 
-This first implementation decodes Dataset-owned filter references before the
-existing GraphView dispatcher encodes subject/predicate/object filters again.
-It removes graph scans and lexical copying but may hash long bound terms twice.
-Installed-wheel CPU controls must measure this cost; do not claim universal query
-improvement from row counts or allocation budgets alone.
+Encode each supplied component once. Do not decode a filter and pass it to a
+public lookup that encodes it again. Exact scoped matches probe the canonical
+GSPO index with a stack key; other masks reuse existing encoded range helpers.
+Global lookups likewise use encoded helpers before decoding results. A test-only
+counter at each Dataset encoding boundary checks all sixteen graph/SPO masks and
+absent terms. Installed-wheel controls must still verify query CPU costs; row
+counts and allocation budgets alone do not prove a performance improvement.

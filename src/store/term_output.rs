@@ -8,8 +8,13 @@ use pyo3::types::{PyString, PyType};
 use super::read;
 use crate::error;
 
+#[path = "pointer_batch.rs"]
+mod pointer_batch;
+use pointer_batch::PositionCache;
+
 type Row = (Option<Py<PyAny>>, Option<Py<PyAny>>, Option<Py<PyAny>>);
 pub(super) type FirstBatch = (Vec<Row>, Option<NativeReadCursor>);
+const MIN_REUSE_ROWS: usize = 8;
 
 #[pyclass(frozen, module = "rdflib_turbo._native")]
 pub(crate) struct NativeTermFactories {
@@ -17,17 +22,20 @@ pub(crate) struct NativeTermFactories {
     bnode: Py<PyAny>,
     literal: Py<PyAny>,
     allocate: Py<PyAny>,
+    reuse_identifiers: bool,
 }
 
 #[pymethods]
 impl NativeTermFactories {
     #[new]
+    #[pyo3(signature = (uri, bnode, literal, allocate, reuse_identifiers=false))]
     pub(super) fn new(
         py: Python<'_>,
         uri: Py<PyAny>,
         bnode: Py<PyAny>,
         literal: Py<PyAny>,
         allocate: Py<PyAny>,
+        reuse_identifiers: bool,
     ) -> PyResult<Self> {
         for class in [&uri, &bnode] {
             let class = class.bind(py).cast::<PyType>()?;
@@ -49,6 +57,7 @@ impl NativeTermFactories {
             bnode,
             literal,
             allocate,
+            reuse_identifiers,
         })
     }
 
@@ -87,8 +96,50 @@ impl NativeTermFactories {
         Ok(Some(term.unbind()))
     }
 
+    fn cached_term(
+        &self,
+        py: Python<'_>,
+        source: Option<LexicalTerm>,
+        cache: &mut PositionCache,
+    ) -> PyResult<Option<Py<PyAny>>> {
+        let key = match &source {
+            Some(LexicalTerm::NamedNode(text)) => Some((false, text)),
+            Some(LexicalTerm::BlankNode(text)) => Some((true, text)),
+            _ => None,
+        };
+        let key = key.filter(|(_, text)| cache.eligible(text));
+        let retained = if let Some((kind, text)) = key {
+            if let Some(value) = cache.get(py, kind, text) {
+                return Ok(Some(value));
+            }
+            cache.active().then(|| (kind, text.clone()))
+        } else {
+            None
+        };
+        let value = self.term(py, source)?;
+        if let (Some((kind, text)), Some(value)) = (retained, &value) {
+            cache.insert(py, kind, text, value);
+        }
+        Ok(value)
+    }
+
     fn rows(&self, py: Python<'_>, rows: Vec<read::Row>) -> PyResult<Vec<Row>> {
         // bounded: the native reader caps every input batch at 128 rows / ~64 KiB.
+        // Avoid cache setup for short selective scans; byte-limited large batches still qualify.
+        if self.reuse_identifiers && rows.len() >= MIN_REUSE_ROWS {
+            // bounded: three positions, four identifiers <=256 UTF-8 bytes each, batch-local only.
+            let mut caches = std::array::from_fn::<_, 3, _>(|_| PositionCache::default());
+            return rows
+                .into_iter()
+                .map(|(s, p, o)| {
+                    Ok((
+                        self.cached_term(py, s, &mut caches[0])?,
+                        self.cached_term(py, p, &mut caches[1])?,
+                        self.cached_term(py, o, &mut caches[2])?,
+                    ))
+                })
+                .collect();
+        }
         rows.into_iter()
             .map(|(s, p, o)| Ok((self.term(py, s)?, self.term(py, p)?, self.term(py, o)?)))
             .collect()

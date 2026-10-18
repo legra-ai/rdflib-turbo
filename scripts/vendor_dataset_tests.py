@@ -18,6 +18,7 @@ REQUIRED_TESTS = (
     "dataset::endpoint_tests::maximum_id_subject_range_matches_stored_quad",
     "dataset::scoped_pattern_tests::scoped_patterns_do_not_decode_unrelated_graph_rows",
     "dataset::scoped_pattern_tests::iterator_retains_dataset_terms_after_temporary_patterns_drop",
+    "dataset::scoped_pattern_tests::pattern_encodes_each_supplied_component_once_for_every_mask",
 )
 
 

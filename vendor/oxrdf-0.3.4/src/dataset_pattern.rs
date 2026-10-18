@@ -37,35 +37,102 @@ impl Pattern {
         })
     }
     fn iter<'a>(self, data: &'a Dataset) -> Box<dyn Iterator<Item = QuadRef<'a>> + 'a> {
-        // Decoded filter references borrow only the Dataset interner, not this pattern.
-        let subject = self.subject.as_ref().map(|s| s.decode_from(&data.interner));
-        let predicate = self.predicate.map(|p| p.decode_from(&data.interner));
-        let object = self.object.as_ref().map(|o| o.decode_from(&data.interner));
         if let Some(graph) = self.graph {
-            let view = GraphView {
-                dataset: data,
-                graph_name: graph,
-            };
-            let graph_name = graph.decode_from(&data.interner);
-            return Box::new(
-                view.triples_for_pattern(subject, predicate, object)
-                    .map(move |t| QuadRef::new(t.subject, t.predicate, t.object, graph_name)),
-            );
+            return self.scoped(data, graph);
         }
-        if let Some(subject) = subject {
-            Box::new(data.quads_for_subject(subject).filter(move |q| {
-                predicate.is_none_or(|p| p == q.predicate) && object.is_none_or(|o| o == q.object)
-            }))
-        } else if let Some(object) = object {
+        let predicate = self.predicate.map(|p| p.decode_from(&data.interner));
+        if let Some(subject) = self.subject {
+            let object = self.object.as_ref().map(|o| o.decode_from(&data.interner));
             Box::new(
-                data.quads_for_object(object)
+                data.interned_quads_for_subject(&subject)
+                    .map(move |q| data.decode_spog(q))
+                    .filter(move |q| {
+                        predicate.is_none_or(|p| p == q.predicate)
+                            && object.is_none_or(|o| o == q.object)
+                    }),
+            )
+        } else if let Some(object) = self.object {
+            Box::new(
+                data.interned_quads_for_object(&object)
+                    .map(move |q| data.decode_spog(q))
                     .filter(move |q| predicate.is_none_or(|p| p == q.predicate)),
             )
-        } else if let Some(predicate) = predicate {
-            Box::new(data.quads_for_predicate(predicate))
+        } else if let Some(predicate) = self.predicate {
+            Box::new(
+                data.interned_quads_for_predicate(predicate)
+                    .map(move |q| data.decode_spog(q)),
+            )
         } else {
             Box::new(data.iter())
         }
+    }
+
+    fn scoped<'a>(
+        self,
+        data: &'a Dataset,
+        graph: InternedGraphName,
+    ) -> Box<dyn Iterator<Item = QuadRef<'a>> + 'a> {
+        let view = GraphView {
+            dataset: data,
+            graph_name: graph,
+        };
+        let graph_name = graph.decode_from(&data.interner);
+        match (self.subject, self.predicate, self.object) {
+            (Some(subject), Some(predicate), Some(object)) => {
+                let record = QuadRecord::from_gspo((graph, subject, predicate, object));
+                Box::new(
+                    data.gspo
+                        .get(&record)
+                        .into_iter()
+                        .map(move |q| data.decode_spog(q.parts())),
+                )
+            }
+            (Some(subject), Some(predicate), None) => {
+                let s = subject.decode_from(&data.interner);
+                let p = predicate.decode_from(&data.interner);
+                Self::quads(
+                    graph_name,
+                    view.objects_for_interned_subject_predicate(Some(subject), Some(predicate))
+                        .map(move |o| TripleRef::new(s, p, o)),
+                )
+            }
+            (Some(subject), None, Some(object)) => {
+                let s = subject.decode_from(&data.interner);
+                let o = object.decode_from(&data.interner);
+                Self::quads(
+                    graph_name,
+                    view.predicates_for_interned_subject_object(Some(subject), Some(object))
+                        .map(move |p| TripleRef::new(s, p, o)),
+                )
+            }
+            (Some(subject), None, None) => {
+                Self::quads(graph_name, view.triples_for_interned_subject(Some(subject)))
+            }
+            (None, Some(predicate), Some(object)) => {
+                let p = predicate.decode_from(&data.interner);
+                let o = object.decode_from(&data.interner);
+                Self::quads(
+                    graph_name,
+                    view.subjects_for_interned_predicate_object(Some(predicate), Some(object))
+                        .map(move |s| TripleRef::new(s, p, o)),
+                )
+            }
+            (None, Some(predicate), None) => Self::quads(
+                graph_name,
+                view.triples_for_interned_predicate(Some(predicate)),
+            ),
+            (None, None, Some(object)) => {
+                Self::quads(graph_name, view.triples_for_interned_object(Some(object)))
+            }
+            (None, None, None) => Self::quads(graph_name, view.iter()),
+        }
+    }
+
+    fn quads<'a>(
+        graph: GraphNameRef<'a>,
+        triples: impl Iterator<Item = TripleRef<'a>> + 'a,
+    ) -> Box<dyn Iterator<Item = QuadRef<'a>> + 'a> {
+        Box::new(triples.map(move |t| QuadRef::new(t.subject, t.predicate, t.object, graph)))
     }
 }
 impl Dataset {

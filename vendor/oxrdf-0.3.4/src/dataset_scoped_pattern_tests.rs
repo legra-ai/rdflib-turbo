@@ -110,3 +110,74 @@ fn scoped_result_order_matches_existing_global_index_filtering() {
         }
     }
 }
+
+// The counters live at actual Dataset encoding boundaries that hash lexical inputs.
+// They are thread-local test instrumentation, not Dataset fields or production state.
+thread_local! { static ENCODE_CALLS: Cell<[usize; 4]> = const { Cell::new([0; 4]) }; }
+pub(super) fn term_encoded(component: usize) {
+    ENCODE_CALLS.with(|counts| {
+        let mut current = counts.get();
+        current[component] += 1;
+        counts.set(current);
+    });
+}
+
+#[test]
+fn pattern_encodes_each_supplied_component_once_for_every_mask() {
+    let subject = NamedNode::new_unchecked(format!("urn:subject:{}", "s".repeat(4096)));
+    let predicate = NamedNode::new_unchecked(format!("urn:predicate:{}", "p".repeat(4096)));
+    let object = Literal::new_simple_literal("object".repeat(4096));
+    let graph = NamedNode::new_unchecked(format!("urn:graph:{}", "g".repeat(4096)));
+    let mut data = Dataset::new();
+    for context in [GraphName::DefaultGraph, graph.clone().into()] {
+        data.insert(&Quad::new(
+            subject.clone(),
+            predicate.clone(),
+            object.clone(),
+            context,
+        ));
+    }
+    for mask in 0..16 {
+        ENCODE_CALLS.with(|counts| counts.set([0; 4]));
+        let rows = data
+            .quads_for_pattern(
+                (mask & 1 != 0).then_some(subject.as_ref().into()),
+                (mask & 2 != 0).then_some(predicate.as_ref()),
+                (mask & 4 != 0).then_some(object.as_ref().into()),
+                (mask & 8 != 0).then_some(graph.as_ref().into()),
+            )
+            .count();
+        let expected_rows = if mask & 8 != 0 { 1 } else { 2 };
+        assert_eq!(rows, expected_rows, "mask{mask} result changed");
+        let calls = ENCODE_CALLS.with(Cell::get);
+        let expected = [
+            usize::from(mask & 1 != 0),
+            usize::from(mask & 2 != 0),
+            usize::from(mask & 4 != 0),
+            usize::from(mask & 8 != 0),
+        ];
+        println!("PATTERN_ENCODINGS mask={mask} calls={calls:?}");
+        assert_eq!(
+            calls, expected,
+            "mask{mask} hashed supplied lexical input repeatedly"
+        );
+    }
+    let missing = Literal::new_simple_literal("not in the Dataset");
+    ENCODE_CALLS.with(|counts| counts.set([0; 4]));
+    assert_eq!(
+        data.quads_for_pattern(
+            Some(subject.as_ref().into()),
+            Some(predicate.as_ref()),
+            Some(missing.as_ref().into()),
+            Some(graph.as_ref().into())
+        )
+        .count(),
+        0
+    );
+    assert!(
+        ENCODE_CALLS
+            .with(Cell::get)
+            .into_iter()
+            .all(|calls| calls <= 1)
+    );
+}

@@ -7,7 +7,7 @@ from ._literal import restore
 from ._native import NativeTermFactories
 from .store import Store
 
-_TERM_FACTORIES = NativeTermFactories(URIRef, BNode, restore, str.__new__)
+_TERM_FACTORIES = NativeTermFactories(URIRef, BNode, restore, str.__new__, True)
 
 
 def encode(value):

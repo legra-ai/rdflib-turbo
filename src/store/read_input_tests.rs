@@ -41,6 +41,7 @@ fn native_read_filter_binding_does_not_copy_large_input_lexical() {
                 string.clone_ref(py),
                 string.clone_ref(py),
                 string,
+                false,
             )
             .unwrap(),
         )

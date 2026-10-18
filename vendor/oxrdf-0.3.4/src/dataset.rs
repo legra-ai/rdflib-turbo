@@ -474,6 +474,8 @@ impl Dataset {
         &self,
         node: impl Into<NamedNodeRef<'a>>,
     ) -> Option<InternedNamedNode> {
+        #[cfg(test)]
+        scoped_pattern_tests::term_encoded(1);
         InternedNamedNode::encoded_from(node.into(), &self.interner)
     }
 
@@ -481,10 +483,14 @@ impl Dataset {
         &self,
         node: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> Option<InternedNamedOrBlankNode> {
+        #[cfg(test)]
+        scoped_pattern_tests::term_encoded(0);
         InternedNamedOrBlankNode::encoded_from(node.into(), &self.interner)
     }
 
     pub(super) fn encoded_term<'a>(&self, term: impl Into<TermRef<'a>>) -> Option<InternedTerm> {
+        #[cfg(test)]
+        scoped_pattern_tests::term_encoded(2);
         InternedTerm::encoded_from(term.into(), &self.interner)
     }
 
@@ -492,6 +498,8 @@ impl Dataset {
         &self,
         graph_name: impl Into<GraphNameRef<'a>>,
     ) -> Option<InternedGraphName> {
+        #[cfg(test)]
+        scoped_pattern_tests::term_encoded(3);
         InternedGraphName::encoded_from(graph_name.into(), &self.interner)
     }
 
