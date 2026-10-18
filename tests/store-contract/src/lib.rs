@@ -1,5 +1,12 @@
 //! Isolated feature matrix for the patched storage dependency.
 
+#[cfg(test)]
+mod cardinality_tests;
+#[cfg(test)]
+mod lexical_projection_tests;
+#[cfg(test)]
+mod projection_tests;
+
 #[cfg(all(test, feature = "exact"))]
 #[path = "../../../src/store_tests.rs"]
 mod store_tests;

@@ -69,6 +69,13 @@ fn phase(name: &str, quads: usize) {
     CALLS.store(0, Relaxed);
 }
 
+/// Measure requested bytes for one synchronous operation in an isolated test.
+pub(crate) fn measure_allocated<T>(operation: impl FnOnce() -> T) -> (T, usize) {
+    TOTAL.store(0, Relaxed);
+    let result = operation();
+    (result, TOTAL.load(Relaxed))
+}
+
 #[test]
 #[ignore = "explicit release-mode profiling, run alone with a fixture and shapes file"]
 fn profile_pipeline_allocations() {
@@ -120,5 +127,65 @@ fn inference_heap_budget() {
         let first = data.dump(py, "nquads").unwrap();
         data.infer(py, "owlrl", None).unwrap();
         assert_eq!(data.dump(py, "nquads").unwrap(), first);
+    });
+}
+
+/// Repeated lexical values must be interned as parsed, never retained per input row.
+#[test]
+#[ignore = "global peak counters require this test to run alone"]
+fn parse_heap_budget() {
+    let lexical = "x".repeat(64 * 1024);
+    let mut source = String::new();
+    for index in 0..512 {
+        source.push_str(&format!("<urn:s{index}> <urn:p> \"{lexical}\" .\n"));
+    }
+    Python::initialize();
+    Python::attach(|py| {
+        let data = NativeDataset::new();
+        PEAK.store(LIVE.load(Relaxed), Relaxed);
+        data.load(py, &source, "turtle", None, true).unwrap();
+        let retained = LIVE.load(Relaxed);
+        let peak = PEAK.load(Relaxed);
+        println!("PARSER_HEAP peak_bytes={peak} retained_bytes={retained}");
+        assert_eq!(data.__len__().unwrap(), 512);
+        assert!(
+            peak.saturating_sub(retained) < 4 * 1024 * 1024,
+            "Parser retained a decoded lexical batch: peak={peak}, retained={retained}"
+        );
+    });
+}
+
+/// Late parse errors release inserted terms as well as restoring caller metadata.
+#[test]
+#[ignore = "global live counters require this test to run alone"]
+fn failed_parse_releases_staged_terms() {
+    let lexical = "x".repeat(64 * 1024);
+    let mut source = String::from("@prefix ex: <urn:new:> .\n");
+    for index in 0..128 {
+        source.push_str(&format!(
+            "_:s{index} ex:p \"{lexical}{index}\"^^<urn:datatype{index}> .\n"
+        ));
+    }
+    source.push_str("invalid");
+    Python::initialize();
+    Python::attach(|py| {
+        let data = NativeDataset::new();
+        data.load(py, "@prefix ex: <urn:old:> . ex:s ex:p \"01\"^^<http://www.w3.org/2001/XMLSchema#integer> .", "turtle", None, true).unwrap();
+        let original = data.dump(py, "nquads").unwrap();
+        let namespaces = data.namespaces().unwrap();
+        let before = LIVE.load(Relaxed);
+        let error = data.load(py, &source, "turtle", None, true).unwrap_err();
+        drop(error);
+        let after = LIVE.load(Relaxed);
+        println!("PARSER_ROLLBACK before_bytes={before} after_bytes={after}");
+        assert!(
+            after <= before + 256 * 1024,
+            "Failed parse retained staged native allocations: before={before}, after={after}"
+        );
+        assert_eq!(data.dump(py, "nquads").unwrap(), original);
+        assert_eq!(data.namespaces().unwrap(), namespaces);
+        data.load(py, "<urn:next> <urn:p> <urn:o> .", "turtle", None, true)
+            .unwrap();
+        assert_eq!(data.__len__().unwrap(), 2);
     });
 }

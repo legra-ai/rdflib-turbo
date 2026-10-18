@@ -128,3 +128,86 @@ fn invalid_inference_aborts_all_prior_changes_and_releases_the_writer() {
         assert!(session.finish(true).is_err());
     }
 }
+
+#[test]
+fn implicit_mutations_commit_abort_and_release_the_writer_without_an_owner_thread() {
+    let control = control();
+    let store = control.lock().unwrap().read().unwrap();
+    Session::execute_inline(control.clone(), insert()).unwrap();
+    assert_eq!(store.len().unwrap(), 1);
+    assert!(
+        Session::execute_inline(
+            control.clone(),
+            Operation::Update("INSERT DATA { <urn:s2> <urn:p> <urn:o> }; INVALID".into())
+        )
+        .is_err()
+    );
+    assert_eq!(store.len().unwrap(), 1);
+    let session = Session::start(control.clone()).unwrap();
+    assert!(Session::execute_inline(control.clone(), insert()).is_err());
+    session.finish(false).unwrap();
+    Session::execute_inline(control.clone(), insert()).unwrap();
+    control.lock().unwrap().close().unwrap();
+    assert!(Session::execute_inline(control, insert()).is_err());
+}
+
+#[test]
+fn poisoned_store_control_is_a_hard_error_at_the_native_boundary() {
+    pyo3::Python::initialize();
+    let store = pyo3::Python::attach(|py| super::NativeStore::new(py, None).unwrap());
+    let control = store.control.clone();
+    assert!(
+        std::thread::spawn(move || {
+            let _guard = control.lock().unwrap();
+            panic!("simulate a panic while holding the native store control");
+        })
+        .join()
+        .is_err()
+    );
+    pyo3::Python::attach(|py| {
+        assert!(
+            store
+                .ensure_open()
+                .unwrap_err()
+                .to_string()
+                .contains("poisoned")
+        );
+        assert!(
+            store
+                .__len__(py)
+                .unwrap_err()
+                .to_string()
+                .contains("poisoned")
+        );
+        assert!(
+            store
+                .close(py)
+                .unwrap_err()
+                .to_string()
+                .contains("poisoned")
+        );
+        let failure = store.transaction(py).err().unwrap();
+        assert!(failure.to_string().contains("poisoned"));
+    });
+    let failure = Session::execute_inline(store.control.clone(), insert())
+        .err()
+        .unwrap();
+    assert!(failure.to_string().contains("poisoned"));
+}
+
+#[cfg(not(feature = "persistence"))]
+#[test]
+fn memory_only_native_build_rejects_persistent_paths() {
+    pyo3::Python::initialize();
+    pyo3::Python::attach(|py| {
+        let failure = super::NativeStore::new(py, Some("must-not-open-a-database".into()))
+            .err()
+            .unwrap();
+        assert!(failure.is_instance_of::<pyo3::exceptions::PyNotImplementedError>(py));
+        assert!(
+            failure
+                .to_string()
+                .contains("no RocksDB persistence support")
+        );
+    });
+}

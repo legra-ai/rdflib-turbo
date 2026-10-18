@@ -1,3 +1,4 @@
+use super::memory_counts::{PendingCounts, PublishedCounts};
 use crate::model::{GraphNameRef, NamedOrBlankNodeRef, QuadRef, TermRef};
 use crate::storage::CorruptionError;
 pub use crate::storage::error::StorageError;
@@ -23,8 +24,8 @@ use std::sync::{Arc, Condvar, Mutex, RwLock, Weak};
 #[derive(Clone)]
 pub struct MemoryStorage {
     content: Arc<Content>,
-    id2str: Arc<DashMap<StrHash, String, BuildHasherDefault<StrHashHasher>>>,
-    version_counter: Arc<AtomicUsize>,
+    id2str: Arc<DashMap<StrHash, Arc<str>, BuildHasherDefault<StrHashHasher>>>,
+    published: Arc<RwLock<PublishedCounts>>,
     transaction_counter: Arc<AtomicUsize>,
     transaction_lock: Arc<Lock>,
 }
@@ -56,16 +57,20 @@ impl MemoryStorage {
                 graphs: DashMap::default(),
             }),
             id2str: Arc::new(DashMap::default()),
-            version_counter: Arc::new(AtomicUsize::new(0)),
+            published: Arc::new(RwLock::new(PublishedCounts::default())),
             transaction_counter: Arc::new(AtomicUsize::new(usize::MAX >> 1)),
             transaction_lock: Arc::new(Lock::new()),
         }
     }
 
     pub fn snapshot(&self) -> MemoryStorageReader<'static> {
+        let published = self.published.read().unwrap();
         MemoryStorageReader {
             storage: self.clone(),
-            snapshot_id: self.version_counter.load(Ordering::Acquire),
+            snapshot_id: published.version,
+            quad_count: published.total,
+            #[cfg(test)]
+            visited_nodes: Arc::new(AtomicUsize::new(0)),
             _lifetime: PhantomData,
         }
     }
@@ -74,15 +79,23 @@ impl MemoryStorage {
         // We ensure there is only one transaction running
         let transaction_guard = self.transaction_lock.lock();
         let transaction_id = self.transaction_counter.fetch_add(1, Ordering::Acquire);
-        let snapshot_id = self.version_counter.load(Ordering::Relaxed);
+        let published = self.published.read().unwrap();
+        let snapshot_id = published.version;
+        let counts = PendingCounts::new(published.total, published.default_count);
+        drop(published);
         MemoryStorageTransaction {
             storage: self,
             log: Vec::new(),
             transaction_id,
             snapshot_id,
+            counts,
             _transaction_guard: transaction_guard,
             committed: false,
         }
+    }
+
+    pub fn graph_len(&self, graph: &EncodedTerm) -> usize {
+        self.published.read().unwrap().graph_len(graph)
     }
 
     pub fn bulk_loader(&self) -> MemoryStorageBulkLoader<'_> {
@@ -99,26 +112,19 @@ impl MemoryStorage {
 pub struct MemoryStorageReader<'a> {
     storage: MemoryStorage,
     snapshot_id: usize,
+    quad_count: usize,
+    #[cfg(test)]
+    visited_nodes: Arc<AtomicUsize>,
     _lifetime: PhantomData<&'a ()>,
 }
 
 impl<'a> MemoryStorageReader<'a> {
     pub fn len(&self) -> usize {
-        self.storage
-            .content
-            .quad_set
-            .iter()
-            .filter(|e| self.is_node_in_range(e))
-            .count()
+        self.quad_count
     }
 
     pub fn is_empty(&self) -> bool {
-        !self
-            .storage
-            .content
-            .quad_set
-            .iter()
-            .any(|e| self.is_node_in_range(&e))
+        self.quad_count == 0
     }
 
     pub fn contains(&self, quad: &EncodedQuad) -> bool {
@@ -221,6 +227,11 @@ impl<'a> MemoryStorageReader<'a> {
             .graphs
             .get(graph_name)
             .is_some_and(|range| self.is_in_range(&range))
+    }
+
+    pub(super) fn get_shared_str(&self, key: &StrHash) -> Option<Arc<str>> {
+        // Clone only the immutable owner while guarded; the DashMap guard cannot escape.
+        self.storage.id2str.view(key, |_, value| Arc::clone(value))
     }
 
     pub fn contains_str(&self, key: &StrHash) -> bool {
@@ -403,6 +414,8 @@ impl<'a> MemoryStorageReader<'a> {
     }
 
     fn is_node_in_range(&self, node: &QuadListNode) -> bool {
+        #[cfg(test)]
+        self.visited_nodes.fetch_add(1, Ordering::Relaxed);
         let range = node.range.lock().unwrap();
         self.is_in_range(&range)
     }
@@ -410,7 +423,7 @@ impl<'a> MemoryStorageReader<'a> {
 
 impl StrLookup for MemoryStorageReader<'_> {
     fn get_str(&self, key: &StrHash) -> Result<Option<String>, StorageError> {
-        Ok(self.storage.id2str.view(key, |_, v| v.clone()))
+        Ok(self.storage.id2str.view(key, |_, v| v.as_ref().to_owned()))
     }
 }
 
@@ -421,14 +434,30 @@ pub struct MemoryStorageTransaction<'a> {
     transaction_id: usize,
     snapshot_id: usize,
     committed: bool,
+    counts: PendingCounts,
     _transaction_guard: LockGuard<'a>,
 }
 
 impl MemoryStorageTransaction<'_> {
+    pub fn graph_len(&self, graph: &EncodedTerm) -> usize {
+        self.counts.graph_len(graph, || {
+            self.storage.published.read().unwrap().graph_len(graph)
+        })
+    }
+
+    fn record_count(&mut self, graph: &EncodedTerm, added: bool) {
+        self.counts.change(graph, added, || {
+            self.storage.published.read().unwrap().graph_len(graph)
+        });
+    }
+
     pub fn reader(&self) -> MemoryStorageReader<'_> {
         MemoryStorageReader {
             storage: self.storage.clone(),
             snapshot_id: self.transaction_id,
+            quad_count: self.counts.total,
+            #[cfg(test)]
+            visited_nodes: Arc::new(AtomicUsize::new(0)),
             _lifetime: PhantomData,
         }
     }
@@ -444,6 +473,7 @@ impl MemoryStorageTransaction<'_> {
         {
             let added = node.range.lock().unwrap().add(self.transaction_id);
             if added {
+                self.record_count(&encoded.graph_name, true);
                 self.log.push(LogEntry::QuadNode(node));
                 if !quad.graph_name.is_default_graph()
                     && self
@@ -535,6 +565,7 @@ impl MemoryStorageTransaction<'_> {
                 }
                 GraphNameRef::DefaultGraph => (),
             }
+            self.record_count(&encoded.graph_name, true);
             self.log.push(LogEntry::QuadNode(node));
         }
     }
@@ -576,7 +607,7 @@ impl MemoryStorageTransaction<'_> {
             .id2str
             .entry(*key)
             .or_insert_with(|| value.into());
-        debug_assert_eq!(*inserted, value, "Hash conflict for two strings");
+        debug_assert_eq!(inserted.as_ref(), value, "Hash conflict for two strings");
     }
 
     pub fn remove(&mut self, quad: QuadRef<'_>) {
@@ -595,6 +626,7 @@ impl MemoryStorageTransaction<'_> {
         };
         let removed = node.range.lock().unwrap().remove(self.transaction_id);
         if removed {
+            self.record_count(&quad.graph_name, false);
             self.log.push(LogEntry::QuadNode(node));
         }
     }
@@ -610,7 +642,9 @@ impl MemoryStorageTransaction<'_> {
             .last_quad_by_graph_name
             .view(graph_name, |_, (node, _)| Weak::clone(node));
         while let Some(current) = next.take().and_then(|c| c.upgrade()) {
-            if current.range.lock().unwrap().remove(self.transaction_id) {
+            let removed = current.range.lock().unwrap().remove(self.transaction_id);
+            if removed {
+                self.record_count(&current.quad.graph_name, false);
                 self.log.push(LogEntry::QuadNode(Arc::clone(&current)));
             }
             next.clone_from(&current.previous_graph_name);
@@ -625,8 +659,11 @@ impl MemoryStorageTransaction<'_> {
     }
 
     pub fn clear_all_graphs(&mut self) {
-        self.storage.content.quad_set.iter().for_each(|node| {
-            if node.range.lock().unwrap().remove(self.transaction_id) {
+        let storage = self.storage;
+        storage.content.quad_set.iter().for_each(|node| {
+            let removed = node.range.lock().unwrap().remove(self.transaction_id);
+            if removed {
+                self.record_count(&node.quad.graph_name, false);
                 self.log.push(LogEntry::QuadNode(Arc::clone(&node)));
             }
         });
@@ -672,7 +709,10 @@ impl MemoryStorageTransaction<'_> {
     }
 
     pub fn commit(mut self) {
-        let new_version_id = self.snapshot_id + 1;
+        let new_version_id = self
+            .snapshot_id
+            .checked_add(1)
+            .expect("snapshot version overflow");
         for operation in take(&mut self.log) {
             match operation {
                 LogEntry::QuadNode(node) => {
@@ -690,9 +730,12 @@ impl MemoryStorageTransaction<'_> {
                 }
             }
         }
+        let counts = std::mem::replace(&mut self.counts, PendingCounts::new(0, 0));
         self.storage
-            .version_counter
-            .store(new_version_id, Ordering::Release);
+            .published
+            .write()
+            .unwrap()
+            .publish(counts, new_version_id);
         self.committed = true;
     }
 }
@@ -1211,3 +1254,11 @@ mod tests {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "memory_lease_tests.rs"]
+mod lease_tests;
+
+#[cfg(test)]
+#[path = "memory_count_tests.rs"]
+mod cardinality_tests;

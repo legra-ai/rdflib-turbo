@@ -105,18 +105,36 @@ impl Drop for Connection {
 
 pub(super) struct Session(Mutex<Connection>);
 
+fn reserve_writer(control: &Arc<Mutex<Control>>) -> Result<(Store, WriterPermit)> {
+    let store = {
+        let mut state = lock(control)?;
+        let store = state.read()?;
+        if state.active_writer {
+            return Err(Error::Runtime("Store has an active transaction".into()));
+        }
+        state.active_writer = true;
+        store
+    };
+    Ok((store, WriterPermit(control.clone())))
+}
+
 impl Session {
+    pub fn execute_inline(control: Arc<Mutex<Control>>, operation: Operation) -> Result<Reply> {
+        // An implicit transaction never outlives this native call. Borrow it on
+        // the caller thread; only explicit multi-call sessions require an owner.
+        let (store, _permit) = reserve_writer(&control)?;
+        let mut transaction = store
+            .start_transaction()
+            .map_err(|e| Error::Runtime(e.to_string()))?;
+        let reply = operation.execute(&mut transaction)?;
+        transaction
+            .commit()
+            .map_err(|e| Error::Runtime(e.to_string()))?;
+        Ok(reply)
+    }
+
     pub fn start(control: Arc<Mutex<Control>>) -> Result<Self> {
-        let store = {
-            let mut state = lock(&control)?;
-            let store = state.read()?;
-            if state.active_writer {
-                return Err(Error::Runtime("Store has an active transaction".into()));
-            }
-            state.active_writer = true;
-            store
-        };
-        let permit = WriterPermit(control);
+        let (store, permit) = reserve_writer(&control)?;
         // bounded: rendezvous channels retain at most the current command/response.
         let (sender, receiver) = mpsc::sync_channel(0);
         let (ready, started) = mpsc::sync_channel(0);
@@ -187,3 +205,7 @@ fn run(mut transaction: Transaction<'_>, receiver: mpsc::Receiver<Command>) {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "session_failure_tests.rs"]
+mod failure_tests;

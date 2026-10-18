@@ -1,6 +1,6 @@
 Functional alpha of rdflib-turbo.
 
-Native exact-term RDF Dataset with parsing, serialization, SELECT/ASK/CONSTRUCT/DESCRIBE, atomic inference and explicit RDFLib conversion. Five platform ABI3 wheels support Python 3.11+.
+Native exact-term RDF Dataset with parsing, serialization, SELECT/ASK/CONSTRUCT/DESCRIBE, atomic inference and explicit RDFLib conversion. Twenty-five platform wheels cover CPython 3.11 through 3.15, with a separate native wheel for each interpreter and platform.
 
 The dataset runtime is shared with [owlrl-turbo](https://github.com/legra-ai/owlrl-turbo) and supports borrowed native SHACL validation through [pyshacl-turbo](https://github.com/legra-ai/pyshacl-turbo). Default-graph inference journals additions instead of cloning all six indexes, and retains only distinct new statements per round. Failure atomicity, graph destinations and exact term identity are preserved. An opt-in phase heap profiler and a required native allocation budget accompany the installed-wheel pipeline benchmarks.
 

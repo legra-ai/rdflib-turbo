@@ -1,9 +1,11 @@
 """Transactions operate on the native store, without copying the base dataset."""
 
+import json
+
 import pytest
-from rdflib import Literal, URIRef
+from rdflib import BNode, Literal, URIRef
 from rdflib.namespace import XSD
-from rdflib_turbo import Store
+from rdflib_turbo import Store, StoreDataset
 
 TRIPLE = '<urn:s> <urn:p> "01"^^<http://www.w3.org/2001/XMLSchema#integer> .'
 INSERT = "INSERT DATA { " + TRIPLE + " }"
@@ -183,6 +185,8 @@ def test_transaction_accepts_calls_from_another_thread():
         lambda transaction: transaction.query("INVALID QUERY"),
         lambda transaction: transaction.parse(data=TRIPLE, format="invalid-format"),
         lambda transaction: transaction.serialize(format="invalid-format"),
+        lambda transaction: transaction._native.load_graph(TRIPLE, "invalid-format", None, ""),
+        lambda transaction: transaction._native.change_graph("", False),
         lambda transaction: transaction.update(
             "INSERT DATA { <urn:a> <urn:b> <urn:c> }; LOAD <https://example.invalid/data>"
         ),
@@ -196,3 +200,64 @@ def test_caught_native_errors_doom_the_transaction(operation):
                 with pytest.raises((ValueError, RuntimeError, NotImplementedError)):
                     operation(transaction)
         assert len(store) == 0
+
+
+def test_blank_node_contexts_commit_and_abort_with_dataset_transactions():
+    dataset = StoreDataset()
+    original, committed, aborted = map(BNode, ("original", "committed", "aborted"))
+    triple = (URIRef("urn:s"), URIRef("urn:p"), Literal("value"))
+    dataset.graph(original).add(triple)
+    with dataset.transaction() as transaction:
+        assert set(transaction.graph(original)) == {triple}
+        transaction.graph(committed).add(triple)
+        transaction.remove_graph(original)
+        assert not list(transaction.graph(original))
+        assert set(dataset.graph(original)) == {triple}
+    assert set(dataset.graph(committed)) == {triple}
+    assert not list(dataset.graph(original))
+    with pytest.raises(ValueError, match="abort named context"):
+        with dataset.transaction() as transaction:
+            transaction.graph(aborted).add(triple)
+            transaction.remove_graph(committed)
+            raise ValueError("abort named context")
+    assert set(dataset.graph(committed)) == {triple}
+    assert not list(dataset.graph(aborted))
+
+
+@pytest.mark.parametrize(
+    "pattern",
+    [
+        [{"type": "literal", "value": "bad-subject"}, None, None, None],
+        [None, {"type": "bnode", "value": "bad-predicate"}, None, None],
+        [None, None, {"type": "unknown", "value": "bad-object"}, None],
+        [None, None, None, json.dumps({"type": "literal", "value": "bad-graph"})],
+    ],
+)
+def test_invalid_native_pattern_transport_aborts_prior_writes(pattern):
+    with Store() as store:
+        with pytest.raises(RuntimeError, match=r"closed|failed"):
+            with store.transaction() as transaction:
+                transaction.update(INSERT)
+                with pytest.raises(ValueError):
+                    transaction._native.match_quads(json.dumps(pattern))
+        assert len(store) == 0
+        store.update(INSERT)
+        assert len(store) == 1
+
+
+@pytest.mark.parametrize("populated", [False, True])
+def test_store_triples_scoped_protocol_returns_the_requested_context(populated):
+    dataset = StoreDataset()
+    graph = dataset.graph(BNode("requested-context"))
+    triple = (URIRef("urn:s"), URIRef("urn:p"), Literal("value"))
+    if populated:
+        graph.add(triple)
+    rows = list(dataset.store.triples((None, None, None), context=graph))
+    if not populated:
+        assert rows == []
+        return
+    assert len(rows) == 1
+    actual, contexts = rows[0]
+    assert actual == triple
+    assert iter(contexts) is contexts
+    assert list(contexts) == [graph]

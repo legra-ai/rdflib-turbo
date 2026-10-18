@@ -49,3 +49,12 @@ and evaluates STR and DATATYPE against original RDF terms when available. Numeri
 value expressions retain normal value semantics. Without the feature, the upstream
 builtin paths remain unchanged. The transactional Store enables this feature;
 see rdflib-turbo ADR 0006 and `src/store_tests.rs`.
+
+The opt-in `rdf-set-union` feature deduplicates exact subject/predicate/object
+tuples when multiple source graphs form the query's default graph. Deduplication
+happens before graph-pattern evaluation, preserving SPARQL solution bags; it is
+not SELECT DISTINCT or output filtering. Both union-of-all-graphs and explicit
+multi-FROM datasets use this path. Feature-off upstream behavior is unchanged.
+Native Graph/StoreDataset regressions retain two identical projected bindings
+from two distinct triples while collapsing copies of the same triple across
+contexts. See rdflib-turbo ADR 0008.

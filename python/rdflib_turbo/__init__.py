@@ -3,14 +3,15 @@
 import json
 
 from rdflib import Dataset as RDFLibDataset
-from rdflib import Graph
+from rdflib import Graph as RDFLibGraph
 
 from ._native import NativeDataset
 from ._operations import GraphOperations, _term
+from .graph import Graph, StoreDataset
 from .store import Store
 
 __version__ = "0.2.0a1"
-__all__ = ["Dataset", "Store"]
+__all__ = ["Dataset", "Graph", "Store", "StoreDataset"]
 
 
 class Dataset(GraphOperations):
@@ -40,7 +41,9 @@ class Dataset(GraphOperations):
     @classmethod
     def from_rdflib(cls, graph):
         """Copy an RDFLib Graph or Dataset, preserving terms and blank-node IDs."""
-        if not isinstance(graph, Graph):
+        if getattr(graph, "_turbo_native_graph", False):
+            raise NotImplementedError("Native Store inference/SHACL adapters are not implemented")
+        if not isinstance(graph, RDFLibGraph):
             raise TypeError("Expected an RDFLib Graph or Dataset")
         result = cls()
         if isinstance(graph, RDFLibDataset):

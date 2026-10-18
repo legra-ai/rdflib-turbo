@@ -159,6 +159,8 @@ impl<'a, D: QueryableDataset<'a>> EvalDataset<'a, D> {
                         }),
                     )
                 } else {
+                    #[cfg(feature = "rdf-set-union")]
+                    let mut seen = FxHashSet::default();
                     let iters = default_graph_graphs
                         .iter()
                         .map(|graph_name| {
@@ -170,16 +172,59 @@ impl<'a, D: QueryableDataset<'a>> EvalDataset<'a, D> {
                             )
                         })
                         .collect::<Vec<_>>();
-                    Box::new(iters.into_iter().flatten().map(|quad| {
-                        let mut quad = quad?;
-                        quad.graph_name = None;
-                        Ok(quad)
-                    }))
+                    Box::new(
+                        iters
+                            .into_iter()
+                            .flatten()
+                            .filter(move |quad| {
+                                #[cfg(feature = "rdf-set-union")]
+                                {
+                                    match quad {
+                                        Err(_) => true,
+                                        Ok(quad) => seen.insert((
+                                            quad.subject.clone(),
+                                            quad.predicate.clone(),
+                                            quad.object.clone(),
+                                        )),
+                                    }
+                                }
+                                #[cfg(not(feature = "rdf-set-union"))]
+                                {
+                                    let _ = quad;
+                                    true
+                                }
+                            })
+                            .map(|quad| {
+                                let mut quad = quad?;
+                                quad.graph_name = None;
+                                Ok(quad)
+                            }),
+                    )
                 }
             } else {
                 // The default graph has not been set, it is the union of all graphs, we query all graphs
+                #[cfg(feature = "rdf-set-union")]
+                let mut seen = FxHashSet::default();
                 Box::new(
                     self.underlying_internal_quads_for_pattern(subject, predicate, object, None)
+                        .filter(move |quad| {
+                            #[cfg(feature = "rdf-set-union")]
+                            {
+                                match quad {
+                                    Err(_) => true,
+                                    Ok(quad) => seen.insert((
+                                        quad.subject.clone(),
+                                        quad.predicate.clone(),
+                                        quad.object.clone(),
+                                    )),
+                                }
+                            }
+                            #[cfg(not(feature = "rdf-set-union"))]
+                            {
+                                let _ = quad;
+                                true
+                            }
+                        })
                         .map(|quad| {
                             let mut quad = quad?;
                             quad.graph_name = None;

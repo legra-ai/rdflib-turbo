@@ -6,7 +6,25 @@ from pathlib import Path
 from rdflib import BNode, Graph, Literal, URIRef, Variable
 from rdflib.query import Result
 
+from ._literal import restore
 from ._native import NativeDataset
+
+
+def _encode(value):
+    if value is None:
+        return None
+    if isinstance(value, URIRef):
+        return {"type": "uri", "value": str(value)}
+    if isinstance(value, BNode):
+        return {"type": "bnode", "value": str(value)}
+    if isinstance(value, Literal):
+        result = {"type": "literal", "value": str(value)}
+        if value.language:
+            result["xml:lang"] = value.language
+        elif value.datatype:
+            result["datatype"] = str(value.datatype)
+        return result
+    raise TypeError(f"Unsupported RDF term: {type(value).__name__}")
 
 
 def _term(value):
@@ -14,16 +32,11 @@ def _term(value):
         return None
     kind = value["type"]
     if kind == "uri":
-        return URIRef(value["value"])
+        return str.__new__(URIRef, value["value"])
     if kind == "bnode":
-        return BNode(value["value"])
+        return str.__new__(BNode, value["value"])
     if kind == "literal":
-        return Literal(
-            value["value"],
-            lang=value.get("xml:lang"),
-            datatype=value.get("datatype"),
-            normalize=False,
-        )
+        return restore(value["value"], value.get("datatype"), value.get("xml:lang"))
     raise ValueError(f"Unknown native RDF term: {kind}")
 
 

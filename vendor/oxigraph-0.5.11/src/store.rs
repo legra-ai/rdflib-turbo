@@ -29,6 +29,13 @@
 //! };
 //! # Result::<_, Box<dyn std::error::Error>>::Ok(())
 //! ```
+mod lexical;
+mod projection;
+
+pub use crate::storage::term_text::TermText;
+pub use lexical::{LexicalQuadIter, LexicalTerm};
+pub use projection::ProjectedQuadIter;
+
 use crate::io::{RdfParseError, RdfParser, RdfSerializer};
 use crate::model::*;
 #[expect(deprecated)]
@@ -504,7 +511,8 @@ impl Store {
 
     /// Returns the number of quads in the store.
     ///
-    /// <div class="warning">This function executes a full scan.</div>
+    /// In-memory storage reads captured snapshot cardinality in constant time.
+    /// Persistent storage executes an exact index scan.
     ///
     /// Usage example:
     /// ```
@@ -520,6 +528,15 @@ impl Store {
     /// ```
     pub fn len(&self) -> Result<usize, StorageError> {
         self.storage.snapshot().len()
+    }
+
+    /// Returns the number of statements in one default or named graph.
+    ///
+    /// This reads the latest committed graph cardinality. In-memory storage uses
+    /// native metadata; persistent storage scans the graph's exact encoded index.
+    /// Empty or absent graphs return zero. Copies in other graphs are not counted.
+    pub fn graph_len<'a>(&self, graph: impl Into<GraphNameRef<'a>>) -> Result<usize, StorageError> {
+        self.storage.graph_len(&EncodedTerm::from(graph.into()))
     }
 
     /// Returns if the store is empty.
@@ -1129,6 +1146,14 @@ pub struct Transaction<'a> {
 }
 
 impl<'a> Transaction<'a> {
+    /// Returns exact graph cardinality including this transaction's pending writes.
+    ///
+    /// In-memory storage uses native metadata; persistent storage scans the exact
+    /// transaction-visible graph index. This does not count a graph union.
+    pub fn graph_len<'b>(&self, graph: impl Into<GraphNameRef<'b>>) -> Result<usize, StorageError> {
+        self.inner.graph_len(&EncodedTerm::from(graph.into()))
+    }
+
     /// Executes a [SPARQL 1.1 query](https://www.w3.org/TR/sparql11-query/).
     ///
     /// Usage example:

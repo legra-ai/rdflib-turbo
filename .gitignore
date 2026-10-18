@@ -13,3 +13,6 @@ python-coverage.*
 .mypy_cache/
 
 /source-build/
+
+/docs/plans/
+/docs/parity-evidence/

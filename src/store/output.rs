@@ -55,7 +55,7 @@ pub(super) fn prepare_query(
         "CONSTRUCT"
     };
     let mut query = SparqlEvaluator::new().for_query(parsed);
-    if union {
+    if union && query.dataset().is_default_dataset() {
         query.dataset_mut().set_default_graph_as_union();
     }
     Ok((query, kind))
@@ -69,7 +69,7 @@ struct Solutions {
 
 // A query explicitly requests materialized output, never a copy of the base store.
 #[derive(Serialize)]
-struct OwnedTermOutput {
+pub(super) struct OwnedTermOutput {
     #[serde(rename = "type")]
     kind: &'static str,
     value: String,

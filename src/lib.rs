@@ -169,19 +169,20 @@ impl NativeDataset {
                     .map_err(|e| PyValueError::new_err(e.to_string()))?;
             }
             let mut reader = parser.for_slice(source.as_bytes());
-            let additions = reader
-                .by_ref()
-                .collect::<std::result::Result<Vec<_>, _>>()
-                .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            let prefixes = reader
-                .prefixes()
-                .map(|(p, n)| (p.to_owned(), n.to_owned()))
-                .collect();
             let mut state = self
                 .inner
                 .write()
                 .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
-            state.extend(additions);
+            let mut transaction = state.data.insert_transaction();
+            for quad in reader.by_ref() {
+                let quad = quad.map_err(|e| PyValueError::new_err(e.to_string()))?;
+                transaction.insert(&quad);
+            }
+            let prefixes = reader
+                .prefixes()
+                .map(|(p, n)| (p.to_owned(), n.to_owned()))
+                .collect();
+            transaction.commit();
             state.bind(prefixes);
             Ok(())
         })

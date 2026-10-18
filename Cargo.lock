@@ -606,8 +606,6 @@ dependencies = [
 [[package]]
 name = "oxrocksdb-sys"
 version = "0.5.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01fcf5ae1e1295a612bef72fc64cd81e1ac3d1bd3243ef84d330f2962a8335e1"
 dependencies = [
  "bindgen",
  "cc",
@@ -1001,6 +999,7 @@ name = "rdflib-turbo-native"
 version = "0.2.0-alpha.1"
 dependencies = [
  "oxigraph",
+ "oxilangtag",
  "oxrdf",
  "pyo3",
  "pyshacl-turbo-engine",
