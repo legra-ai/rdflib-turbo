@@ -49,6 +49,7 @@ const DPOS_CF: &str = "dpos";
 const DOSP_CF: &str = "dosp";
 const GRAPHS_CF: &str = "graphs";
 const DEFAULT_CF: &str = "default";
+const EXACT_HASH_KEY: &[u8] = b"turbo-strhash";
 
 #[cfg(feature = "exact-term-storage")]
 #[path = "rocksdb/exact_hash.rs"]
@@ -57,6 +58,10 @@ mod exact_hash;
 #[cfg(all(test, feature = "exact-term-storage"))]
 #[path = "rocksdb/key_hash_tests.rs"]
 mod key_hash_tests;
+
+#[cfg(all(test, not(feature = "exact-term-storage")))]
+#[path = "rocksdb/upstream_hash_tests.rs"]
+mod upstream_hash_tests;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct RocksDbStorageOptions {
@@ -201,7 +206,15 @@ impl RocksDbStorage {
         #[cfg(feature = "exact-term-storage")]
         this.ensure_exact_hash()?;
         #[cfg(not(feature = "exact-term-storage"))]
-        this.migrate()?;
+        {
+            if this.db.contains_key(&this.default_cf, EXACT_HASH_KEY)? {
+                return Err(CorruptionError::msg(
+                    "Exact lexical hash scheme requires exact-term-storage",
+                )
+                .into());
+            }
+            this.migrate()?;
+        }
         Ok(this)
     }
 

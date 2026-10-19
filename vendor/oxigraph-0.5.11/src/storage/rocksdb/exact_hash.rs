@@ -1,12 +1,13 @@
 //! Exact stores declare their lexical key scheme before any indexed operation.
-use super::{CorruptionError, LATEST_STORAGE_VERSION, RocksDbStorage, StorageError};
+use super::{
+    CorruptionError, EXACT_HASH_KEY, LATEST_STORAGE_VERSION, RocksDbStorage, StorageError,
+};
 
-const HASH_KEY: &[u8] = b"turbo-strhash";
 const HASH_SCHEME: &[u8] = b"siphash13-128";
 
 impl RocksDbStorage {
     pub(super) fn ensure_exact_hash(&self) -> Result<(), StorageError> {
-        if let Some(scheme) = self.db.get(&self.default_cf, HASH_KEY)? {
+        if let Some(scheme) = self.db.get(&self.default_cf, EXACT_HASH_KEY)? {
             if scheme.as_ref() != HASH_SCHEME {
                 return Err(CorruptionError::msg("Unsupported lexical hash scheme").into());
             }
@@ -49,7 +50,7 @@ impl RocksDbStorage {
             );
         }
         let mut transaction = self.db.start_transaction()?;
-        transaction.insert(&self.default_cf, HASH_KEY, HASH_SCHEME);
+        transaction.insert(&self.default_cf, EXACT_HASH_KEY, HASH_SCHEME);
         transaction.insert(
             &self.default_cf,
             b"oxversion",

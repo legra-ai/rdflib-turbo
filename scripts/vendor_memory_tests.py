@@ -57,7 +57,14 @@ def run_configuration(root, features, required):
 
 def run(root):
     run_configuration(root, "exact-term-storage,rocksdb", REQUIRED_TESTS)
-    run_configuration(root, None, ("storage::numeric_encoder::tests::str_hash_stability",))
+    run_configuration(
+        root,
+        "rocksdb",
+        (
+            "storage::numeric_encoder::tests::str_hash_stability",
+            "storage::rocksdb::upstream_hash_tests::exact_hash_declarations_are_rejected_before_upstream_migration",
+        ),
+    )
 
 
 if __name__ == "__main__":

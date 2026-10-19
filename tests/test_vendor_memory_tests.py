@@ -34,6 +34,7 @@ def test_vendor_memory_runner_applies_current_root_patches_and_locked_native_tes
                 for name in (
                     *vendor_memory_tests.REQUIRED_TESTS,
                     "storage::numeric_encoder::tests::str_hash_stability",
+                    "storage::rocksdb::upstream_hash_tests::exact_hash_declarations_are_rejected_before_upstream_migration",
                 )
             )
         )
@@ -48,7 +49,7 @@ def test_vendor_memory_runner_applies_current_root_patches_and_locked_native_tes
     assert "--locked" in arguments and "--lib" in arguments
     assert "storage::" in arguments
     assert arguments[arguments.index("--features") + 1] == "exact-term-storage,rocksdb"
-    assert "--features" not in calls[3][0]
+    assert calls[3][0][calls[3][0].index("--features") + 1] == "rocksdb"
     assert arguments[arguments.index("--manifest-path") + 1] == str(
         root / "vendor/oxigraph-0.5.11/Cargo.toml"
     )
@@ -124,3 +125,25 @@ def test_missing_lexical_hash_regression_fails_inventory(
     with pytest.raises(RuntimeError, match="Missing native storage regressions"):
         vendor_memory_tests.run(tmp_path)
     assert len(calls) == 1
+
+
+def test_missing_upstream_store_guard_fails_inventory(tmp_path, monkeypatch, vendor_memory_tests):
+    (tmp_path / "Cargo.toml").write_text("[patch.crates-io]\n")
+    calls = []
+
+    def cargo(arguments, **kwargs):
+        calls.append(arguments)
+        return SimpleNamespace(
+            stdout="\n".join(
+                f"{name}: test"
+                for name in (
+                    *vendor_memory_tests.REQUIRED_TESTS,
+                    "storage::numeric_encoder::tests::str_hash_stability",
+                )
+            )
+        )
+
+    monkeypatch.setattr(vendor_memory_tests.subprocess, "run", cargo)
+    with pytest.raises(RuntimeError, match="Missing native storage regressions"):
+        vendor_memory_tests.run(tmp_path)
+    assert len(calls) == 3

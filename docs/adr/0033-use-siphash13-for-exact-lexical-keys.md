@@ -22,7 +22,9 @@ is initialized only when every column family is empty. Missing or mismatched
 declarations on existing stores are hard errors for both readers and writers;
 there is no inference, retry with another hash or conversion path. A new
 declaration is flushed together with the existing initial storage metadata.
-The key layout and existing storage version field are retained.
+The key layout and existing storage version field are retained. Builds without
+`exact-term-storage` reject any `turbo-strhash` declaration before migration,
+including unknown schemes or incomplete version metadata.
 
 There is no additional RDF index, retained input cache, Python owner or
 mutable global state. Native literal spelling, explicit datatypes, language
