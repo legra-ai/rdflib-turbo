@@ -4,7 +4,11 @@ use crate::model::*;
 use crate::storage::error::{CorruptionError, StorageError};
 use crate::storage::small_string::SmallString;
 use oxsdatatypes::*;
-use siphasher::sip128::{Hasher128, SipHasher24};
+use siphasher::sip128::Hasher128;
+#[cfg(feature = "exact-term-storage")]
+use siphasher::sip128::SipHasher13 as StringHasher;
+#[cfg(not(feature = "exact-term-storage"))]
+use siphasher::sip128::SipHasher24 as StringHasher;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::mem::discriminant;
@@ -19,7 +23,7 @@ pub struct StrHash {
 
 impl StrHash {
     pub fn new(value: &str) -> Self {
-        let mut hasher = SipHasher24::new();
+        let mut hasher = StringHasher::new();
         hasher.write(value.as_bytes());
         Self {
             hash: u128::from(hasher.finish128()).to_be_bytes(),
@@ -1207,6 +1211,7 @@ mod tests {
     #[cfg(target_pointer_width = "64")]
     use std::mem::{align_of, size_of};
 
+    #[cfg(not(feature = "exact-term-storage"))]
     #[test]
     fn str_hash_stability() {
         const EMPTY_HASH: [u8; 16] = [

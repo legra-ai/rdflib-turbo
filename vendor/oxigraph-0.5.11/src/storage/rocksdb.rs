@@ -1,10 +1,12 @@
-#[cfg(feature = "rdf-12")]
+#[cfg(all(feature = "rdf-12", not(feature = "exact-term-storage")))]
 use crate::model::vocab::rdf;
-#[cfg(feature = "rdf-12")]
+#[cfg(all(feature = "rdf-12", not(feature = "exact-term-storage")))]
 use crate::model::{BlankNode, GraphName, Term, Triple};
 use crate::model::{GraphNameRef, NamedOrBlankNodeRef, Quad, QuadRef, TermRef};
+#[cfg(not(feature = "exact-term-storage"))]
+use crate::storage::binary_encoder::TYPE_STAR_TRIPLE;
 use crate::storage::binary_encoder::{
-    QuadEncoding, TYPE_STAR_TRIPLE, WRITTEN_TERM_MAX_SIZE, decode_term, encode_term,
+    QuadEncoding, WRITTEN_TERM_MAX_SIZE, decode_term, encode_term,
     encode_term_pair, encode_term_quad, encode_term_triple, write_gosp_quad, write_gpos_quad,
     write_gspo_quad, write_osp_quad, write_ospg_quad, write_pos_quad, write_posg_quad,
     write_spo_quad, write_spog_quad, write_term,
@@ -19,13 +21,13 @@ use crate::storage::rocksdb_wrapper::{
 };
 use crate::storage::{DEFAULT_BULK_LOAD_BATCH_SIZE, map_thread_result};
 use rustc_hash::{FxBuildHasher, FxHashSet};
-#[cfg(feature = "rdf-12")]
+#[cfg(all(feature = "rdf-12", not(feature = "exact-term-storage")))]
 use siphasher::sip128::{Hasher128, SipHasher24};
 use spareval::CancellationToken;
 use std::collections::{HashMap, VecDeque};
 use std::fs::remove_file;
 use std::hash::BuildHasherDefault;
-#[cfg(feature = "rdf-12")]
+#[cfg(all(feature = "rdf-12", not(feature = "exact-term-storage")))]
 use std::hash::Hash;
 use std::mem::take;
 use std::path::{Path, PathBuf};
@@ -47,6 +49,14 @@ const DPOS_CF: &str = "dpos";
 const DOSP_CF: &str = "dosp";
 const GRAPHS_CF: &str = "graphs";
 const DEFAULT_CF: &str = "default";
+
+#[cfg(feature = "exact-term-storage")]
+#[path = "rocksdb/exact_hash.rs"]
+mod exact_hash;
+
+#[cfg(all(test, feature = "exact-term-storage"))]
+#[path = "rocksdb/key_hash_tests.rs"]
+mod key_hash_tests;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct RocksDbStorageOptions {
@@ -188,10 +198,14 @@ impl RocksDbStorage {
             graphs_cf: db.column_family(GRAPHS_CF)?,
             db,
         };
+        #[cfg(feature = "exact-term-storage")]
+        this.ensure_exact_hash()?;
+        #[cfg(not(feature = "exact-term-storage"))]
         this.migrate()?;
         Ok(this)
     }
 
+    #[cfg(not(feature = "exact-term-storage"))]
     fn migrate(&self) -> Result<(), StorageError> {
         let mut version = self.ensure_version()?;
         if version == 0 {
@@ -330,6 +344,7 @@ impl RocksDbStorage {
         }
     }
 
+    #[cfg(not(feature = "exact-term-storage"))]
     fn ensure_version(&self) -> Result<u64, StorageError> {
         Ok(
             if let Some(version) = self.db.get(&self.default_cf, b"oxversion")? {
@@ -343,6 +358,7 @@ impl RocksDbStorage {
         )
     }
 
+    #[cfg(not(feature = "exact-term-storage"))]
     fn update_version(&self, version: u64) -> Result<(), StorageError> {
         self.db
             .insert(&self.default_cf, b"oxversion", &version.to_be_bytes())?;

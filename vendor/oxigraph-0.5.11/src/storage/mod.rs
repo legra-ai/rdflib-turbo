@@ -1,4 +1,6 @@
 use crate::model::{GraphNameRef, NamedOrBlankNodeRef, QuadRef};
+#[cfg(all(test, feature = "exact-term-storage"))]
+mod lexical_hash_tests;
 pub use crate::storage::error::{CorruptionError, LoaderError, SerializerError, StorageError};
 use crate::storage::memory::{
     MemoryDecodingGraphIterator, MemoryStorage, MemoryStorageBulkLoader, MemoryStorageReader,
