@@ -88,7 +88,8 @@ jobs:
   wheels:
     needs: [prepare, sdist]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    # Includes cold native compilation, all five interpreter wheels and verification.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
