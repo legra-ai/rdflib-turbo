@@ -7,13 +7,22 @@ use oxigraph::model::*;
 use super::{Graph, OWL, Pending};
 use crate::Result;
 
+#[path = "same_as_components.rs"]
+mod components;
+#[path = "same_as_dense.rs"]
+mod dense;
+use components::Components;
+
 struct RowGroup {
     members: Vec<NamedOrBlankNode>,
+    size: usize,
+    dense: bool,
 }
 
 struct Rows {
     subjects: HashMap<NamedOrBlankNode, usize>,
     groups: Vec<RowGroup>,
+    components: Components,
 }
 
 fn row(
@@ -42,10 +51,14 @@ impl Rows {
         let mut output = Self {
             subjects: HashMap::new(),
             groups: Vec::new(),
+            components: Components::default(),
         };
         let mut signatures: HashMap<(usize, u64), Vec<usize>> = HashMap::new();
         for quad in data.quads(None, Some(predicate.as_ref()), None) {
             let quad = quad?;
+            output
+                .components
+                .connect(quad.subject.clone().into(), quad.object.clone());
             if let Ok(inverse_subject) = NamedOrBlankNode::try_from(quad.object) {
                 pending.push(
                     data,
@@ -88,12 +101,23 @@ impl Rows {
                 let index = output.groups.len();
                 output.groups.push(RowGroup {
                     members: Vec::new(),
+                    size: values.len(),
+                    dense: false,
                 });
                 signatures.entry(signature).or_default().push(index);
                 index
             });
             output.groups[group].members.push(quad.subject.clone());
             output.subjects.insert(quad.subject, group);
+        }
+        output.components.finish();
+        for group in &mut output.groups {
+            group.dense = group.size
+                > output
+                    .components
+                    .members(&group.members[0].clone().into())
+                    .len()
+                    / 2;
         }
         Ok(output)
     }
@@ -106,6 +130,10 @@ impl Rows {
     ) -> Result<()> {
         for (id, group) in self.groups.iter().enumerate() {
             let values = row(data, &group.members[0], predicate)?;
+            let dense = self.dense(&group.members[0]);
+            if dense {
+                self.extend_dense(data, predicate, &values, &group.members, pending)?;
+            }
             // Transient missing-target delta for this group only, not a second edge relation.
             let mut missing = HashSet::new();
             for intermediate in &values {
@@ -117,16 +145,21 @@ impl Rows {
                 }
                 // R^-1 R: subject replacement on an equality predicate. The inverse
                 // edge itself is pending and must not become visible to this pass.
-                for target in &values {
-                    pending.push(
-                        data,
-                        Quad::new(
-                            intermediate.clone(),
-                            predicate.clone(),
-                            target.clone(),
-                            GraphName::DefaultGraph,
-                        ),
-                    )?;
+                if !self.dense(&intermediate) {
+                    for target in &values {
+                        pending.push(
+                            data,
+                            Quad::new(
+                                intermediate.clone(),
+                                predicate.clone(),
+                                target.clone(),
+                                GraphName::DefaultGraph,
+                            ),
+                        )?;
+                    }
+                }
+                if dense {
+                    continue;
                 }
                 // R R: only successors absent from the group's existing row can add facts.
                 for successor in

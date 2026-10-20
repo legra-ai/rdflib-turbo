@@ -202,3 +202,28 @@ fn intersection_reachability_candidate_and_membership_failures_abort() {
         );
     }
 }
+
+#[test]
+fn dense_missing_pair_probe_failures_abort_without_publication() {
+    let input = [
+        ("a", "sameAs", "b"),
+        ("a", "sameAs", "c"),
+        ("b", "sameAs", "b"),
+        ("b", "sameAs", "c"),
+    ];
+    for (scan, after_results) in [
+        (Scan::new(Some("b"), Some("sameAs"), Some("a")), 0),
+        (Scan::new(None, Some("sameAs"), Some("b")), 1),
+    ] {
+        failure_rolls_back(
+            Kernel::Equality,
+            &input,
+            Fault {
+                scan,
+                activation: Activation::AfterEqualityEnumeration,
+                after_results,
+            },
+            true,
+        );
+    }
+}

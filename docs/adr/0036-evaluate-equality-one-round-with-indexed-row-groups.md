@@ -38,3 +38,26 @@ including blank nodes, literal edges and predicate aliases. Chain/fork tests
 protect round boundaries and co-neighbor consequences; complete fixed points
 also match the frozen ordinary rule engine. Existing transaction rollback and
 graph-scope contracts remain unchanged.
+
+Identical-row grouping alone does not bound work for a nearly complete relation:
+missing diagonals make every outgoing row distinct while most composition
+witnesses still reproduce existing facts. Track weak connectivity with transient
+term identities and a union-by-size forest. These components only restrict the
+candidate search space; they never establish equality or make pending inverses
+visible. Retain O(distinct equality terms) component metadata, not an edge copy.
+
+For a row containing more than half its component's terms, examine only missing
+targets. Establish each addition with an indexed two-edge transitive witness or
+a common predecessor from the original snapshot. Transitive witnesses are shared
+by identical outgoing rows; common-predecessor witnesses remain per subject.
+Keep sparse rows on the witness-enumeration path, including sparse output rows
+reached as co-neighbors of a dense source row. Literal terms can be candidate
+objects but never outgoing intermediates. This adaptive choice is a work-saving
+strategy, not a universal quadratic complexity guarantee.
+
+Missing-diagonal single and disjoint cliques count both indexed read calls and
+emitted rows, including unsuccessful exact probes. Their quadratic synthetic
+budgets remain fixed. Mixed dense/sparse graphs, literals, blank nodes and
+disconnected components also match the frozen one-round rule set. Storage errors
+during dense probes preserve pending-publication and insertion-journal rollback
+contracts.
