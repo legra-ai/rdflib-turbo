@@ -17,6 +17,14 @@ computed RDF terms use the same encoding as stored RDF terms. The feature also
 enables spareval's local `exact-term-builtins` feature for STR and DATATYPE.
 Without the opt-in, upstream encoding and shortcuts remain unchanged.
 
+Exact-term lexical dictionary keys use the existing siphasher dependency's
+128-bit SipHash-1-3 implementation. The key width and byte order are retained.
+Persistent exact stores atomically declare `turbo-strhash = siphash13-128`
+together with their initial storage metadata. Missing or mismatched declarations
+on existing stores are hard errors on read-write and read-only open. Exact stores
+do not execute upstream storage migrations. Feature-off hashing and storage
+behavior remain upstream. See ADR 0033 and native storage contract tests.
+
 See ADR 0006 and `tests/store-contract` for the feature matrix and persistence
 regressions. This dependency patch does not itself expose a Python Store API.
 

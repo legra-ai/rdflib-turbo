@@ -542,6 +542,7 @@ impl Db {
         Ok(found != 0)
     }
 
+    #[cfg(any(not(feature = "exact-term-storage"), test))]
     pub fn insert(
         &self,
         column_family: &ColumnFamily,
