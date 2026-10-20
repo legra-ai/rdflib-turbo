@@ -155,3 +155,17 @@ def test_source_archive_extraction_invalidates_stale_native_builds(tmp_path):
     subprocess.run(["sh", "-c", extraction], cwd=tmp_path, check=True, capture_output=True)
     assert build_and_read() == "new"
     assert archive.read_bytes() == original_bytes
+
+
+def test_wheel_job_budget_covers_five_interpreters_and_verification():
+    import re
+
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+    wheels = workflow.split("\n  wheels:\n", 1)[1].split("\n  native-coverage:\n", 1)[0]
+    timeout = re.search(r"^    timeout-minutes: (\d+)$", wheels, re.MULTILINE)
+    assert timeout is not None
+    assert int(timeout.group(1)) == 60, "Cold native builds plus five wheels require a bounded hour"
+    versions = " ".join(f"{abi[2]}.{abi.split('-')[0][3:]}" for abi in ABIS)
+    assert f"for python in {versions}; do" in wheels
+    assert " ".join(ABIS) in wheels
+    assert "python scripts/test_wheel.py" in wheels
