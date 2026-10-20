@@ -128,7 +128,9 @@ jobs:
       - name: Unpack the tested source distribution once for every interpreter
         run: |
           mkdir source-build || exit 1
-          tar -xzf source-dist/*.tar.gz --strip-components=1 -C source-build || exit 1
+          # Restored Cargo outputs can be newer than archive timestamps. Establish
+          # checkout freshness while preserving the tested archive and source bytes.
+          tar -xzmf source-dist/*.tar.gz --strip-components=1 -C source-build || exit 1
       - name: Build native manylinux wheel from source archive
         if: runner.os == 'Linux'
         run: sh scripts/build_manylinux.sh '${{ matrix.container }}' '${{ matrix.target }}' cp311-cp311 cp312-cp312 cp313-cp313 cp314-cp314 cp315-cp315
