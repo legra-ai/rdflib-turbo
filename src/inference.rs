@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use oxigraph::model::*;
-use oxigraph::sparql::{QueryResults, SparqlEvaluator};
+use oxigraph::sparql::{PreparedSparqlQuery, QueryResults, SparqlEvaluator};
 
 use crate::{Error, Result};
 
@@ -9,12 +9,15 @@ mod axioms;
 mod backend;
 mod delta;
 mod intersections;
+mod same_as;
+mod traversal;
 
 pub(crate) use delta::expand_delta;
-mod traversal;
 
 #[cfg(test)]
 mod intersection_tests;
+#[cfg(test)]
+mod same_as_tests;
 
 use backend::Graph;
 
@@ -55,11 +58,7 @@ const OWL_RULES: &[(&str, &str)] = &[
         "?s owl:sameAs ?s . ?p owl:sameAs ?p . ?o owl:sameAs ?o",
         "?s ?p ?o",
     ),
-    ("?y owl:sameAs ?x", "?x owl:sameAs ?y"),
-    ("?x owl:sameAs ?z", "?x owl:sameAs ?y . ?y owl:sameAs ?z"),
-    ("?y ?p ?o", "?x owl:sameAs ?y . ?x ?p ?o"),
     ("?s ?q ?o", "?p owl:sameAs ?q . ?s ?p ?o"),
-    ("?s ?p ?y", "?x owl:sameAs ?y . ?s ?p ?x"),
     ("?s a ?c", "?p rdfs:domain ?c . ?s ?p ?o"),
     ("?o a ?c", "?p rdfs:range ?c . ?s ?p ?o"),
     (
@@ -242,6 +241,35 @@ impl Pending {
     }
 }
 
+fn apply_rules(
+    data: &impl Graph,
+    queries: &[PreparedSparqlQuery],
+    additions: &mut Pending,
+    owl: bool,
+) -> Result<()> {
+    if owl {
+        same_as::apply(data, additions)?;
+    }
+    for query in queries {
+        let QueryResults::Graph(triples) = data.query(query.clone())? else {
+            unreachable!("Inference rules are CONSTRUCT queries")
+        };
+        for triple in triples {
+            let triple = triple?;
+            additions.push(
+                data,
+                Quad::new(
+                    triple.subject,
+                    triple.predicate,
+                    triple.object,
+                    GraphName::DefaultGraph,
+                ),
+            )?;
+        }
+    }
+    Ok(())
+}
+
 fn expand_inner(data: &mut impl Graph, mode: &str) -> Result<()> {
     match mode {
         "none" | "" => return Ok(()),
@@ -276,23 +304,7 @@ fn expand_inner(data: &mut impl Graph, mode: &str) -> Result<()> {
         .collect::<Result<Vec<_>>>()?;
     loop {
         let mut additions = std::mem::take(&mut initial_resources);
-        for query in &queries {
-            let QueryResults::Graph(triples) = data.query(query.clone())? else {
-                unreachable!("Inference rules are CONSTRUCT queries")
-            };
-            for triple in triples {
-                let triple = triple?;
-                additions.push(
-                    data,
-                    Quad::new(
-                        triple.subject,
-                        triple.predicate,
-                        triple.object,
-                        GraphName::DefaultGraph,
-                    ),
-                )?;
-            }
-        }
+        apply_rules(data, &queries, &mut additions, mode != "rdfs")?;
         if mode != "rdfs" {
             // Lists can themselves be inferred, so discover them each round.
             intersections::additions(data, &mut additions)?;
