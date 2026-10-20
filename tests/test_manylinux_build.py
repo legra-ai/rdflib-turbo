@@ -94,3 +94,17 @@ def test_manylinux_outer_enters_one_container_for_all_five_abis(tmp_path):
     assert calls[0].startswith("build ")
     assert calls[1].startswith("run --rm ")
     assert "sh /build-wheel.sh x86_64-unknown-linux-gnu " + " ".join(ABIS) in calls[1]
+
+
+def test_wheel_job_budget_covers_five_interpreters_and_verification():
+    import re
+
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+    wheels = workflow.split("\n  wheels:\n", 1)[1].split("\n  native-coverage:\n", 1)[0]
+    timeout = re.search(r"^    timeout-minutes: (\d+)$", wheels, re.MULTILINE)
+    assert timeout is not None
+    assert int(timeout.group(1)) == 60, "Cold native builds plus five wheels require a bounded hour"
+    versions = " ".join(f"{abi[2]}.{abi.split('-')[0][3:]}" for abi in ABIS)
+    assert f"for python in {versions}; do" in wheels
+    assert " ".join(ABIS) in wheels
+    assert "python scripts/test_wheel.py" in wheels
