@@ -235,6 +235,10 @@ def callback_failed_or_independent_case(operation):
                     data.infer(inference="owlrl")
                 else:
                     data.infer_delta(inference="owlrl")
+        elif operation == "invalid-rules":
+            inner = program(SHAPES.replace("sh:condition ex:C;", ""))
+            with pytest.raises(RuntimeError, match="iteration limit"):
+                inner.validate(data, inplace=True, iterate_rules=True, max_rule_iterations=1)
         elif operation == "copy":
             copied = data.copy()
             copied.parse(data="<urn:copy> <urn:p> <urn:o>.")
@@ -252,7 +256,15 @@ def callback_failed_or_independent_case(operation):
 
 @pytest.mark.parametrize(
     "operation",
-    ["invalid-load", "invalid-bind", "invalid-infer", "invalid-delta", "copy", "readonly"],
+    [
+        "invalid-load",
+        "invalid-bind",
+        "invalid-infer",
+        "invalid-delta",
+        "invalid-rules",
+        "copy",
+        "readonly",
+    ],
 )
 def test_failed_or_independent_mutation_does_not_conflict(tmp_path, operation):
     run_bounded(tmp_path, "callback_failed_or_independent_case", operation)
