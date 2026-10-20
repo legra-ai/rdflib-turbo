@@ -15,6 +15,8 @@ mod traversal;
 pub(crate) use delta::expand_delta;
 
 #[cfg(test)]
+mod failure_tests;
+#[cfg(test)]
 mod intersection_tests;
 #[cfg(test)]
 mod same_as_tests;
