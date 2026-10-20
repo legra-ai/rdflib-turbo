@@ -205,14 +205,23 @@ fn intersection_reachability_candidate_and_membership_failures_abort() {
 
 #[test]
 fn dense_missing_pair_probe_failures_abort_without_publication() {
+    // An unbalanced nearly complete component activates bounded discovery.
+    // The missing a->b inverse leaves pending state before either late failure.
     let input = [
-        ("a", "sameAs", "b"),
         ("a", "sameAs", "c"),
-        ("b", "sameAs", "b"),
+        ("a", "sameAs", "d"),
+        ("b", "sameAs", "a"),
         ("b", "sameAs", "c"),
+        ("b", "sameAs", "d"),
+        ("c", "sameAs", "a"),
+        ("c", "sameAs", "b"),
+        ("c", "sameAs", "d"),
+        ("d", "sameAs", "a"),
+        ("d", "sameAs", "b"),
+        ("d", "sameAs", "c"),
     ];
     for (scan, after_results) in [
-        (Scan::new(Some("b"), Some("sameAs"), Some("a")), 0),
+        (Scan::new(Some("b"), Some("sameAs"), Some("b")), 0),
         (Scan::new(None, Some("sameAs"), Some("b")), 1),
     ] {
         failure_rolls_back(

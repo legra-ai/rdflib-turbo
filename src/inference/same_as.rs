@@ -15,8 +15,6 @@ use components::Components;
 
 struct RowGroup {
     members: Vec<NamedOrBlankNode>,
-    size: usize,
-    dense: bool,
 }
 
 struct Rows {
@@ -56,9 +54,6 @@ impl Rows {
         let mut signatures: HashMap<(usize, u64), Vec<usize>> = HashMap::new();
         for quad in data.quads(None, Some(predicate.as_ref()), None) {
             let quad = quad?;
-            output
-                .components
-                .connect(quad.subject.clone().into(), quad.object.clone());
             if let Ok(inverse_subject) = NamedOrBlankNode::try_from(quad.object) {
                 pending.push(
                     data,
@@ -101,8 +96,6 @@ impl Rows {
                 let index = output.groups.len();
                 output.groups.push(RowGroup {
                     members: Vec::new(),
-                    size: values.len(),
-                    dense: false,
                 });
                 signatures.entry(signature).or_default().push(index);
                 index
@@ -110,15 +103,7 @@ impl Rows {
             output.groups[group].members.push(quad.subject.clone());
             output.subjects.insert(quad.subject, group);
         }
-        output.components.finish();
-        for group in &mut output.groups {
-            group.dense = group.size
-                > output
-                    .components
-                    .members(&group.members[0].clone().into())
-                    .len()
-                    / 2;
-        }
+        output.components = Components::discover(data, predicate, &output, &signatures)?;
         Ok(output)
     }
 
