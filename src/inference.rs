@@ -7,7 +7,11 @@ use crate::{Error, Result};
 
 mod axioms;
 mod backend;
+mod intersections;
 mod traversal;
+
+#[cfg(test)]
+mod intersection_tests;
 
 use backend::Graph;
 
@@ -83,10 +87,6 @@ const OWL_RULES: &[(&str, &str)] = &[
     (
         "?x a ?member",
         "?c owl:intersectionOf ?list . ?list rdf:rest*/rdf:first ?member . ?x a ?c",
-    ),
-    (
-        "?x a ?c",
-        "?c owl:intersectionOf ?list . ?x a ?any FILTER NOT EXISTS { ?list rdf:rest*/rdf:first ?member FILTER NOT EXISTS { ?x a ?member } }",
     ),
     (
         "?x a ?c",
@@ -292,6 +292,7 @@ fn expand_inner(data: &mut impl Graph, mode: &str) -> Result<()> {
         }
         if mode != "rdfs" {
             // Lists can themselves be inferred, so discover them each round.
+            intersections::additions(data, &mut additions)?;
             traversal::chains(data, &mut additions)?;
             traversal::keys(data, &mut additions)?;
         }
