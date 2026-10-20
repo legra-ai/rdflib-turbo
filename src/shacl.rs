@@ -17,6 +17,9 @@ use crate::store::{NativeStore, NativeTransaction};
 mod report;
 pub(crate) use report::Report;
 
+mod commit;
+use commit::Prepared;
+
 pyo3::create_exception!(_native, SharedValidationFailure, PyValueError);
 
 pub(crate) fn error(error: Error) -> PyErr {
@@ -205,33 +208,25 @@ impl SharedShapes {
         inplace: bool,
     ) -> PyResult<Output> {
         let mut options = Settings::parse(settings)?;
-        py.detach(|| {
-            if inplace {
-                let mut data = dataset
-                    .inner
-                    .write()
-                    .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
-                options.namespaces = data.namespaces.clone();
-                let outcome = self
-                    .inner
-                    .validate_delta(&data.data, options)
-                    .map_err(error)?;
-                let result = output(outcome.report)?;
-                data.extend(outcome.additions.iter());
-                Ok(result)
-            } else {
-                let data = dataset
-                    .inner
-                    .read()
-                    .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
-                options.namespaces = data.namespaces.clone();
-                output(
-                    self.inner
-                        .validate_staged(&data.data, options)
-                        .map_err(error)?,
-                )
+        let prepared = py.detach(|| -> PyResult<Prepared> {
+            let mut data = dataset.inner.write()
+                .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
+            options.namespaces = data.namespaces.clone();
+            if !inplace {
+                return Ok(Prepared::ready(output(self.inner.validate_staged(&data.data, options).map_err(error)?)?));
             }
-        })
+            let revision = data.next_revision()?;
+            let outcome = self.inner.validate_delta(&data.data, options).map_err(error)?;
+            let result = output(outcome.report)?;
+            if result.3.is_empty() {
+                data.extend(outcome.additions.iter());
+                data.revision = revision;
+                Ok(Prepared::ready(result))
+            } else {
+                Ok(Prepared::staged(result, outcome.additions, data.revision))
+            }
+        })?;
+        prepared.finish(py, dataset)
     }
     fn validate_store(
         &self,

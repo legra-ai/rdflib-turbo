@@ -91,9 +91,28 @@ fn term(term: &Term) -> Value {
 struct DatasetState {
     data: Dataset,
     namespaces: Vec<(String, String)>,
+    revision: u64,
 }
 
 impl DatasetState {
+    fn new(data: Dataset, namespaces: Vec<(String, String)>) -> Self {
+        Self {
+            data,
+            namespaces,
+            revision: 0,
+        }
+    }
+
+    fn copy_owner(&self) -> Self {
+        Self::new(self.data.clone(), self.namespaces.clone())
+    }
+
+    fn next_revision(&self) -> PyResult<u64> {
+        self.revision
+            .checked_add(1)
+            .ok_or_else(|| PyRuntimeError::new_err("Dataset mutation revision exhausted"))
+    }
+
     fn bind(&mut self, entries: Vec<(String, String)>) {
         for (prefix, namespace) in entries {
             if let Some((_, value)) = self.namespaces.iter_mut().find(|(key, _)| key == &prefix) {
@@ -147,7 +166,7 @@ impl NativeDataset {
                 .read()
                 .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
             Ok(Self {
-                inner: RwLock::new(data.clone()),
+                inner: RwLock::new(data.copy_owner()),
             })
         })
     }
@@ -177,6 +196,7 @@ impl NativeDataset {
                 .inner
                 .write()
                 .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
+            let revision = state.next_revision()?;
             let mut transaction = state.data.insert_transaction();
             for quad in reader.by_ref() {
                 let quad = quad.map_err(|e| PyValueError::new_err(e.to_string()))?;
@@ -188,6 +208,7 @@ impl NativeDataset {
                 .collect();
             transaction.commit();
             state.bind(prefixes);
+            state.revision = revision;
             Ok(())
         })
     }
@@ -205,10 +226,13 @@ impl NativeDataset {
         for (_, namespace) in &entries {
             NamedNode::new(namespace.as_str()).map_err(|e| PyValueError::new_err(e.to_string()))?;
         }
-        self.inner
+        let mut state = self
+            .inner
             .write()
-            .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?
-            .bind(entries);
+            .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
+        let revision = state.next_revision()?;
+        state.bind(entries);
+        state.revision = revision;
         Ok(())
     }
 
@@ -304,6 +328,7 @@ impl NativeDataset {
                 .inner
                 .write()
                 .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
+            let revision = current.next_revision()?;
             if let Some(destination) = destination {
                 inference::expand_into(
                     &mut current,
@@ -326,6 +351,7 @@ impl NativeDataset {
                 )
                 .map_err(error)?;
             }
+            current.revision = revision;
             Ok(())
         })
     }
@@ -370,3 +396,6 @@ mod store_tests;
 
 #[cfg(test)]
 mod construct_tests;
+
+#[cfg(test)]
+mod dataset_revision_tests;

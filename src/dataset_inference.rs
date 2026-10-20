@@ -30,13 +30,15 @@ impl NativeDataset {
                 .inner
                 .write()
                 .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
+            let revision = current.next_revision()?;
             // Namespace bindings are metadata, not a snapshot of RDF quads.
             let namespaces = current.namespaces.clone();
             let data =
                 inference::expand_delta(&mut current, mode, destination.map(Into::into), options)
                     .map_err(error)?;
+            current.revision = revision;
             Ok(Self {
-                inner: RwLock::new(DatasetState { data, namespaces }),
+                inner: RwLock::new(DatasetState::new(data, namespaces)),
             })
         })
     }

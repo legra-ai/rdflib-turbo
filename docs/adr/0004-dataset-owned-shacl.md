@@ -37,3 +37,21 @@ that consumer revision; a newer pyshacl wheel cannot share an older embedded
 engine. Keep the fingerprint check strict and test the actual wheel combination.
 The installed-wheel revision regression also checks the reported revision against
 the declared Cargo source, preventing metadata from silently drifting from code.
+
+Python warning policy is part of successful validation. Rule evaluation reuses
+its existing working copy, but an operation with recursion warnings must release
+the dataset lock before invoking Python's warning machinery. The provider emits
+the public `pyshacl_turbo.ShapeRecursionWarning` category at the same caller
+location as ordinary Graph validation and returns no deferred warning messages.
+Warnings promoted to errors discard the staged data and namespace metadata.
+Python warning callbacks may read or mutate the receiver without deadlocking.
+
+The unlocked warning interval uses an optimistic owner-local mutation revision.
+Every successful mutator, including metadata-only and no-op writes, advances a
+checked revision; failed parsing and inference roll back before returning.
+Independent copies start independent revisions. Accepted warnings are followed
+by one compare-and-commit under the write lock. Any intervening write causes a
+hard transaction-conflict error: preserve that write, discard the outer staged
+rule changes, and never retry Python callbacks. Revision exhaustion fails before
+mutation. Validation without warnings retains its original single lock and
+working-copy cost; no additional dataset snapshot is introduced.
