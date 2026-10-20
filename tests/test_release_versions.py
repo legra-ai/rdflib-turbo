@@ -1,6 +1,7 @@
 """Cargo preparation must preserve Python candidate spelling and synchronize locks."""
 
 import importlib.util
+import re
 import subprocess
 import tomllib
 from pathlib import Path
@@ -79,13 +80,53 @@ def test_version_outputs_refuse_a_different_prepared_version(tmp_path):
         load("release_version").validated_versions(tmp_path, "0.2.0-alpha.3")
 
 
+def _assert_shared_release_action_pins(workflow):
+    for action in ["prepare-cargo-release", "tag-tested-release"]:
+        revisions = re.findall(
+            rf"(?m)^\s*(?:-\s+)?uses:\s+legra-ai/github-actions/\.github/actions/{action}@([^\s#]+)",
+            workflow,
+        )
+        assert len(revisions) == 1, f"Expected exactly one shared {action} step"
+        assert re.fullmatch(r"[0-9a-f]{40}", revisions[0]), f"Unpinned shared {action} step"
+
+
+def test_shared_release_actions_accept_independent_immutable_updates():
+    workflow = (
+        "    uses: legra-ai/github-actions/.github/actions/prepare-cargo-release@"
+        + "a" * 40
+        + "\n  - uses: legra-ai/github-actions/.github/actions/tag-tested-release@"
+        + "b" * 40
+        + "\n"
+    )
+    _assert_shared_release_action_pins(workflow)
+
+
+@pytest.mark.parametrize("action", ["prepare-cargo-release", "tag-tested-release"])
+@pytest.mark.parametrize("revision", ["main", "v1", "a" * 39, "a" * 41, "G" * 40, ""])
+def test_shared_release_actions_reject_floating_or_malformed_revisions(action, revision):
+    workflow = "\n".join(
+        f"uses: legra-ai/github-actions/.github/actions/{name}@"
+        + (revision if name == action else "a" * 40)
+        for name in ["prepare-cargo-release", "tag-tested-release"]
+    )
+    with pytest.raises(AssertionError):
+        _assert_shared_release_action_pins(workflow)
+
+
+def test_shared_release_actions_reject_missing_or_duplicate_steps():
+    step = "uses: legra-ai/github-actions/.github/actions/prepare-cargo-release@" + "a" * 40
+    tag = "uses: legra-ai/github-actions/.github/actions/tag-tested-release@" + "b" * 40
+    for workflow in ["", step, step + "\n" + tag + "\n" + step]:
+        with pytest.raises(AssertionError):
+            _assert_shared_release_action_pins(workflow)
+
+
 def test_main_release_uses_shared_planner_and_successful_test_gate():
     workflow = (ROOT / ".github/workflows/ci.yml").read_text()
     assert "inputs.publish" not in workflow
     assert "steps.release.outputs.release" in workflow
     assert "needs.prepare.outputs.release == 'true'" in workflow
-    for action in ["prepare-cargo-release", "tag-tested-release"]:
-        assert f"/.github/actions/{action}@4225546e92bf7ca66814a00070db2193051473eb" in workflow
+    _assert_shared_release_action_pins(workflow)
     assert "needs: [prepare, test]" in workflow
     assert "cancel-in-progress: false" in workflow
     assert workflow.count("tag-format: pep440") == 2
