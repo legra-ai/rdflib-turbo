@@ -179,3 +179,16 @@ def test_project_identity_mismatch_fails_before_any_command(tmp_path, monkeypatc
         module.initialize_dependencies(
             root, tmp_path / "profiles", tmp_path / "reports", "rdflib-turbo", sys.executable, {}
         )
+
+
+def test_source_distribution_uses_uv_lock_without_legacy_dependency_snapshots():
+    import tomllib
+
+    root = Path(__file__).resolve().parents[1]
+    manifest = tomllib.loads((root / "pyproject.toml").read_text())
+    includes = {entry["path"] for entry in manifest["tool"]["maturin"]["include"]}
+    assert "uv.lock" in includes
+    for name in ("requirements-coverage.in", "requirements-coverage.lock"):
+        assert not (root / name).exists()
+        assert name not in includes
+    assert "scripts/**/*" in includes
