@@ -1,7 +1,9 @@
 """Shared Python input and result conversion for the native backends."""
 
 import json
+from os import PathLike
 from pathlib import Path
+from typing import Self
 
 from rdflib import BNode, Graph, Literal, URIRef, Variable
 from rdflib.query import Result
@@ -43,10 +45,17 @@ def _term(value):
 class GraphOperations:
     """RDF input, output and SPARQL query operations on a native handle."""
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self._native)
 
-    def parse(self, source=None, *, data=None, format="turtle", publicID=None):
+    def parse(
+        self,
+        source: str | PathLike[str] | None = None,
+        *,
+        data: str | bytes | None = None,
+        format: str = "turtle",
+        publicID: str | None = None,
+    ) -> Self:
         """Append a UTF-8 document atomically. source is a local file path."""
         if (source is None) == (data is None):
             raise TypeError("Specify exactly one of source or data")
@@ -62,11 +71,11 @@ class GraphOperations:
         self._native.load(data, format, publicID)
         return self
 
-    def serialize(self, *, format="nquads"):
+    def serialize(self, *, format: str = "nquads") -> str:
         """Serialize natively; graph-only formats reject named graph data."""
         return self._native.dump(format)
 
-    def query(self, query, *, default_union=False):
+    def query(self, query: str, *, default_union: bool = False) -> Result:
         """Execute SELECT, ASK, CONSTRUCT or DESCRIBE; return an RDFLib Result."""
         kind, payload = self._native.query(query, default_union)
         result = Result(kind)

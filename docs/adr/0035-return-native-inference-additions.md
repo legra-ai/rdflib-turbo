@@ -1,0 +1,30 @@
+# ADR 0035: Return native inference additions before RDFLib writeback
+
+Status: Accepted
+
+`Dataset.infer_delta(inference="owlrl", destination=None)` mutates its receiver
+with the same closure and graph-scope semantics as `Dataset.infer`, then returns
+a separate native Dataset containing only exact quads newly added by that call.
+The result copies namespace bindings and preserves output graph contexts. Repeated
+inference on a saturated dataset returns an empty result. This API does not
+change the supported modes or standard RDF output boundary.
+
+Read additions from oxrdf's existing insertion journal. Default-graph inference
+does not take a before/after snapshot, clone the original dataset, or build a
+second index of original statements. Stage the returned dataset before committing
+the receiver's transaction. Invalid arguments and inference failures retain the
+existing all-or-nothing contract. Named-graph inference retains the preexisting
+union working view and destination semantics; a destination insertion journal
+identifies actual newly added quads without exporting original contexts.
+
+The returned dataset owns the derived output and therefore consumes memory
+proportional to that output. This is not a bounded-memory materialization claim.
+RDFLib adapters can convert this delta and write only additions, avoiding term
+allocation and insertion for the original graph. Nonmutating adapters still
+return the complete closure. Companion adapters require a released runtime that
+provides the new API before publishing that dependency requirement.
+
+Ship `py.typed` with inline annotations on the public Dataset API and its inherited
+parse/query operations. The marker is verified from installed release wheels.
+It does not imply every native Graph/Store operation has a complete static typing
+contract or that typing is equivalent to inference conformance.

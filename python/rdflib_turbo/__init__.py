@@ -1,6 +1,8 @@
 """Native RDF datasets. This alpha exposes a subset of the RDFLib API."""
 
 import json
+from collections.abc import Iterator
+from typing import Self
 
 from rdflib import Dataset as RDFLibDataset
 from rdflib import Graph as RDFLibGraph
@@ -21,25 +23,35 @@ class Dataset(GraphOperations):
     Queries use the default graph unless default_union=True is explicitly passed.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._native = NativeDataset()
 
-    def copy(self):
+    def copy(self) -> "Dataset":
         result = Dataset()
         result._native = self._native.copy()
         return result
 
-    def namespaces(self):
+    def namespaces(self) -> Iterator[tuple[str, str]]:
         """Return namespace bindings retained atomically from parsed documents."""
         return iter(self._native.namespaces())
 
-    def infer(self, *, inference="owlrl", destination=None):
+    def infer(self, *, inference: str = "owlrl", destination: str | None = None) -> Self:
         """Expand this native dataset atomically; used by owlrl-turbo."""
         self._native.infer(inference, destination)
         return self
 
+    def infer_delta(self, *, inference: str = "owlrl", destination: str | None = None) -> "Dataset":
+        """Expand atomically and return a native dataset of newly added quads.
+
+        The result retains namespace bindings and exact output graph contexts.
+        It excludes original quads; failures leave this dataset unchanged.
+        """
+        result = Dataset()
+        result._native = self._native.infer_delta(inference, destination)
+        return result
+
     @classmethod
-    def from_rdflib(cls, graph):
+    def from_rdflib(cls, graph: RDFLibGraph) -> Self:
         """Copy an RDFLib Graph or Dataset, preserving terms and blank-node IDs."""
         if getattr(graph, "_turbo_native_graph", False):
             raise NotImplementedError("Native Store inference/SHACL adapters are not implemented")
@@ -60,7 +72,7 @@ class Dataset(GraphOperations):
         )
         return result
 
-    def to_rdflib(self):
+    def to_rdflib(self) -> RDFLibDataset:
         """Copy to an RDFLib Dataset without literal normalization."""
         result = RDFLibDataset()
         for prefix, namespace in self.namespaces():

@@ -8,6 +8,7 @@ use pyo3::exceptions::{PyNotImplementedError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use serde_json::{Value, json};
 
+mod dataset_inference;
 mod graph;
 mod inference;
 mod shacl;
@@ -300,6 +301,11 @@ impl NativeDataset {
             }
             Ok(())
         })
+    }
+
+    #[pyo3(signature = (mode, destination=None))]
+    fn infer_delta(&self, py: Python<'_>, mode: &str, destination: Option<&str>) -> PyResult<Self> {
+        self.expand_delta(py, mode, destination)
     }
 }
 

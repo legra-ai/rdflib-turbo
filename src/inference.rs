@@ -7,7 +7,10 @@ use crate::{Error, Result};
 
 mod axioms;
 mod backend;
+mod delta;
 mod intersections;
+
+pub(crate) use delta::expand_delta;
 mod traversal;
 
 #[cfg(test)]
