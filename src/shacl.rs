@@ -1,9 +1,10 @@
 //! SHACL executes where its dataset or transaction is owned. No Rust pointer crosses a DSO.
+use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 
 use oxigraph::io::RdfFormat;
-use oxigraph::model::{NamedNode, Term};
+use oxigraph::model::{Dataset, GraphNameRef, NamedNode, Term, TermRef};
 use pyo3::exceptions::{PyNotImplementedError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyshacl_turbo_engine::{CompiledShapes, Error, Options, ValidationReport, parse_graph};
@@ -82,7 +83,59 @@ impl Settings {
     }
 }
 
-type Output = (bool, String, String, Vec<String>);
+type Record = (u8, String, Option<String>, Option<String>);
+type QuadRecord = (usize, usize, usize, Option<usize>);
+type Batch = (Vec<Record>, Vec<QuadRecord>);
+type Output = (bool, Batch, String, Vec<String>);
+
+#[derive(Default)]
+struct ReportTerms<'a> {
+    records: Vec<Record>,
+    indices: HashMap<TermRef<'a>, usize>,
+}
+
+impl<'a> ReportTerms<'a> {
+    fn encode(data: &'a Dataset) -> Batch {
+        let mut terms = Self::default();
+        let quads = data
+            .iter()
+            .map(|quad| {
+                let subject = terms.intern(quad.subject.into());
+                let predicate = terms.intern(quad.predicate.into());
+                let object = terms.intern(quad.object);
+                let graph = match quad.graph_name {
+                    GraphNameRef::DefaultGraph => None,
+                    GraphNameRef::NamedNode(node) => Some(terms.intern(node.into())),
+                    GraphNameRef::BlankNode(node) => Some(terms.intern(node.into())),
+                };
+                (subject, predicate, object, graph)
+            })
+            .collect();
+        (terms.records, quads)
+    }
+
+    fn intern(&mut self, term: TermRef<'a>) -> usize {
+        if let Some(&index) = self.indices.get(&term) {
+            return index;
+        }
+        let record = match term {
+            TermRef::NamedNode(node) => (0, node.as_str().to_owned(), None, None),
+            TermRef::BlankNode(node) => (1, node.as_str().to_owned(), None, None),
+            TermRef::Literal(literal) => (
+                2,
+                literal.value().to_owned(),
+                (literal.language().is_none() && literal.has_explicit_datatype())
+                    .then(|| literal.datatype().as_str().to_owned()),
+                literal.language().map(str::to_owned),
+            ),
+        };
+        let index = self.records.len();
+        self.records.push(record);
+        self.indices.insert(term, index);
+        index
+    }
+}
+
 
 fn output(report: ValidationReport) -> PyResult<Output> {
     Report::try_new(report)
@@ -230,4 +283,64 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.py().get_type::<SharedValidationFailure>(),
     )?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use oxigraph::model::{BlankNode, GraphName, Literal, Quad};
+
+    use super::*;
+
+    #[test]
+    fn report_terms_keep_exact_literals_and_all_graph_name_kinds() {
+        let subject = BlankNode::new("subject").unwrap();
+        let predicate = NamedNode::new("urn:p").unwrap();
+        let mut data = Dataset::new();
+        // bounded: three fixed graph/term forms exercise the transport boundary.
+        for (literal, graph) in [
+            (Literal::new_simple_literal("word"), GraphName::DefaultGraph),
+            (
+                Literal::new_typed_literal(
+                    "word",
+                    NamedNode::new("http://www.w3.org/2001/XMLSchema#string").unwrap(),
+                ),
+                NamedNode::new("urn:graph").unwrap().into(),
+            ),
+            (
+                Literal::new_language_tagged_literal("mot", "fr").unwrap(),
+                BlankNode::new("graph").unwrap().into(),
+            ),
+        ] {
+            data.insert(&Quad::new(
+                subject.clone(),
+                predicate.clone(),
+                literal,
+                graph,
+            ));
+        }
+        let (records, quads) = ReportTerms::encode(&data);
+        assert_eq!(records.iter().collect::<HashSet<_>>().len(), records.len());
+        assert!(records.contains(&(2, "word".into(), None, None)));
+        assert!(records.contains(&(
+            2,
+            "word".into(),
+            Some("http://www.w3.org/2001/XMLSchema#string".into()),
+            None,
+        )));
+        assert!(records.contains(&(2, "mot".into(), None, Some("fr".into()))));
+        let graph_records = quads
+            .iter()
+            .filter_map(|quad| quad.3.map(|index| records[index].clone()))
+            .collect::<HashSet<_>>();
+        assert_eq!(
+            graph_records,
+            HashSet::from([
+                (0, "urn:graph".into(), None, None),
+                (1, "graph".into(), None, None),
+            ])
+        );
+        assert_eq!(quads.iter().filter(|quad| quad.3.is_none()).count(), 1);
+    }
 }
