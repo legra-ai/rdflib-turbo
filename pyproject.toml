@@ -60,4 +60,4 @@ show_missing = true
 
 [dependency-groups]
 dev = ["mypy>=1.15,<3"]
-coverage = ["rdflib==7.6.0", "owlrl==7.6.2", "pyshacl==0.40.1", "pyshacl-turbo==0.2.4", "pytest==9.1.1", "pytest-cov==7.1.0", "ruff==0.17.0"]
+coverage = ["rdflib==7.6.0", "owlrl==7.6.2", "pyshacl==0.40.1", "pyshacl-turbo==0.3.0", "pytest==9.1.1", "pytest-cov==7.1.0", "ruff==0.17.1"]
