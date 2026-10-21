@@ -113,6 +113,10 @@ def test_environment_locks_are_preserved_per_stage(tmp_path):
     assert (output / "dependencies/owlrl-uv.lock").read_text() == "companion environment"
 
 
+@pytest.mark.skipif(
+    sys.platform not in {"darwin", "linux"},
+    reason="Native coverage runner requires Linux/macOS posix_spawn",
+)
 def test_real_locked_export_ignores_stale_snapshot_and_fails_stale_uv_lock(tmp_path, monkeypatch):
     module = harness()
     root = tmp_path / "source"
