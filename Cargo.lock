@@ -1005,7 +1005,9 @@ dependencies = [
  "oxilangtag",
  "oxrdf",
  "pyo3",
+ "pyo3-build-config",
  "pyshacl-turbo-engine",
+ "roxmltree",
  "serde",
  "serde_json",
  "spareval",
@@ -1084,6 +1086,15 @@ name = "rhusky"
 version = "0.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bd58f5095f1eaaee85441008005db48773976f5bb85bedd35d6cf3f04db8ec4b"
+
+[[package]]
+name = "roxmltree"
+version = "0.21.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f1964b10c76125c36f8afe190065a4bf9a87bf324842c05701330bba9f1cacbb"
+dependencies = [
+ "memchr",
+]
 
 [[package]]
 name = "rustc-hash"

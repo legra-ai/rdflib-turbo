@@ -42,7 +42,7 @@ impl Pending {
                 .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
             self.check_revision(current.revision)?;
             if let Some(additions) = self.additions {
-                let revision = current.next_revision()?;
+                let revision = current.next_revision().map_err(crate::error)?;
                 current.extend(additions.iter());
                 current.revision = revision;
             }

@@ -27,6 +27,7 @@ class Dataset(GraphOperations):
 
     def __init__(self) -> None:
         self._native = NativeDataset()
+        self._last_inference = None
 
     def copy(self) -> "Dataset":
         result = Dataset()
@@ -50,13 +51,16 @@ class Dataset(GraphOperations):
         destination: str | None = None,
         axiomatic_triples: bool = False,
         datatype_axioms: bool = False,
+        prior_error_messages: list[str] | None = None,
     ) -> Self:
         """Expand this native dataset atomically; used by owlrl-turbo."""
-        self._native.infer(
+        self._last_inference = None
+        self._last_inference = self._native.infer(
             inference,
             destination,
             axiomatic_triples=axiomatic_triples,
             datatype_axioms=datatype_axioms,
+            prior_error_messages=prior_error_messages,
         )
         return self
 
@@ -67,6 +71,7 @@ class Dataset(GraphOperations):
         destination: str | None = None,
         axiomatic_triples: bool = False,
         datatype_axioms: bool = False,
+        prior_error_messages: list[str] | None = None,
     ) -> "Dataset":
         """Expand atomically and return a native dataset of newly added quads.
 
@@ -74,12 +79,16 @@ class Dataset(GraphOperations):
         It excludes original quads; failures leave this dataset unchanged.
         """
         result = Dataset()
-        result._native = self._native.infer_delta(
+        self._last_inference = None
+        result._native, outcome = self._native.infer_delta(
             inference,
             destination,
             axiomatic_triples=axiomatic_triples,
             datatype_axioms=datatype_axioms,
+            prior_error_messages=prior_error_messages,
         )
+        self._last_inference = outcome
+        result._last_inference = outcome
         return result
 
     @classmethod

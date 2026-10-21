@@ -1,9 +1,11 @@
 """Native graph inference preserves the caller's read and write scopes."""
 
+import decimal
+
 import pytest
 from rdflib import BNode, Literal, Namespace
 from rdflib import Graph as ReferenceGraph
-from rdflib.namespace import OWL, RDF, RDFS
+from rdflib.namespace import OWL, RDF, RDFS, XSD
 from rdflib_turbo import Graph, Store, StoreDataset
 
 EX = Namespace("urn:scoped-inference:")
@@ -162,3 +164,35 @@ def test_python_destination_failure_aborts_prior_transaction_changes_when_caught
                 with pytest.raises(TypeError, match="destination"):
                     graph.infer(destination=object())
         assert len(original) == 0
+
+
+@pytest.mark.parametrize("union", [False, True])
+@pytest.mark.parametrize("transactional", [False, True])
+def test_scoped_diagnostics_capture_context_and_retain_the_invocation(union, transactional):
+    with Store() as store:
+
+        def exercise(backend):
+            source = (
+                StoreDataset(store=backend) if union else Graph(store=backend, identifier=EX.source)
+            )
+            input_graph = source.graph(EX.source) if union else source
+            input_graph.add((EX.x, EX.value, Literal("bad", datatype=XSD.decimal, normalize=False)))
+            input_graph.add((EX.conflict, RDF.type, OWL.Nothing))
+            with decimal.localcontext() as context:
+                context.traps[decimal.InvalidOperation] = False
+                context.clear_flags()
+                assert source.infer(destination=EX.destination) is source
+                assert context.flags[decimal.InvalidOperation]
+            assert backend._last_inference.error_messages == [
+                f"{EX.conflict} is defined of type 'Nothing'"
+            ]
+            destination = Graph(store=input_graph.store, identifier=EX.destination)
+            error_type = Namespace("http://www.daml.org/2002/03/agents/agent-ont#").ErrorMessage
+            assert list(destination.subjects(RDF.type, error_type))
+            assert len(input_graph) == 2
+
+        if transactional:
+            with store.transaction() as transaction:
+                exercise(transaction)
+        else:
+            exercise(store)

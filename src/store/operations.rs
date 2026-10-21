@@ -31,6 +31,7 @@ pub(super) enum Operation {
         allow_named_graphs: bool,
     },
     Graphs,
+    ForkGraph(Option<String>),
     ContainsGraph(TermTuple),
     GraphLen(Option<TermTuple>),
     Graph(String, bool),
@@ -41,11 +42,12 @@ pub(super) enum Operation {
         base: Option<String>,
     },
     Update(String, Option<String>),
-    Infer(String, Option<String>, crate::inference::InferenceOptions),
+    Infer(String, Option<String>, crate::inference::InferenceRequest),
     InferGraph {
         mode: String,
         source: Option<String>,
         destination: String,
+        request: crate::inference::InferenceRequest,
     },
     Query(String, bool, Option<String>),
     Dump(RdfFormat),
@@ -56,10 +58,12 @@ pub(super) enum Reply {
     StagedValidation(Box<(crate::shacl::Report, Dataset)>),
     PreparedValidation(Box<(crate::shacl::Report, u64)>),
     Done,
+    Store(oxigraph::store::Store),
     Bool(bool),
     Count(usize),
     Text(String),
     Query(String, String),
+    Inference(crate::inference::InferenceOutcome),
 }
 
 impl Operation {
@@ -79,6 +83,7 @@ impl Operation {
             | Self::Count(_)
             | Self::QueryGraph(..)
             | Self::Graphs
+            | Self::ForkGraph(_)
             | Self::ContainsGraph(_)
             | Self::GraphLen(_)
             | Self::Len
@@ -145,6 +150,7 @@ impl Operation {
                     .map(Reply::Text)
                     .map_err(runtime)
             }
+            Self::ForkGraph(graph) => super::fork::fork(transaction, graph).map(Reply::Store),
             Self::Graphs => {
                 let graphs = transaction
                     .named_graphs()
@@ -248,6 +254,7 @@ impl Operation {
                 mode,
                 source,
                 destination,
+                request,
             } => {
                 if !matches!(mode.as_str(), "rdfs" | "owlrl" | "both") {
                     return Err(Error::Invalid(format!("Unknown inference mode: {mode}")));
@@ -257,10 +264,11 @@ impl Operation {
                     &mode,
                     source.as_deref().map(pattern::graph).transpose()?,
                     pattern::graph(&destination)?,
-                )?;
-                Ok(Reply::Done)
+                    request,
+                )
+                .map(Reply::Inference)
             }
-            Self::Infer(mode, destination, options) => {
+            Self::Infer(mode, destination, request) => {
                 if !matches!(mode.as_str(), "rdfs" | "owlrl" | "both") {
                     return Err(Error::Invalid(format!("Unknown inference mode: {mode}")));
                 }
@@ -269,8 +277,8 @@ impl Operation {
                     .transpose()
                     .map_err(invalid)?
                     .map_or(oxigraph::model::GraphName::DefaultGraph, Into::into);
-                crate::inference::expand_transaction(transaction, &mode, destination, options)?;
-                Ok(Reply::Done)
+                crate::inference::expand_transaction(transaction, &mode, destination, request)
+                    .map(Reply::Inference)
             }
             Self::Update(source, bindings) => {
                 let evaluator = SparqlEvaluator::new();

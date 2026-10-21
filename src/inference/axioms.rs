@@ -7,6 +7,8 @@ use std::collections::HashSet;
 use oxigraph::model::*;
 
 use super::backend::Graph;
+use super::diagnostic_datatypes::LexicalContext;
+use super::diagnostics::Diagnostics;
 use super::{OWL, Pending};
 use crate::Result;
 use crate::graph::{RDF, RDFS, XSD, iri};
@@ -70,7 +72,12 @@ fn triple(s: impl Into<NamedOrBlankNode>, p: NamedNode, o: impl Into<Term>) -> Q
     Quad::new(s, p, o, GraphName::DefaultGraph)
 }
 
-pub(super) fn owl(data: &mut impl Graph, combined: bool) -> Result<()> {
+pub(super) fn owl(
+    data: &mut impl Graph,
+    combined: bool,
+    diagnostics: &mut Diagnostics,
+    context: &LexicalContext,
+) -> Result<()> {
     // bounded: the fixed XSD/RDF datatype vocabulary below.
     let datatypes: HashSet<NamedNode> = XSD_TYPES
         .iter()
@@ -83,6 +90,15 @@ pub(super) fn owl(data: &mut impl Graph, combined: bool) -> Result<()> {
     let mut additions = Pending::default();
     for q in data.quads(None, None, None) {
         let q = q?;
+        if let Term::Literal(literal) = &q.object
+            && literal.language().is_none()
+            && literal.has_explicit_datatype()
+            && datatypes.contains(&literal.datatype().into_owned())
+        {
+            diagnostics.literal(literal, |literal| {
+                super::diagnostics::valid_lexical(literal, context)
+            })?;
+        }
         let typed = match &q.object {
             Term::Literal(literal)
                 if (literal.has_explicit_datatype() || literal.language().is_some())

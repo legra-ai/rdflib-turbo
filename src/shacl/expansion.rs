@@ -26,7 +26,7 @@ impl SharedShapes {
                     .inner
                     .write()
                     .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
-                let revision = current.next_revision()?;
+                let revision = current.next_revision().map_err(crate::error)?;
                 let expected_revision = current.revision;
                 options.namespaces = current.namespaces.clone();
                 let expansion = self

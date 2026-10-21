@@ -20,6 +20,7 @@ from rdflib.util import from_n3, guess_format
 from ._inference import GraphInference
 from ._namespaces import NamespaceBindings
 from ._operations import _encode, _term
+from ._ownership import GraphOwnership
 from ._reads import ProjectedReads, encode, encode_graph, scoped_rows
 from .store import Store, Transaction
 
@@ -210,7 +211,7 @@ class RDFLibStore(ReferenceStore):
         self.backend.close()
 
 
-class Graph(GraphInference, ProjectedReads, RDFLibGraph):
+class Graph(GraphOwnership, GraphInference, ProjectedReads, RDFLibGraph):
     """RDFLib Graph facade with exact-term native storage and native SPARQL."""
 
     _turbo_native_graph = True
@@ -346,11 +347,8 @@ class Graph(GraphInference, ProjectedReads, RDFLibGraph):
         self.store._namespaces.replace(store._namespaces)
 
 
-class StoreDataset(GraphInference, RDFLibDataset):
-    """RDFLib Dataset foundation over the transactional Store.
-
-    Inference/SHACL remain on the separate legacy Dataset until direct adapters exist.
-    """
+class StoreDataset(GraphOwnership, GraphInference, RDFLibDataset):
+    """RDFLib Dataset over the transactional native store."""
 
     _turbo_native_graph = True
 
@@ -369,14 +367,14 @@ class StoreDataset(GraphInference, RDFLibDataset):
         )
 
     def graph(self, identifier=None, base=None):
-        graph = Graph(store=self.store, identifier=identifier, base=base)
+        graph = Graph(self.store, identifier, self.namespace_manager, base)
         self.store.add_graph(graph)
         return graph
 
     def get_context(self, identifier, quoted=False, base=None):
         if quoted:
             raise ValueError("Quoted graphs are unsupported")
-        return Graph(store=self.store, identifier=identifier, base=base)
+        return Graph(self.store, identifier, self.namespace_manager, base)
 
     def query(
         self,

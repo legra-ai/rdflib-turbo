@@ -82,23 +82,21 @@ pub(crate) fn expand(
     mode: &str,
     source: Option<GraphName>,
     destination: GraphName,
-) -> Result<()> {
+    request: super::InferenceRequest,
+) -> Result<super::InferenceOutcome> {
     let Some(source) = source else {
-        return super::expand_transaction(
-            transaction,
-            mode,
-            destination,
-            super::InferenceOptions::default(),
-        );
+        return super::expand_transaction(transaction, mode, destination, request);
     };
-    super::expand_inner(
+    super::expand_configured(
         &mut ScopedGraph {
             transaction,
             source,
             destination,
         },
         mode,
+        request,
     )
+    .map(|(_, outcome)| outcome)
 }
 
 #[cfg(test)]
