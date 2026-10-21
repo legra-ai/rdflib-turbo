@@ -2,6 +2,7 @@
 
 import json
 from collections.abc import Iterator
+from importlib.metadata import version
 from typing import Self
 
 from rdflib import Dataset as RDFLibDataset
@@ -12,7 +13,7 @@ from ._operations import GraphOperations, _term
 from .graph import Graph, StoreDataset
 from .store import Store
 
-__version__ = "0.2.0a1"
+__version__ = version("rdflib-turbo")
 __all__ = ["Dataset", "Graph", "Store", "StoreDataset"]
 
 
