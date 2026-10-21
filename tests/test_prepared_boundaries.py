@@ -138,3 +138,34 @@ def test_optional_scope_literal_key_stays_distinct_from_variable_names():
     assert sorted(actual.query(actual_prepared).bindings, key=repr) == sorted(
         reference.query(reference_prepared).bindings, key=repr
     )
+
+
+@pytest.mark.parametrize("optional", [False, True])
+def test_supplied_parser_filter_keeps_its_expression_guard(optional):
+    # RDFLib normally removes Filter syntax nodes during translation. Its public
+    # CompValue/Query objects can retain them; reuse an actual translated guard
+    # and compare the same source's normal reference execution.
+    body = "?s <urn:p> ?v FILTER(?v=1)"
+    if optional:
+        body = '?s <urn:p> ?v OPTIONAL {?s <urn:q> ?q FILTER(?q="yes")}'
+    source = f"SELECT ?ok WHERE {{BIND(EXISTS {{{body}}} AS ?ok)}}"
+    prepared = prepareQuery(source)
+    exists = prepared.algebra.p.p.expr
+    translated = exists.graph
+    raw = exists["graph"]
+    if optional:
+        optional_syntax = next(part for part in raw.part if part.name == "OptionalGraphPattern")
+        optional_syntax.graph.part.append(CompValue("Filter", expr=translated.expr))
+    else:
+        raw.part.append(CompValue("Filter", expr=translated.expr))
+    exists.graph = raw
+    actual = Graph().parse(data=DATA, format="turtle")
+    reference = ReferenceGraph().parse(data=DATA, format="turtle")
+    assert actual.query(prepared).bindings == reference.query(prepareQuery(source)).bindings
+
+
+def test_prepared_snapshot_boundary_rejects_non_query_objects():
+    from rdflib_turbo._prepared import snapshot
+
+    with pytest.raises(TypeError, match="A prepared RDFLib Query is required"):
+        snapshot("ASK {}")
