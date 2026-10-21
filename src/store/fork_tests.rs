@@ -74,3 +74,39 @@ fn failed_copy_on_transaction_worker_aborts_pending_source_writes() {
         Reply::Store(_)
     ));
 }
+
+#[test]
+fn copying_pending_quads_keeps_prepared_validation_acceptable() {
+    let store = Store::new().unwrap();
+    let control = Arc::new(Mutex::new(Control::new(store.clone())));
+    let session = Session::start(control).unwrap();
+    session
+        .execute(Operation::Update(
+            "INSERT DATA { <urn:s> <urn:p> <urn:o> }".into(),
+            None,
+        ))
+        .unwrap();
+    let shapes =
+        pyshacl_turbo_engine::CompiledShapes::compile(oxigraph::model::Dataset::new(), false)
+            .unwrap();
+    let Reply::PreparedValidation(report) = session
+        .execute(Operation::Validate {
+            shapes: Arc::new(shapes),
+            options: Default::default(),
+            inplace: true,
+        })
+        .unwrap()
+    else {
+        panic!("Expected prepared report")
+    };
+    let (_, revision) = *report;
+    let Reply::Store(copied) = session.execute(Operation::ForkGraph(None)).unwrap() else {
+        panic!("Expected independent copied store")
+    };
+    assert_eq!(copied.len().unwrap(), 1);
+    assert!(store.is_empty().unwrap());
+    session.accept_validation(revision).unwrap();
+    session.finish(true).unwrap();
+    assert_eq!(store.len().unwrap(), 1);
+    assert_eq!(copied.len().unwrap(), 1);
+}
