@@ -103,7 +103,13 @@ def test_wheel_job_budget_covers_five_interpreters_and_verification():
     wheels = workflow.split("\n  wheels:\n", 1)[1].split("\n  native-coverage:\n", 1)[0]
     timeout = re.search(r"^    timeout-minutes: (\d+)$", wheels, re.MULTILINE)
     assert timeout is not None
-    assert int(timeout.group(1)) == 60, "Cold native builds plus five wheels require a bounded hour"
+    # Intel run 39636861664 built all five wheels in ~58 minutes and hit the
+    # hour limit before verification. Budget a cold build, four ABI rebuilds,
+    # installed tests for every wheel, and runner setup without dropping stages.
+    required_minutes = 35 + 7 * (len(ABIS) - 1) + 2 * len(ABIS) + 2
+    assert required_minutes <= int(timeout.group(1)) <= 120, (
+        "The bounded wheel job must cover cold compilation and every interpreter verification"
+    )
     versions = " ".join(f"{abi[2]}.{abi.split('-')[0][3:]}" for abi in ABIS)
     assert f"for python in {versions}; do" in wheels
     assert " ".join(ABIS) in wheels
