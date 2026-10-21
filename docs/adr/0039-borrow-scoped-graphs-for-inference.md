@@ -19,6 +19,14 @@ facts but only reads the source for rule evaluation. This matches the original
 reasoner's separate Graph destination behavior: written consequences terminate
 duplicate production without feeding back into the source snapshot.
 
+RDFS's one-time literal identity publication is a distinct operation: the
+reference writes each literal-valued input statement directly to the destination,
+even when that statement exists in the source. Check destination membership for
+this publication instead of union membership. This exception does not apply to
+OWL-RL or combined semantics. Stage only absent output quads in the existing
+operation journal; never copy the input graph. Cross-literal Python-value
+substitution remains a separate parity gap and is not claimed by this decision.
+
 Reuse the Store's operation journal and owner session. Inference sees preceding
 transaction changes, commits only at the existing boundary and aborts all pending
 writes on failure. It adds no base snapshot or Python triple materialization.

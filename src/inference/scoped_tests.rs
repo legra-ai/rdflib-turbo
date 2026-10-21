@@ -1,8 +1,47 @@
-use oxigraph::model::{BlankNode, GraphName, NamedNode, Quad};
+use oxigraph::model::{BlankNode, GraphName, Literal, NamedNode, Quad};
 use oxigraph::store::Store;
 
 const TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 const SUBCLASS: &str = "http://www.w3.org/2000/01/rdf-schema#subClassOf";
+
+#[test]
+fn rdfs_literal_identity_is_published_even_when_present_only_in_source() {
+    // bounded: scoped/union reads and the three inference modes.
+    for union in [false, true] {
+        for mode in ["rdfs", "owlrl", "both"] {
+            let store = Store::new().unwrap();
+            let source: GraphName = iri("urn:source").into();
+            let destination: GraphName = iri("urn:destination").into();
+            let input = Quad::new(
+                iri("urn:s"),
+                iri("urn:label"),
+                Literal::new_simple_literal("label"),
+                source.clone(),
+            );
+            let expected = Quad::new(
+                input.subject.clone(),
+                input.predicate.clone(),
+                input.object.clone(),
+                destination.clone(),
+            );
+            let mut transaction = store.start_transaction().unwrap();
+            transaction.insert(&input);
+            super::expand(
+                &mut transaction,
+                mode,
+                (!union).then_some(source),
+                destination,
+            )
+            .unwrap();
+            assert_eq!(
+                transaction.contains(&expected).unwrap(),
+                mode == "rdfs",
+                "union={union}, mode={mode}"
+            );
+            assert!(transaction.contains(&input).unwrap());
+        }
+    }
+}
 
 fn iri(value: &str) -> NamedNode {
     NamedNode::new(value).unwrap()

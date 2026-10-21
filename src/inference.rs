@@ -316,6 +316,20 @@ fn expand_inner(data: &mut impl Graph, mode: &str) -> Result<()> {
         _ => return Err(Error::Unsupported(format!("inference: {mode}"))),
     }
     if mode == "rdfs" {
+        // RDFS_Semantics.one_time_rules publishes every literal's identity pair
+        // directly to its destination, even when the input contains that SPO.
+        // Retain only the output delta; no source snapshot is needed.
+        let mut literal_publications = Pending::default();
+        for quad in data.quads(None, None, None) {
+            let mut quad = quad?;
+            if quad.object.is_literal() && !data.contains_destination(&quad)? {
+                quad.graph_name = GraphName::DefaultGraph;
+                literal_publications.0.insert(quad);
+            }
+        }
+        for quad in literal_publications.0 {
+            data.insert(quad);
+        }
         literal_values::strings(data)?;
     }
     // bounded: the fixed RDFS/OWL rule tables above.

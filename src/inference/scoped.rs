@@ -14,6 +14,17 @@ struct ScopedGraph<'a, 'store> {
 }
 
 impl Graph for ScopedGraph<'_, '_> {
+    fn contains_destination(&self, quad: &Quad) -> Result<bool> {
+        self.transaction
+            .contains(&Quad::new(
+                quad.subject.clone(),
+                quad.predicate.clone(),
+                quad.object.clone(),
+                self.destination.clone(),
+            ))
+            .map_err(|error| Error::Runtime(error.to_string()))
+    }
+
     fn quads<'a>(
         &'a self,
         subject: Option<NamedOrBlankNodeRef<'a>>,
