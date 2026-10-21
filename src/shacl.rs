@@ -219,18 +219,23 @@ impl SharedShapes {
     ) -> PyResult<Output> {
         let mut options = Settings::parse(settings)?;
         let prepared = py.detach(|| -> PyResult<Prepared<Output>> {
-            let mut data = dataset
-                .inner
-                .write()
-                .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
-            options.namespaces = data.namespaces.clone();
-            if !inplace {
+            if !inplace || !self.inner.has_active_rules(&options) {
+                let data = dataset
+                    .inner
+                    .read()
+                    .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
+                options.namespaces = data.namespaces.clone();
                 return Ok(Prepared::report(output(
                     self.inner
                         .validate_staged(&data.data, options)
                         .map_err(error)?,
                 )?));
             }
+            let mut data = dataset
+                .inner
+                .write()
+                .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
+            options.namespaces = data.namespaces.clone();
             let revision = data.next_revision()?;
             let outcome = self
                 .inner
@@ -365,3 +370,6 @@ mod tests {
         assert_eq!(quads.iter().filter(|quad| quad.3.is_none()).count(), 1);
     }
 }
+
+#[cfg(test)]
+mod read_lock_tests;
