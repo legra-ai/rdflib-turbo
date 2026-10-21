@@ -1,7 +1,7 @@
 """Explicit native copies own their selected scope without Python RDF transport."""
 
 import pytest
-from rdflib import BNode, Literal, Namespace
+from rdflib import BNode, Literal, Namespace, URIRef
 from rdflib import Graph as ReferenceGraph
 from rdflib.namespace import RDF, XSD
 from rdflib_turbo import Dataset, Graph, Store, StoreDataset
@@ -76,7 +76,7 @@ def test_copy_reads_pending_transaction_view_without_publishing_to_source(datase
             copied = transaction.copy()
             copied_target = copied.graph(EX.pending) if dataset else copied
             assert (EX.pending, EX.p, EX.o) in copied_target
-            assert dict(copied.namespaces())["pending"] == EX
+            assert dict(copied.namespaces())["pending"] == URIRef(EX)
             assert len(original.graph(EX.pending) if dataset else original) == 0
             raise failure
     assert caught.value is failure
