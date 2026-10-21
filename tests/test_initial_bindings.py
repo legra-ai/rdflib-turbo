@@ -32,6 +32,8 @@ QUERIES = [
     "SELECT ?s WHERE { VALUES ?s { <urn:bindings:a> } MINUS { { SELECT ?x WHERE { BIND(1 AS ?x) } } } }",
     "SELECT ?s ?ok WHERE { VALUES ?s { <urn:bindings:a> } { BIND(<urn:bindings:b> AS ?s) BIND(EXISTS { { BIND(<urn:bindings:b> AS ?s) } } AS ?ok) } }",
     "SELECT ?s ?label WHERE { BIND(<urn:bindings:b> AS ?s) { SELECT DISTINCT ?label WHERE { ?s <urn:bindings:label> ?label } } }",
+    "SELECT ?o WHERE { VALUES ?s {<urn:bindings:a>} {SELECT ?o WHERE {VALUES ?o {1 1}} LIMIT 2}}",
+    "SELECT ?s ?label WHERE { {SELECT DISTINCT ?label WHERE {?s <urn:bindings:label> ?label}} {SELECT DISTINCT ?s WHERE {BIND(<urn:bindings:b> AS ?s)}} }",
 ]
 
 

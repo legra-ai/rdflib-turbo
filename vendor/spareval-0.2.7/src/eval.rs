@@ -1414,7 +1414,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                         let globals = self.encode_bindings(encoded_variables, [])?;
                         Rc::new(move |from| {
                             let mut errors = Vec::new();
-                            let built = left(from.clone())
+                            let built = right(from.clone())
                                 .filter_map(|row| match row {
                                     Ok(row) => Some(row),
                                     Err(error) => {
@@ -1422,12 +1422,14 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                                         None
                                     }
                                 })
+                                .collect::<FxHashSet<_>>()
+                                .into_iter()
                                 .collect::<Vec<_>>();
                             if built.is_empty() && errors.is_empty() {
                                 return Box::new(empty());
                             }
                             Box::new(CartesianProductJoinIterator {
-                                probe_iter: right(from).peekable(),
+                                probe_iter: left(from).peekable(),
                                 built,
                                 buffered_results: errors,
                                 rdflib_globals: Some(globals.clone()),
@@ -4084,7 +4086,7 @@ impl<T: Clone + Eq> Iterator for CartesianProductJoinIterator<'_, T> {
             };
             for built_tuple in &self.built {
                 let result = if let Some(globals) = &self.rdflib_globals {
-                    built_tuple.combine_with_rdflib(&probe_tuple, globals)
+                    probe_tuple.combine_with_rdflib(built_tuple, globals)
                 } else {
                     probe_tuple.combine_with(built_tuple)
                 };

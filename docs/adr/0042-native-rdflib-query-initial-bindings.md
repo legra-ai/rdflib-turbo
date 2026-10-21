@@ -36,6 +36,8 @@ including DESCRIBE's selected resources. Independent joins check compatibility
 directionally: iterate the left explicit domain and look up each value in the
 right row, consulting initial bindings for absent keys. That lookup must not
 insert keys into the right row, because MINUS observes the explicit domain.
+Independent joins materialize a distinct right-hand solution set and stream
+left-hand rows, preserving RDFLib's duplicate behavior at these barriers.
 
 Do not apply the ordinary SPARQL optimizer to this order-sensitive algebra.
 Its join reordering and projection assumptions are invalid for these context

@@ -92,5 +92,6 @@ beyond the query lifetime, and the source need not be cloned into an Arc Dataset
 Original independent joins distinguish the explicit solution domain from
 initial-binding lookup. Directional compatibility consults initial values for
 missing right-side keys without restoring hidden projected keys to the domain.
+These joins stream left rows against a distinct right-hand solution set.
 Ordinary SPARQL joins retain their existing compatibility rule.
 
