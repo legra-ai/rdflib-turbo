@@ -27,6 +27,7 @@ def test_graph_copy_selects_only_its_scope_and_owns_exact_terms(identifier, monk
     copied = source.copy()
     assert copied.identifier == source.identifier
     assert copied.store.backend is not source.store.backend
+    assert copied.last_inference is None
     assert len(copied) == 1 and original in copied
     assert len(Graph(copied.store, EX.outside)) == 0
     assert dict(copied.namespaces()) == dict(source.namespaces())
@@ -51,6 +52,7 @@ def test_dataset_copy_preserves_all_contexts_empty_graphs_and_namespace_ownershi
     monkeypatch.setattr(ReferenceGraph, "serialize", forbid)
     copied = source.copy()
     assert copied.default_union is union
+    assert copied.last_inference is None
     assert set(copied.quads()) == set(source.quads())
     assert {g.identifier for g in copied.graphs()} == {g.identifier for g in source.graphs()}
     assert dict(copied.namespaces()) == dict(source.namespaces())
@@ -63,6 +65,8 @@ def test_dataset_copy_preserves_all_contexts_empty_graphs_and_namespace_ownershi
 @pytest.mark.parametrize("dataset", [False, True])
 def test_copy_reads_pending_transaction_view_without_publishing_to_source(dataset):
     original = StoreDataset() if dataset else Graph()
+    if dataset:
+        original.graph(EX.pending)
     failure = ValueError("rollback")
     with pytest.raises(ValueError) as caught:
         with original.transaction() as transaction:
