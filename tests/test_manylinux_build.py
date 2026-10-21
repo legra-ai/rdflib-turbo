@@ -108,3 +108,11 @@ def test_wheel_job_budget_covers_five_interpreters_and_verification():
     assert f"for python in {versions}; do" in wheels
     assert " ".join(ABIS) in wheels
     assert "python scripts/test_wheel.py" in wheels
+
+
+def test_clang_install_uses_only_the_images_base_repositories():
+    dockerfile = (ROOT / "scripts/manylinux.Dockerfile").read_text()
+    install = next(line for line in dockerfile.splitlines() if "clang-libs" in line)
+    assert "--disablerepo='epel*'" in install
+    assert "--nogpgcheck" not in dockerfile
+    assert "sslverify=0" not in dockerfile
