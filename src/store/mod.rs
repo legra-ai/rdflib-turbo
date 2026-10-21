@@ -213,6 +213,24 @@ impl NativeStore {
         .map_err(error)
     }
 
+    #[pyo3(signature = (mode, source_graph, destination_graph))]
+    fn infer_graph(
+        &self,
+        py: Python<'_>,
+        mode: String,
+        source_graph: Option<String>,
+        destination_graph: String,
+    ) -> PyResult<()> {
+        py.detach(|| {
+            self.mutate(Operation::InferGraph {
+                mode,
+                source: source_graph,
+                destination: destination_graph,
+            })
+        })
+        .map_err(error)
+    }
+
     fn update(&self, py: Python<'_>, source: String) -> PyResult<()> {
         py.detach(|| self.mutate(Operation::Update(source)))
             .map_err(error)

@@ -16,6 +16,11 @@ pub(super) trait Graph {
     fn query(&self, query: PreparedSparqlQuery) -> Result<QueryResults<'_>>;
     fn insert(&mut self, quad: Quad);
 
+    /// Direct reference publication checks the output scope, not the read union.
+    fn contains_destination(&self, quad: &Quad) -> Result<bool> {
+        self.contains(quad)
+    }
+
     fn contains(&self, quad: &Quad) -> Result<bool> {
         self.quads(
             Some(quad.subject.as_ref()),
@@ -54,6 +59,17 @@ pub(crate) struct TransactionGraph<'a, 'store> {
 }
 
 impl Graph for TransactionGraph<'_, '_> {
+    fn contains_destination(&self, quad: &Quad) -> Result<bool> {
+        self.transaction
+            .contains(&Quad::new(
+                quad.subject.clone(),
+                quad.predicate.clone(),
+                quad.object.clone(),
+                self.destination.clone(),
+            ))
+            .map_err(|error| Error::Runtime(error.to_string()))
+    }
+
     fn quads<'a>(
         &'a self,
         subject: Option<NamedOrBlankNodeRef<'a>>,

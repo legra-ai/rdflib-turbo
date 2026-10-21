@@ -4,7 +4,7 @@ from importlib.resources import files
 
 import pytest
 from rdflib import Graph as ReferenceGraph
-from rdflib import Literal, Namespace
+from rdflib import Literal, Namespace, URIRef
 from rdflib.namespace import XSD
 from rdflib_turbo import Dataset
 
@@ -47,6 +47,30 @@ def test_rdfs_substitutes_equal_string_values_preserving_the_replacement_terms(d
 
 def statements(dataset):
     return set(dataset.serialize().splitlines())
+
+
+@pytest.mark.parametrize("delta", [False, True])
+@pytest.mark.parametrize("mode", ["rdfs", "owlrl", "both"])
+@pytest.mark.parametrize("named", [False, True])
+def test_literal_identity_publication_is_an_exact_destination_addition(delta, mode, named):
+    statement = '<urn:s> <urn:label> "label" .'
+    source = Dataset().parse(
+        data="<urn:source> { " + statement + " }" if named else statement,
+        format="trig" if named else "turtle",
+    )
+    operation = source.infer_delta if delta else source.infer
+    output = operation(inference=mode, destination="urn:destination")
+    publication = (URIRef("urn:s"), URIRef("urn:label"), Literal("label"))
+    destination = output.to_rdflib().graph(URIRef("urn:destination"))
+    assert (publication in destination) is (mode == "rdfs")
+    original_graph = (
+        source.to_rdflib().graph(URIRef("urn:source"))
+        if named
+        else source.to_rdflib().default_graph
+    )
+    assert publication in original_graph
+    if delta:
+        assert len(output.to_rdflib().graph(URIRef("urn:source"))) == 0
 
 
 @pytest.mark.parametrize("mode", ["rdfs", "owlrl", "both"])

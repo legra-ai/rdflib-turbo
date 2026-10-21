@@ -40,6 +40,11 @@ pub(super) enum Operation {
     },
     Update(String),
     Infer(String, Option<String>, crate::inference::InferenceOptions),
+    InferGraph {
+        mode: String,
+        source: Option<String>,
+        destination: String,
+    },
     Query(String, bool),
     Dump(RdfFormat),
 }
@@ -191,6 +196,22 @@ impl Operation {
                 for quad in parser.for_slice(source.as_bytes()) {
                     transaction.insert(&quad.map_err(invalid)?);
                 }
+                Ok(Reply::Done)
+            }
+            Self::InferGraph {
+                mode,
+                source,
+                destination,
+            } => {
+                if !matches!(mode.as_str(), "rdfs" | "owlrl" | "both") {
+                    return Err(Error::Invalid(format!("Unknown inference mode: {mode}")));
+                }
+                crate::inference::scoped::expand(
+                    transaction,
+                    &mode,
+                    source.as_deref().map(pattern::graph).transpose()?,
+                    pattern::graph(&destination)?,
+                )?;
                 Ok(Reply::Done)
             }
             Self::Infer(mode, destination, options) => {
