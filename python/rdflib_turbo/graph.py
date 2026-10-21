@@ -338,14 +338,14 @@ class StoreDataset(GraphInference, RDFLibDataset):
         )
 
     def graph(self, identifier=None, base=None):
-        graph = Graph(store=self.store, identifier=identifier, base=base)
+        graph = Graph(self.store, identifier, self.namespace_manager, base)
         self.store.add_graph(graph)
         return graph
 
     def get_context(self, identifier, quoted=False, base=None):
         if quoted:
             raise ValueError("Quoted graphs are unsupported")
-        return Graph(store=self.store, identifier=identifier, base=base)
+        return Graph(self.store, identifier, self.namespace_manager, base)
 
     def query(
         self,
