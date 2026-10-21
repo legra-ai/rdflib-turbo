@@ -273,6 +273,11 @@ fn every_mutation_attempt_invalidates_prepared_validation() {
             None,
         ))),
         Operation::Infer("rdfs".into(), None, options),
+        Operation::InferGraph {
+            mode: "rdfs".into(),
+            source: Some("{\"type\":\"uri\",\"value\":\"urn:empty\"}".into()),
+            destination: "{\"type\":\"uri\",\"value\":\"urn:empty\"}".into(),
+        },
     ];
     for mutation in mutations {
         let control = control();

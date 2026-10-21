@@ -71,7 +71,8 @@ impl Operation {
             | Self::Graph(_, _)
             | Self::Load { .. }
             | Self::Update(_)
-            | Self::Infer(..) => true,
+            | Self::Infer(..)
+            | Self::InferGraph { .. } => true,
             Self::Validate { .. }
             | Self::Match(_)
             | Self::Count(_)
