@@ -191,9 +191,14 @@ impl NativeTransaction {
         .map_err(error)
     }
 
-    fn update(&self, py: Python<'_>, source: String) -> PyResult<()> {
-        py.detach(|| self.session.execute(Operation::Update(source)).map(|_| ()))
-            .map_err(error)
+    #[pyo3(signature = (source, bindings=None))]
+    fn update(&self, py: Python<'_>, source: String, bindings: Option<String>) -> PyResult<()> {
+        py.detach(|| {
+            self.session
+                .execute(Operation::Update(source, bindings))
+                .map(|_| ())
+        })
+        .map_err(error)
     }
 
     #[pyo3(signature = (source, default_union=false, bindings=None))]

@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use oxigraph::model::Variable;
+use oxigraph::model::{Term, Variable};
 use oxigraph::sparql::PreparedSparqlQuery;
 
 use super::operations::invalid;
@@ -16,9 +16,13 @@ pub(super) fn apply(
     let Some(source) = source else {
         return Ok(query);
     };
+    Ok(query.with_initial_bindings(decode(source)?))
+}
+
+pub(super) fn decode(source: &str) -> Result<Vec<(Variable, Term)>> {
     let bindings: BTreeMap<String, Option<InputTerm>> =
         serde_json::from_str(source).map_err(invalid)?;
-    let values = bindings
+    bindings
         .into_iter()
         .filter_map(|(variable, term)| {
             term.map(|term| {
@@ -26,6 +30,5 @@ pub(super) fn apply(
                     .map(|term| (Variable::new_unchecked(variable), term))
             })
         })
-        .collect::<Result<Vec<_>>>()?;
-    Ok(query.with_initial_bindings(values))
+        .collect()
 }

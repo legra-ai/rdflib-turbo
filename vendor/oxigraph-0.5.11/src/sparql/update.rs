@@ -1,6 +1,6 @@
 #[cfg(feature = "http-client")]
 use crate::io::{RdfFormat, RdfParser};
-use crate::model::{GraphName as OxGraphName, GraphNameRef, Quad as OxQuad};
+use crate::model::{GraphName as OxGraphName, GraphNameRef, Quad as OxQuad, Variable};
 #[expect(deprecated)]
 use crate::sparql::algebra::Update;
 use crate::sparql::dataset::DatasetView;
@@ -53,6 +53,16 @@ pub struct PreparedSparqlUpdate {
 }
 
 impl PreparedSparqlUpdate {
+    /// Set RDFLib initial context, independently for every update operation.
+    #[must_use]
+    pub fn with_initial_bindings(
+        mut self,
+        bindings: impl IntoIterator<Item = (Variable, Term)>,
+    ) -> Self {
+        self.evaluator = self.evaluator.with_initial_bindings(bindings);
+        self
+    }
+
     #[expect(deprecated)]
     pub(crate) fn new(
         evaluator: QueryEvaluator,

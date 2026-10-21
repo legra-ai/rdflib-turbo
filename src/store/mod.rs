@@ -232,8 +232,9 @@ impl NativeStore {
         .map_err(error)
     }
 
-    fn update(&self, py: Python<'_>, source: String) -> PyResult<()> {
-        py.detach(|| self.mutate(Operation::Update(source)))
+    #[pyo3(signature = (source, bindings=None))]
+    fn update(&self, py: Python<'_>, source: String, bindings: Option<String>) -> PyResult<()> {
+        py.detach(|| self.mutate(Operation::Update(source, bindings)))
             .map_err(error)
     }
 

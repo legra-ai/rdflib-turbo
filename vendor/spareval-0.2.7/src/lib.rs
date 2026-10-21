@@ -34,6 +34,7 @@ use oxsdatatypes::{DateTime, DayTimeDuration, Float};
 use spargebra::Query;
 use spargebra::algebra::QueryDataset;
 use spargebra::term::{GroundQuadPattern, QuadPattern};
+#[cfg(not(feature = "cached-query-plans"))]
 use sparopt::Optimizer;
 use sparopt::algebra::GraphPattern;
 use std::collections::HashMap;
@@ -904,9 +905,18 @@ impl PreparedDeleteInsertUpdate<'_> {
         self,
         dataset: impl QueryableDataset<'b>,
     ) -> Result<DeleteInsertIter<'b>, QueryEvaluationError> {
-        let mut pattern = GraphPattern::from(self.pattern);
-        if !self.evaluator.without_optimizations {
-            pattern = Optimizer::optimize_graph_pattern(pattern);
+        let mut pattern = self.evaluator.prepare_pattern(self.pattern, &HashMap::new());
+        if let Some(bindings) = &self.evaluator.initial_bindings {
+            // bounded: variables in the update algebra and supplied parameters.
+            // Templates may reference globals absent from WHERE, whereas SELECT
+            // must hide those same variables from its public result projection.
+            let mut variables = bindings.keys().cloned().collect::<Vec<_>>();
+            pattern.lookup_used_variables(&mut |variable| {
+                if !variables.contains(variable) {
+                    variables.push(variable.clone());
+                }
+            });
+            pattern = Arc::new(GraphPattern::project((*pattern).clone(), variables));
         }
         let (solutions, _) = self
             .evaluator

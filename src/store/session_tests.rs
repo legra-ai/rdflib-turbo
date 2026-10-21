@@ -10,7 +10,61 @@ fn control() -> Arc<Mutex<Control>> {
 }
 
 fn insert() -> Operation {
-    Operation::Update("INSERT DATA { <urn:s> <urn:p> <urn:o> }".into())
+    Operation::Update("INSERT DATA { <urn:s> <urn:p> <urn:o> }".into(), None)
+}
+
+#[test]
+fn update_initial_context_preserves_terms_overrides_and_statement_isolation() {
+    let control = control();
+    let session = Session::start(control).unwrap();
+    let bindings = r#"{"s":{"type":"uri","value":"urn:a"},"v":{"type":"literal","value":"01","datatype":"http://www.w3.org/2001/XMLSchema#integer"}}"#;
+    session.execute(Operation::Update(
+        "INSERT {?s <urn:p> ?v} WHERE {}; INSERT {?s <urn:q> ?v} WHERE {BIND(<urn:b> AS ?s)}; INSERT {?s <urn:r> ?v} WHERE {}".into(),
+        Some(bindings.into()),
+    )).unwrap();
+    let Reply::Query(_, result) = session
+        .execute(Operation::Query(
+            "ASK { <urn:a> <urn:p> ?v; <urn:r> ?v . <urn:b> <urn:q> ?v FILTER(STR(?v) = '01') }"
+                .into(),
+            false,
+            None,
+        ))
+        .unwrap()
+    else {
+        panic!("query reply")
+    };
+    assert!(result.contains("true"));
+    session
+        .execute(Operation::Update(
+            "DELETE WHERE {?s <urn:p> ?v}".into(),
+            Some(bindings.into()),
+        ))
+        .unwrap();
+    assert!(matches!(
+        session.execute(Operation::Len).unwrap(),
+        Reply::Count(2)
+    ));
+    session.finish(true).unwrap();
+}
+
+#[test]
+fn invalid_update_bindings_abort_prior_pending_mutations() {
+    let control = control();
+    let store = control.lock().unwrap().read().unwrap();
+    for bindings in ["{", r#"{"s":{"type":"invalid","value":"urn:a"}}"#] {
+        let session = Session::start(control.clone()).unwrap();
+        session.execute(insert()).unwrap();
+        assert!(
+            session
+                .execute(Operation::Update(
+                    "INSERT {} WHERE {}".into(),
+                    Some(bindings.into()),
+                ))
+                .is_err()
+        );
+        assert!(session.finish(true).is_err());
+        assert!(store.is_empty().unwrap());
+    }
 }
 
 #[test]
@@ -43,7 +97,7 @@ fn native_operation_error_aborts_before_the_next_writer_can_start() {
     session.execute(insert()).unwrap();
     assert!(
         session
-            .execute(Operation::Update("INVALID UPDATE".into()))
+            .execute(Operation::Update("INVALID UPDATE".into(), None))
             .is_err()
     );
     assert_eq!(store.len().unwrap(), 0);
@@ -92,7 +146,7 @@ fn inference_uses_pending_writes_and_the_same_commit_boundary() {
     let store = control.lock().unwrap().read().unwrap();
     for commit in [false, true] {
         let session = Session::start(control.clone()).unwrap();
-        session.execute(Operation::Update("INSERT DATA { GRAPH <urn:g> { <urn:a> a <urn:C> . <urn:C> <http://www.w3.org/2000/01/rdf-schema#subClassOf> <urn:D> } }".into())).unwrap();
+        session.execute(Operation::Update("INSERT DATA { GRAPH <urn:g> { <urn:a> a <urn:C> . <urn:C> <http://www.w3.org/2000/01/rdf-schema#subClassOf> <urn:D> } }".into(), None)).unwrap();
         session
             .execute(Operation::Infer(
                 "rdfs".into(),
@@ -147,7 +201,10 @@ fn implicit_mutations_commit_abort_and_release_the_writer_without_an_owner_threa
     assert!(
         Session::execute_inline(
             control.clone(),
-            Operation::Update("INSERT DATA { <urn:s2> <urn:p> <urn:o> }; INVALID".into())
+            Operation::Update(
+                "INSERT DATA { <urn:s2> <urn:p> <urn:o> }; INVALID".into(),
+                None
+            )
         )
         .is_err()
     );

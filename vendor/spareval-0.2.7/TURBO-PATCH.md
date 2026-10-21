@@ -95,3 +95,11 @@ missing right-side keys without restoring hidden projected keys to the domain.
 These joins stream left rows against a distinct right-hand solution set.
 Ordinary SPARQL joins retain their existing compatibility rule.
 
+# RDFLib update context
+
+DELETE/INSERT preparation uses the same explicit RDFLib algebra lowering as
+queries. Its private output projection retains initial globals absent from WHERE
+so mutation templates can read them, while BIND can replace their local values.
+Each prepared operation starts from the immutable original initial context.
+Ordinary SPARQL update evaluation retains its original output domain.
+

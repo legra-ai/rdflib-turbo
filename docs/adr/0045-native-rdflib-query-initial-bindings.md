@@ -51,5 +51,14 @@ continues to use the existing bounded cache. Parameter values are never cached.
 Verify native algebra regressions, paired original-RDFLib query results,
 projection and barrier behavior, exact terms, selected contexts, transaction
 read-your-writes and rollback, and the installed wheel's Python coverage.
-Prepared Python query objects and initial SPARQL Update bindings remain
-separate unsupported contracts.
+Prepared Python query/update objects remain a separate unsupported contract.
+
+SPARQL UPDATE uses the same explicit typed initial context and ordered algebra
+lowering for each DELETE/INSERT WHERE operation. Its template result projection
+also includes supplied globals absent from WHERE; ordinary SELECT projections
+remain restricted. BIND overrides are local to one semicolon-separated operation,
+and every operation starts with the original globals. INSERT DATA ignores them.
+Python validation errors (including processor/options, source and parameter
+encoding) abort an explicit transaction even when caught, before native dispatch.
+Named Graph UPDATE remains explicitly unsupported; it is never redirected to the
+default graph.

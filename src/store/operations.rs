@@ -38,7 +38,7 @@ pub(super) enum Operation {
         format: RdfFormat,
         base: Option<String>,
     },
-    Update(String),
+    Update(String, Option<String>),
     Infer(String, Option<String>, crate::inference::InferenceOptions),
     InferGraph {
         mode: String,
@@ -227,10 +227,20 @@ impl Operation {
                 crate::inference::expand_transaction(transaction, &mode, destination, options)?;
                 Ok(Reply::Done)
             }
-            Self::Update(source) => {
-                SparqlEvaluator::new()
-                    .parse_update(&source)
-                    .map_err(invalid)?
+            Self::Update(source, bindings) => {
+                let evaluator = SparqlEvaluator::new();
+                let evaluator = if bindings.is_some() {
+                    evaluator.with_rdflib_query_context()
+                } else {
+                    evaluator
+                };
+                let update = evaluator.parse_update(&source).map_err(invalid)?;
+                let update = if let Some(bindings) = bindings {
+                    update.with_initial_bindings(super::bindings::decode(&bindings)?)
+                } else {
+                    update
+                };
+                update
                     .on_transaction(transaction)
                     .execute()
                     .map_err(runtime)?;
