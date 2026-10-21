@@ -58,7 +58,7 @@ def execute(datatype, lexical, settings, traps, owner, late_failure):
     elif owner in {"dataset", "delta"}:
         target = Dataset.from_rdflib(source)
     else:
-        target = Store().load(data=source.serialize(format="turtle"))
+        target = Store().parse(data=source.serialize(format="nt"), format="nt")
     with decimal.localcontext() as context:
         for key, value in settings.items():
             setattr(context, key, value)

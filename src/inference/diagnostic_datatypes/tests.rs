@@ -136,6 +136,7 @@ struct ContextFixture {
     kind: String,
     lexical: String,
     expected: String,
+    raised_flags: Vec<String>,
 }
 
 #[test]
@@ -190,6 +191,28 @@ fn decimal_conversion_uses_the_callers_rounding_bounds_and_traps() {
                 fixture.rounding,
                 fixture.precision
             );
+            for (index, signal) in [
+                "InvalidOperation",
+                "Inexact",
+                "Rounded",
+                "Subnormal",
+                "Underflow",
+                "Overflow",
+                "Clamped",
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                assert_eq!(
+                    context.decimal.signals.snapshot() & (1 << index) != 0,
+                    fixture.raised_flags.iter().any(|raised| raised == signal),
+                    "{} context fixture {}: {} {} signal {signal}",
+                    fixture.kind,
+                    index + 1,
+                    fixture.lexical,
+                    fixture.rounding,
+                );
+            }
         }
     }
 }

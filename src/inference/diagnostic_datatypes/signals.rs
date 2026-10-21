@@ -57,6 +57,10 @@ impl Signal {
 pub(super) struct Signals(AtomicU16);
 
 impl Signals {
+    pub(super) fn snapshot(&self) -> u16 {
+        self.0.load(Ordering::Relaxed)
+    }
+
     pub(super) fn record(&self, signals: [bool; 7]) {
         let mut bits = 0;
         for (signal, raised) in Signal::ALL.into_iter().zip(signals) {
@@ -97,7 +101,7 @@ impl SignalPublisher {
 
     /// The caller must finish/join all native producers before entering here.
     pub(crate) fn complete<T>(self, py: Python<'_>, result: crate::Result<T>) -> PyResult<T> {
-        let bits = self.signals.0.load(Ordering::Relaxed);
+        let bits = self.signals.snapshot();
         for (signal, class) in Signal::ALL.into_iter().zip(&self.classes) {
             if bits & signal.bit() != 0 {
                 self.flags.bind(py).set_item(class, true)?;

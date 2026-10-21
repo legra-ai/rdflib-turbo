@@ -39,6 +39,7 @@ for name in ["reference.jsonl", "float-contexts.jsonl", "double-contexts.jsonl",
                     context.traps[getattr(decimal, signal)] = enabled
             if "invalid_trap" in row:
                 context.traps[decimal.InvalidOperation] = row["invalid_trap"]
+            context.clear_flags()
             error = None
             try:
                 if name == "cardinality-zero.jsonl":
@@ -54,6 +55,9 @@ for name in ["reference.jsonl", "float-contexts.jsonl", "double-contexts.jsonl",
                 result = "InvalidComparison" if name == "cardinality-zero.jsonl" else type(exception).__name__
                 error = exception
             assert result == row["expected"], (name, count, row, result)
+            if "raised_flags" in row:
+                raised = {signal.__name__ for signal, value in context.flags.items() if value}
+                assert raised == set(row["raised_flags"]), (name, count, row, raised)
             if result in {"InvalidOperation", "InvalidComparison"}:
                 signal = decimal.InvalidOperation if result == "InvalidComparison" else decimal.ConversionSyntax
                 assert error.args == ([signal],)
