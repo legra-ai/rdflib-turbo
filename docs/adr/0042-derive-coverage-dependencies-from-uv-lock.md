@@ -1,4 +1,4 @@
-# ADR 0037: Derive measurement dependencies from the authoritative uv lock
+# ADR 0042: Derive measurement dependencies from the authoritative uv lock
 
 Status: Accepted
 
