@@ -98,6 +98,79 @@ def initialize_project(project, python, environment):
             run(arguments, environment)
 
 
+def initialize_dependencies(root, profiles, output, project, python, environment):
+    """Export authoritative locked dependencies before creating an isolated project."""
+    root, profiles, output = root.resolve(), profiles.resolve(), output.resolve()
+    selections = {"rdflib-turbo": ["--group", "coverage"], "pyshacl-turbo": ["--extra", "test"]}
+    selection = selections[project]
+    sources = {name: (root / name).read_bytes() for name in ("pyproject.toml", "uv.lock")}
+    if tomllib.loads(sources["pyproject.toml"].decode())["project"]["name"] != project:
+        raise ValueError("Coverage project identity does not match source metadata")
+    profiles.mkdir(parents=True, exist_ok=True)
+    lock = profiles / "requirements.lock"
+    run(
+        [
+            "uv",
+            "export",
+            "--project",
+            root,
+            "--locked",
+            *selection,
+            "--no-dev",
+            "--no-emit-project",
+            "--no-hashes",
+            "--output-file",
+            lock,
+        ],
+        environment,
+    )
+    preserved = output / "dependencies"
+    preserved.mkdir(parents=True, exist_ok=True)
+    for name, content in sources.items():
+        if (root / name).read_bytes() != content:
+            raise RuntimeError(f"Coverage dependency input changed during export: {name}")
+        (preserved / name).write_bytes(content)
+    (preserved / "requirements.lock").write_bytes(lock.read_bytes())
+    provenance = {
+        "source_pyproject_sha256": digest(preserved / "pyproject.toml"),
+        "source_uv_lock_sha256": digest(preserved / "uv.lock"),
+        "export_sha256": digest(lock),
+        "export_selection": selection,
+        "uv_version": run(["uv", "--version"], environment, capture=True).strip(),
+    }
+    project_environment = profiles / "project"
+    initialize_project(project_environment, python, environment)
+    run(
+        ["uv", "add", "--project", project_environment, "--no-sync", "--requirements", lock],
+        environment,
+    )
+    run(["uv", "sync", "--project", project_environment, "--locked"], environment)
+    verify_dependency_inputs(root, profiles, output, provenance)
+    return provenance
+
+
+def verify_dependency_inputs(root, profiles, output, provenance):
+    """Never attribute a measurement to source/export bytes that changed mid-run."""
+    checks = {
+        root / "pyproject.toml": provenance["source_pyproject_sha256"],
+        root / "uv.lock": provenance["source_uv_lock_sha256"],
+        profiles / "requirements.lock": provenance["export_sha256"],
+        output / "dependencies/pyproject.toml": provenance["source_pyproject_sha256"],
+        output / "dependencies/uv.lock": provenance["source_uv_lock_sha256"],
+        output / "dependencies/requirements.lock": provenance["export_sha256"],
+    }
+    for path, expected in checks.items():
+        if digest(path) != expected:
+            raise RuntimeError(f"Coverage dependency input changed: {path}")
+
+
+def record_environment_lock(project, output, stage):
+    """Preserve the actual resolved environment used by each execution stage."""
+    destination = output / "dependencies" / f"{stage}-uv.lock"
+    destination.write_bytes((project / "uv.lock").read_bytes())
+    return digest(destination)
+
+
 def parse_environment(text):
     result = {}
     for line in text.splitlines():
@@ -306,17 +379,12 @@ def main():
         (profiles / name).mkdir(parents=True)
     environment["LLVM_PROFILE_FILE"] = str(profiles / "build/%p-%m.profraw")
     project_environment = profiles / "project"
-    initialize_project(project_environment, args.python, environment)
+    dependencies = initialize_dependencies(
+        root, profiles, output, project, args.python, environment
+    )
     venv = project_environment / ".venv"
     python = venv / "bin/python"
-    lock = root / (
-        "requirements-test.lock" if project == "pyshacl-turbo" else "requirements-coverage.lock"
-    )
-    run(
-        ["uv", "add", "--project", project_environment, "--no-sync", "--requirements", lock],
-        environment,
-    )
-    run(["uv", "sync", "--project", project_environment, "--locked"], environment)
+    rust_lock = record_environment_lock(project_environment, output, "rust")
     project_run = ["uv", "run", "--project", project_environment, "--locked", "--no-sync"]
     environment["PYO3_PYTHON"] = str(python)
     artifacts = run(
@@ -394,13 +462,16 @@ def main():
         "revision": run(["git", "rev-parse", "HEAD"], capture=True).strip(),
         "source_sha256": {name: digest(root / name) for name in sorted(owned_sources(root))},
         "harness_sha256": digest(Path(__file__)),
-        "test_lock_sha256": digest(lock),
+        "test_lock_sha256": dependencies["export_sha256"],
+        "dependencies": dependencies,
         "wheel_sha256": digest(wheel),
         "native_sha256": digest(loaded),
         "rust_test_cases": rust_cases,
         "stages": {},
     }
     result["stages"]["rust"], _ = export(llvm, [profiles / "rust"], objects, output / "rust", root)
+    result["stages"]["rust"]["environment_lock_sha256"] = rust_lock
+    python_lock = record_environment_lock(project_environment, output, "python")
     run(
         [
             *project_run,
@@ -422,6 +493,7 @@ def main():
     result["stages"]["python"], _ = export(
         llvm, [profiles / "python"], objects, output / "python", root
     )
+    result["stages"]["python"]["environment_lock_sha256"] = python_lock
     require_python_execution(result["stages"]["python"], binding)
     stages = [profiles / "rust", profiles / "python"]
     if owlrl:
@@ -438,6 +510,8 @@ def main():
             environment,
         )
         run(["uv", "sync", "--project", project_environment, "--locked"], environment)
+        owlrl_lock = record_environment_lock(project_environment, output, "owlrl")
+        result["owlrl_wheel_sha256"] = digest(companion_files[0])
         run(
             [
                 *project_run,
@@ -461,6 +535,7 @@ def main():
         result["stages"]["owlrl"], _ = export(
             llvm, [profiles / "owlrl"], objects, output / "owlrl", root
         )
+        result["stages"]["owlrl"]["environment_lock_sha256"] = owlrl_lock
         require_python_execution(result["stages"]["owlrl"], binding)
         stages.append(profiles / "owlrl")
     result["stages"]["combined"], flags = export(llvm, stages, objects, output / "combined", root)
@@ -475,6 +550,7 @@ def main():
         ],
         capture=True,
     )
+    verify_dependency_inputs(root, profiles, output, dependencies)
     result["environment_lock_sha256"] = digest(project_environment / "uv.lock")
     (output / "summary.json").write_text(json.dumps(result, indent=2) + "\n")
     write_markdown(result, output / "summary.md")

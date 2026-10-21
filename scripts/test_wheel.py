@@ -85,6 +85,8 @@ def verify_loaded_package(wheel, python, environment):
 
 
 def test_installed_wheel(wheel, version):
+    major, minor = map(int, version.split("."))
+    python_range = f">={version},<{major}.{minor + 1}"
     verify_licenses(wheel)
     with tempfile.TemporaryDirectory() as directory:
         project = Path(directory) / "project"
@@ -97,7 +99,7 @@ def test_installed_wheel(wheel, version):
                 "--vcs",
                 "none",
                 "--python",
-                version,
+                python_range,
                 str(project),
             ],
             ["uv", "python", "pin", "--project", str(project), version],
