@@ -177,14 +177,17 @@ def test_scoped_diagnostics_capture_context_and_retain_the_invocation(union, tra
             )
             input_graph = source.graph(EX.source) if union else source
             input_graph.add((EX.x, EX.value, Literal("bad", datatype=XSD.decimal, normalize=False)))
+            input_graph.add((EX.conflict, RDF.type, OWL.Nothing))
             with decimal.localcontext() as context:
                 context.traps[decimal.InvalidOperation] = False
                 assert source.infer(destination=EX.destination) is source
-            assert backend._last_inference.error_messages
+            assert backend._last_inference.error_messages == [
+                f"{EX.conflict} is defined of type 'Nothing'"
+            ]
             destination = Graph(store=input_graph.store, identifier=EX.destination)
             error_type = Namespace("http://www.daml.org/2002/03/agents/agent-ont#").ErrorMessage
             assert list(destination.subjects(RDF.type, error_type))
-            assert len(input_graph) == 1
+            assert len(input_graph) == 2
 
         if transactional:
             with store.transaction() as transaction:
