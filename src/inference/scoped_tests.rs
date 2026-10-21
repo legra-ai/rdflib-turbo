@@ -31,6 +31,7 @@ fn rdfs_literal_identity_is_published_even_when_present_only_in_source() {
                 mode,
                 (!union).then_some(source),
                 destination,
+                super::super::InferenceRequest::default(),
             )
             .unwrap();
             assert_eq!(
@@ -66,11 +67,11 @@ fn legacy_dataset_destination_and_delta_include_literal_identity_publication() {
             quad("urn:s", TYPE, "urn:C", &source),
         ]);
         if delta {
-            let additions = super::super::expand_delta(
+            let (additions, _) = super::super::expand_delta(
                 &mut data,
                 "rdfs",
                 Some(destination.clone()),
-                super::super::InferenceOptions::default(),
+                super::super::InferenceRequest::default(),
             )
             .unwrap();
             assert!(additions.contains(&publication));
@@ -80,9 +81,10 @@ fn legacy_dataset_destination_and_delta_include_literal_identity_publication() {
                     &mut data,
                     "rdfs",
                     Some(destination.clone()),
-                    super::super::InferenceOptions::default()
+                    super::super::InferenceRequest::default()
                 )
                 .unwrap()
+                .0
                 .iter()
                 .all(|quad| quad != publication.as_ref())
             );
@@ -91,7 +93,7 @@ fn legacy_dataset_destination_and_delta_include_literal_identity_publication() {
                 &mut data,
                 "rdfs",
                 destination.clone(),
-                super::super::InferenceOptions::default(),
+                super::super::InferenceRequest::default(),
             )
             .unwrap();
         }
@@ -128,6 +130,7 @@ fn default_named_and_blank_sources_exclude_outside_schema() {
             "rdfs",
             Some(source.clone()),
             source.clone(),
+            super::super::InferenceRequest::default(),
         )
         .unwrap();
         assert!(
@@ -157,6 +160,7 @@ fn separate_destination_terminates_without_becoming_a_rule_source() {
         "rdfs",
         Some(source.clone()),
         destination.clone(),
+        super::super::InferenceRequest::default(),
     )
     .unwrap();
     assert!(
@@ -185,7 +189,14 @@ fn union_source_keeps_existing_store_inference_behavior() {
     let mut transaction = store.start_transaction().unwrap();
     transaction.insert(&quad("urn:x", TYPE, "urn:C", &data));
     transaction.insert(&quad("urn:C", SUBCLASS, "urn:D", &schema));
-    super::expand(&mut transaction, "rdfs", None, destination.clone()).unwrap();
+    super::expand(
+        &mut transaction,
+        "rdfs",
+        None,
+        destination.clone(),
+        super::super::InferenceRequest::default(),
+    )
+    .unwrap();
     assert!(
         transaction
             .contains(&quad("urn:x", TYPE, "urn:D", &destination))

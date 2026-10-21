@@ -15,6 +15,7 @@ class GraphInference:
         All writes belong to the existing native transaction boundary.
         """
         backend = self.store.backend
+        backend._last_inference = None
         try:
             source = None if isinstance(self, RDFLibDataset) else self.store._graph(self)
             if destination is None:
@@ -29,7 +30,9 @@ class GraphInference:
                 destination_graph = self.store._graph(identifier)
             else:
                 raise TypeError("Expected a native Graph or graph identifier destination")
-            backend._native.infer_graph(inference, source, destination_graph)
+            backend._last_inference = backend._native.infer_graph(
+                inference, source, destination_graph
+            )
         except BaseException:
             if isinstance(backend, Transaction):
                 backend._native.rollback()

@@ -44,6 +44,7 @@ pub(super) enum Operation {
         mode: String,
         source: Option<String>,
         destination: String,
+        request: crate::inference::InferenceRequest,
     },
     Query(String, bool),
     Dump(RdfFormat),
@@ -203,6 +204,7 @@ impl Operation {
                 mode,
                 source,
                 destination,
+                request,
             } => {
                 if !matches!(mode.as_str(), "rdfs" | "owlrl" | "both") {
                     return Err(Error::Invalid(format!("Unknown inference mode: {mode}")));
@@ -212,8 +214,9 @@ impl Operation {
                     &mode,
                     source.as_deref().map(pattern::graph).transpose()?,
                     pattern::graph(&destination)?,
-                )?;
-                Ok(Reply::Done)
+                    request,
+                )
+                .map(Reply::Inference)
             }
             Self::Infer(mode, destination, request) => {
                 if !matches!(mode.as_str(), "rdfs" | "owlrl" | "both") {

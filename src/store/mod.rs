@@ -228,13 +228,25 @@ impl NativeStore {
         mode: String,
         source_graph: Option<String>,
         destination_graph: String,
-    ) -> PyResult<()> {
+    ) -> PyResult<crate::inference::InferenceOutcome> {
+        let request = crate::inference::InferenceRequest::capture(
+            py,
+            None,
+            crate::inference::InferenceOptions::default(),
+        )?;
         py.detach(|| {
-            self.mutate(Operation::InferGraph {
-                mode,
-                source: source_graph,
-                destination: destination_graph,
-            })
+            match Session::execute_inline(
+                self.control.clone(),
+                Operation::InferGraph {
+                    mode,
+                    source: source_graph,
+                    destination: destination_graph,
+                    request,
+                },
+            )? {
+                operations::Reply::Inference(outcome) => Ok(outcome),
+                _ => unreachable!("native scoped inference reply type"),
+            }
         })
         .map_err(error)
     }
