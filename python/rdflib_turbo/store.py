@@ -47,8 +47,13 @@ class Transaction(InferenceOperations):
     def __init__(self, native):
         self._native = native
 
+    @contextmanager
     def _validate_shared_shapes(self, program, settings, inplace):
-        return program.validate_transaction(self._native, settings, inplace)
+        try:
+            yield program.validate_transaction(self._native, settings, inplace)
+        except BaseException:
+            self._native.rollback()
+            raise
 
     def update(self, source):
         """Execute SPARQL Update inside the current transaction."""
@@ -67,8 +72,14 @@ class Store(InferenceOperations):
     def __init__(self, path=None):
         self._native = NativeStore(None if path is None else fspath(path))
 
+    @contextmanager
     def _validate_shared_shapes(self, program, settings, inplace):
-        return program.validate_store(self._native, settings, inplace)
+        if inplace:
+            with self.transaction() as transaction:
+                with transaction._validate_shared_shapes(program, settings, True) as result:
+                    yield result
+        else:
+            yield program.validate_store(self._native, settings, False)
 
     def close(self):
         """Release the store; an active transaction must finish first."""

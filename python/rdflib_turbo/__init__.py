@@ -2,6 +2,7 @@
 
 import json
 from collections.abc import Iterator
+from contextlib import contextmanager
 from importlib.metadata import version
 from typing import Self
 
@@ -32,8 +33,9 @@ class Dataset(GraphOperations):
         result._native = self._native.copy()
         return result
 
+    @contextmanager
     def _validate_shared_shapes(self, program, settings, inplace):
-        return program.validate(self._native, settings, inplace)
+        yield program.validate(self._native, settings, inplace)
 
     def namespaces(self) -> Iterator[tuple[str, str]]:
         """Return namespace bindings retained atomically from parsed documents."""

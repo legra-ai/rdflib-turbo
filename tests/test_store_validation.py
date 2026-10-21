@@ -74,10 +74,29 @@ class Program:
         self.native = SharedShapes(SHAPES, True, [])
 
     def validate(self, source, *, inplace, **options):
-        conforms, report, text, _ = source._validate_shared_shapes(
-            self.native, json.dumps(options), inplace
-        )
-        return conforms, report, text
+        with source._validate_shared_shapes(self.native, json.dumps(options), inplace) as result:
+            conforms, report, text, _ = result
+            return conforms, report, text
+
+
+@pytest.mark.parametrize("explicit", [False, True])
+def test_report_consumer_failure_aborts_owner(explicit):
+    program = SharedShapes(SHAPES, True, [])
+    with Store() as store:
+        if explicit:
+            with pytest.raises(RuntimeError, match="closed"), store.transaction() as transaction:
+                transaction.parse(data=SOURCE)
+                with pytest.raises(ValueError, match="report consumer"):
+                    with transaction._validate_shared_shapes(program, "{}", True):
+                        raise ValueError("report consumer")
+        else:
+            store.parse(data=SOURCE)
+            with pytest.raises(ValueError, match="report consumer"):
+                with store._validate_shared_shapes(program, "{}", True):
+                    raise ValueError("report consumer")
+            assert len(store) == 1
+            return
+        assert len(store) == 0
 
 
 def test_validated_transaction_commits_original_and_rule_writes_together():
@@ -116,17 +135,20 @@ def test_sources_dispatch_validation_to_their_owned_native_backend(kind):
     program = SharedShapes(SHAPES, True, [])
     if kind == "dataset":
         source = Dataset().parse(data=SOURCE)
-        assert source._validate_shared_shapes(program, "{}", False)[0]
+        with source._validate_shared_shapes(program, "{}", False) as result:
+            assert result[0]
         assert len(source) == 1
         return
     with Store() as store:
         if kind == "store":
             store.parse(data=SOURCE)
-            assert store._validate_shared_shapes(program, "{}", False)[0]
+            with store._validate_shared_shapes(program, "{}", False) as result:
+                assert result[0]
         else:
             with store.transaction() as transaction:
                 transaction.parse(data=SOURCE)
-                assert transaction._validate_shared_shapes(program, "{}", False)[0]
+                with transaction._validate_shared_shapes(program, "{}", False) as result:
+                    assert result[0]
         assert len(store) == 1
 
 
