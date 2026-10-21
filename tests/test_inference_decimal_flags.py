@@ -65,7 +65,9 @@ def execute(datatype, lexical, settings, traps, owner, late_failure):
         else:
             identifier = BNode("flags") if owner == "graph-blank" else URIRef("urn:flags:source")
             target = (
-                NativeGraph() if owner == "graph-default" else NativeGraph(identifier=identifier)
+                NativeGraph()
+                if owner == "graph-default"
+                else NativeGraph(store=Store(), identifier=identifier)
             )
             graph = target
         for triple in source:
@@ -89,6 +91,7 @@ def execute(datatype, lexical, settings, traps, owner, late_failure):
                 target.infer_delta()
             elif owner == "graph-transaction":
                 with target.transaction() as graph:
+                    assert len(graph) == len(source)
                     graph.infer()
             elif owner == "transaction":
                 with target.transaction() as transaction:
