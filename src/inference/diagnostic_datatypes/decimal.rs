@@ -91,10 +91,16 @@ pub(super) fn decimal(text: &str, context: &DecimalContext) -> LexicalResult {
     if text.contains(['e', 'E']) {
         return LexicalResult::Diagnostic;
     }
-    if parse(text).is_some() || !context.traps[INVALID] {
-        LexicalResult::Valid
-    } else {
+    if parse(text).is_some() {
+        return LexicalResult::Valid;
+    }
+    let mut signals = [false; 7]; // bounded: fixed Decimal signal vocabulary.
+    signals[INVALID] = true;
+    context.signals.record(signals);
+    if context.traps[INVALID] {
         LexicalResult::Failure(LexicalFailure::DecimalInvalidOperation)
+    } else {
+        LexicalResult::Valid
     }
 }
 
@@ -170,13 +176,30 @@ impl Finite {
 }
 
 pub(super) fn float(text: &str, single: bool, context: &DecimalContext) -> bool {
-    let Some(Parsed::Finite(mut value)) = parse(text) else {
-        return false;
+    let mut signals = [false; 7]; // bounded: fixed Decimal signal vocabulary.
+    let mut value = match parse(text) {
+        Some(Parsed::Finite(value)) => value,
+        Some(Parsed::Infinity) => return false,
+        Some(Parsed::Nan { .. }) | None => {
+            // Decimal construction, signaling-NaN abs, or quiet-NaN ordered
+            // comparison signals InvalidOperation even when the trap is off.
+            signals[INVALID] = true;
+            context.signals.record(signals);
+            return false;
+        }
     };
     if value.digits.is_empty() {
+        let etiny = i128::from(context.emin) - context.precision as i128 + 1;
+        let maximum = i128::from(context.emax)
+            - if context.clamp {
+                context.precision as i128 - 1
+            } else {
+                0
+            };
+        signals[CLAMPED] = value.exponent < etiny || value.exponent > maximum;
+        context.signals.record(signals);
         return false;
     }
-    let mut signals = [false; 7]; // bounded: fixed Decimal signal vocabulary.
     signals[SUBNORMAL] = value.adjusted() < i128::from(context.emin);
     value.round(context, &mut signals);
     signals[UNDERFLOW] = signals[SUBNORMAL] && signals[INEXACT];
@@ -191,6 +214,7 @@ pub(super) fn float(text: &str, single: bool, context: &DecimalContext) -> bool 
     {
         signals[CLAMPED] = true;
     }
+    context.signals.record(signals);
     if signals
         .into_iter()
         .zip(context.traps)
@@ -217,8 +241,15 @@ pub(super) fn float(text: &str, single: bool, context: &DecimalContext) -> bool 
 pub(super) fn zero(text: &str, context: &DecimalContext) -> Result<bool, LexicalFailure> {
     match parse(text) {
         Some(Parsed::Finite(value)) => Ok(value.digits.is_empty()),
-        Some(Parsed::Nan { signaling: true }) if context.traps[INVALID] => {
-            Err(LexicalFailure::DecimalInvalidComparison)
+        Some(Parsed::Nan { signaling: true }) => {
+            let mut signals = [false; 7]; // bounded: fixed Decimal signal vocabulary.
+            signals[INVALID] = true;
+            context.signals.record(signals);
+            if context.traps[INVALID] {
+                Err(LexicalFailure::DecimalInvalidComparison)
+            } else {
+                Ok(false)
+            }
         }
         _ => Ok(false),
     }

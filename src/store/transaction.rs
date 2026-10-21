@@ -157,7 +157,7 @@ impl NativeTransaction {
         datatype_axioms: bool,
         prior_error_messages: Option<Vec<String>>,
     ) -> PyResult<crate::inference::InferenceOutcome> {
-        let request = match crate::inference::InferenceRequest::capture(
+        let (request, publisher) = match crate::inference::InferenceRequest::capture(
             py,
             prior_error_messages,
             crate::inference::InferenceOptions {
@@ -171,7 +171,7 @@ impl NativeTransaction {
                 return Err(failure);
             }
         };
-        py.detach(|| {
+        let result = py.detach(|| {
             match self
                 .session
                 .execute(Operation::Infer(mode, destination, request))?
@@ -179,8 +179,8 @@ impl NativeTransaction {
                 Reply::Inference(outcome) => Ok(outcome),
                 _ => unreachable!("native inference reply type"),
             }
-        })
-        .map_err(error)
+        });
+        publisher.complete(py, result)
     }
 
     #[pyo3(signature = (mode, source_graph, destination_graph))]

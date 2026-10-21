@@ -278,7 +278,7 @@ impl NativeDataset {
             .map(NamedNode::new)
             .transpose()
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        let request = inference::InferenceRequest::capture(
+        let (request, publisher) = inference::InferenceRequest::capture(
             py,
             prior_error_messages,
             crate::inference::InferenceOptions {
@@ -286,7 +286,7 @@ impl NativeDataset {
                 datatype_axioms,
             },
         )?;
-        py.detach(|| {
+        let result = py.detach(|| {
             let mut current = self
                 .inner
                 .write()
@@ -298,8 +298,8 @@ impl NativeDataset {
             };
             outcome.bind_namespace(&mut current.namespaces);
             Ok(outcome)
-        })
-        .map_err(error)
+        });
+        publisher.complete(py, result)
     }
 
     #[pyo3(signature = (mode, destination=None, *, axiomatic_triples=false, datatype_axioms=false, prior_error_messages=None))]

@@ -1,4 +1,7 @@
 use pyo3::prelude::*;
+use std::sync::Arc;
+
+use super::signals::{SignalPublisher, Signals};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Rounding {
@@ -21,6 +24,7 @@ pub(super) struct DecimalContext {
     pub clamp: bool,
     // bounded: seven fixed Decimal signals, never graph-derived state.
     pub traps: [bool; 7],
+    pub signals: Arc<Signals>,
 }
 
 pub(super) const INVALID: usize = 0;
@@ -49,6 +53,7 @@ impl Default for LexicalContext {
                 emax: 999999,
                 clamp: false,
                 traps: [true, false, false, false, false, true, false],
+                signals: Arc::default(),
             },
             hour_leading_space: true,
         }
@@ -57,9 +62,24 @@ impl Default for LexicalContext {
 
 impl LexicalContext {
     /// Snapshot the calling Python thread before moving native inference work.
+    #[cfg(test)]
     pub(crate) fn capture(py: Python<'_>) -> PyResult<Self> {
         let decimal = py.import("decimal")?;
         let context = decimal.call_method0("getcontext")?;
+        Self::from_context(py, &context)
+    }
+
+    pub(crate) fn capture_with_publisher(py: Python<'_>) -> PyResult<(Self, SignalPublisher)> {
+        let decimal = py.import("decimal")?;
+        let context = decimal.call_method0("getcontext")?;
+        let captured = Self::from_context(py, &context)?;
+        let publisher =
+            SignalPublisher::new(decimal.as_any(), &context, captured.decimal.signals.clone())?;
+        Ok((captured, publisher))
+    }
+
+    fn from_context(py: Python<'_>, context: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let decimal = py.import("decimal")?;
         let traps = context.getattr("traps")?;
         let names = [
             "InvalidOperation",
@@ -104,6 +124,7 @@ impl LexicalContext {
                 emax: context.getattr("Emax")?.extract()?,
                 clamp: context.getattr("clamp")?.extract::<u8>()? != 0,
                 traps: flags,
+                signals: Arc::default(),
             },
             hour_leading_space: hour.contains(' '),
         })

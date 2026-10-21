@@ -201,7 +201,7 @@ impl NativeStore {
         datatype_axioms: bool,
         prior_error_messages: Option<Vec<String>>,
     ) -> PyResult<crate::inference::InferenceOutcome> {
-        let request = crate::inference::InferenceRequest::capture(
+        let (request, publisher) = crate::inference::InferenceRequest::capture(
             py,
             prior_error_messages,
             crate::inference::InferenceOptions {
@@ -209,7 +209,7 @@ impl NativeStore {
                 datatype_axioms,
             },
         )?;
-        py.detach(|| {
+        let result = py.detach(|| {
             match Session::execute_inline(
                 self.control.clone(),
                 Operation::Infer(mode, destination, request),
@@ -217,8 +217,8 @@ impl NativeStore {
                 operations::Reply::Inference(outcome) => Ok(outcome),
                 _ => unreachable!("native inference reply type"),
             }
-        })
-        .map_err(error)
+        });
+        publisher.complete(py, result)
     }
 
     #[pyo3(signature = (mode, source_graph, destination_graph))]

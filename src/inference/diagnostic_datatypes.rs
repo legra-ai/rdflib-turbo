@@ -6,11 +6,13 @@ mod cardinality;
 mod context;
 mod decimal;
 mod integer;
+mod signals;
 mod temporal;
 mod text;
 mod unicode;
 
 pub(crate) use context::LexicalContext;
+pub(crate) use signals::SignalPublisher;
 
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum LexicalResult {
@@ -90,3 +92,7 @@ pub(super) fn cardinality_zero(
 ) -> Result<bool, LexicalFailure> {
     cardinality::zero(literal, context)
 }
+
+#[cfg(test)]
+#[path = "diagnostic_datatypes/signal_tests.rs"]
+mod signal_tests;

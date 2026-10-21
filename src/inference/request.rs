@@ -3,7 +3,7 @@
 use pyo3::prelude::*;
 
 use super::InferenceOptions;
-use super::diagnostic_datatypes::LexicalContext;
+use super::diagnostic_datatypes::{LexicalContext, SignalPublisher};
 
 #[derive(Default)]
 pub(crate) struct InferenceRequest {
@@ -17,12 +17,16 @@ impl InferenceRequest {
         py: Python<'_>,
         prior_error_messages: Option<Vec<String>>,
         options: InferenceOptions,
-    ) -> PyResult<Self> {
-        Ok(Self {
-            options,
-            prior_error_messages: prior_error_messages.unwrap_or_default(),
-            lexical_context: LexicalContext::capture(py)?,
-        })
+    ) -> PyResult<(Self, SignalPublisher)> {
+        let (lexical_context, publisher) = LexicalContext::capture_with_publisher(py)?;
+        Ok((
+            Self {
+                options,
+                prior_error_messages: prior_error_messages.unwrap_or_default(),
+                lexical_context,
+            },
+            publisher,
+        ))
     }
 }
 

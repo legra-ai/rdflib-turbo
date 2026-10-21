@@ -6,7 +6,7 @@ use oxigraph::model::NamedNode;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
-use crate::{DatasetState, Error, NativeDataset, error, inference};
+use crate::{DatasetState, Error, NativeDataset, inference};
 
 impl NativeDataset {
     pub(crate) fn expand_delta(
@@ -26,8 +26,9 @@ impl NativeDataset {
             .map(NamedNode::new)
             .transpose()
             .map_err(|error| PyValueError::new_err(error.to_string()))?;
-        let request = inference::InferenceRequest::capture(py, prior_error_messages, options)?;
-        py.detach(|| {
+        let (request, publisher) =
+            inference::InferenceRequest::capture(py, prior_error_messages, options)?;
+        let result = py.detach(|| {
             let mut current = self
                 .inner
                 .write()
@@ -43,8 +44,8 @@ impl NativeDataset {
                 },
                 outcome,
             ))
-        })
-        .map_err(error)
+        });
+        publisher.complete(py, result)
     }
 }
 

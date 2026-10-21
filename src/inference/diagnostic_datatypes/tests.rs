@@ -168,6 +168,7 @@ fn decimal_conversion_uses_the_callers_rounding_bounds_and_traps() {
                     emax: fixture.emax,
                     clamp: fixture.clamp != 0,
                     traps: fixture.traps,
+                    signals: Default::default(),
                 },
                 ..Default::default()
             };

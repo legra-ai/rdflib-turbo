@@ -41,10 +41,18 @@ than substituting strict SHACL datatype validation. Capture integer digit limits
 clamp and relevant traps, and the running interpreter time-parser policy as
 owned per-invocation data. Unicode classification uses one audited scalar-only
 CPython boundary; it borrows no Python objects during detached execution.
-XML acceptance uses roxmltree with differential minidom fixtures. Reference
-Decimal status-flag side effects are a separate unresolved observable contract: 
-this lexical classification profile does not publish newly raised caller
-Context.flags and does not claim complete conversion-context parity.
+XML acceptance uses roxmltree with differential minidom fixtures. Newly raised Decimal status flags are caller-visible even when conversion
+traps become diagnostics or a later inference/storage failure aborts the graph.
+Each invocation owns one fixed atomic signal bitset shared by its native lexical
+configuration and a caller-side publisher. The native worker retains no Python
+objects. The publisher pins the captured caller flags mapping and signal classes;
+after native completion (including transaction failure joins), it sets only
+raised entries to true. It never clears existing flags, replaces the caller
+context, changes configuration, or rolls status flags back with RDF data.
+All nine Decimal signals are represented; the current string conversions can
+raise seven and do not synthesize DivisionByZero or FloatOperation. Detached
+conversion, trapped errors, default cardinality comparisons, late failures and
+all public owners are regression-tested separately from graph atomicity.
 
 Reference compatibility includes observable rule quirks: AllDifferent and
 AllDisjointProperties exclude the final list member; AllDisjointClasses does
