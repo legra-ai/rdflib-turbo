@@ -17,7 +17,7 @@ pub(super) struct Pattern {
 }
 
 #[derive(Deserialize)]
-struct InputTerm {
+pub(super) struct InputTerm {
     #[serde(rename = "type")]
     kind: String,
     value: String,
@@ -27,7 +27,11 @@ struct InputTerm {
 }
 
 impl InputTerm {
-    fn term(self) -> Result<Term> {
+    pub(super) fn blank_node_label(&self) -> Option<&str> {
+        (self.kind == "bnode").then_some(self.value.as_str())
+    }
+
+    pub(super) fn term(self) -> Result<Term> {
         // The Python boundary already supplies RDFLib terms. Do not reinterpret
         // their spelling through an RDF parser (RDFLib permits relative URIRefs).
         match self.kind.as_str() {

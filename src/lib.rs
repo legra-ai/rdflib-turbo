@@ -9,34 +9,12 @@ use pyo3::prelude::*;
 use serde_json::{Value, json};
 
 mod dataset_inference;
+mod errors;
+use errors::{Error, Result, error};
 mod graph;
 mod inference;
 mod shacl;
 mod store;
-
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("{0}")]
-    Invalid(String),
-    #[error("Unsupported feature: {0}")]
-    Unsupported(String),
-    #[error("{0}")]
-    Runtime(String),
-    #[error(transparent)]
-    Shacl(#[from] pyshacl_turbo_engine::Error),
-    #[error("SPARQL evaluation failed: {0}")]
-    Query(#[from] oxigraph::sparql::QueryEvaluationError),
-}
-pub type Result<T> = std::result::Result<T, Error>;
-
-fn error(error: Error) -> PyErr {
-    match error {
-        Error::Shacl(cause) => shacl::error(cause),
-        Error::Invalid(_) => PyValueError::new_err(error.to_string()),
-        Error::Unsupported(_) => PyNotImplementedError::new_err(error.to_string()),
-        _ => PyRuntimeError::new_err(error.to_string()),
-    }
-}
 
 fn format(name: &str) -> PyResult<RdfFormat> {
     match name {
@@ -91,9 +69,28 @@ fn term(term: &Term) -> Value {
 struct DatasetState {
     data: Dataset,
     namespaces: Vec<(String, String)>,
+    revision: u64,
 }
 
 impl DatasetState {
+    fn new(data: Dataset, namespaces: Vec<(String, String)>) -> Self {
+        Self {
+            data,
+            namespaces,
+            revision: 0,
+        }
+    }
+
+    fn copy_owner(&self) -> Self {
+        Self::new(self.data.clone(), self.namespaces.clone())
+    }
+
+    fn next_revision(&self) -> Result<u64> {
+        self.revision
+            .checked_add(1)
+            .ok_or_else(|| Error::Runtime("Dataset mutation revision exhausted".into()))
+    }
+
     fn bind(&mut self, entries: Vec<(String, String)>) {
         for (prefix, namespace) in entries {
             if let Some((_, value)) = self.namespaces.iter_mut().find(|(key, _)| key == &prefix) {
@@ -147,7 +144,7 @@ impl NativeDataset {
                 .read()
                 .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
             Ok(Self {
-                inner: RwLock::new(data.clone()),
+                inner: RwLock::new(data.copy_owner()),
             })
         })
     }
@@ -177,6 +174,7 @@ impl NativeDataset {
                 .inner
                 .write()
                 .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
+            let revision = state.next_revision().map_err(error)?;
             let mut transaction = state.data.insert_transaction();
             for quad in reader.by_ref() {
                 let quad = quad.map_err(|e| PyValueError::new_err(e.to_string()))?;
@@ -188,6 +186,7 @@ impl NativeDataset {
                 .collect();
             transaction.commit();
             state.bind(prefixes);
+            state.revision = revision;
             Ok(())
         })
     }
@@ -205,10 +204,13 @@ impl NativeDataset {
         for (_, namespace) in &entries {
             NamedNode::new(namespace.as_str()).map_err(|e| PyValueError::new_err(e.to_string()))?;
         }
-        self.inner
+        let mut state = self
+            .inner
             .write()
-            .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?
-            .bind(entries);
+            .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
+        let revision = state.next_revision().map_err(error)?;
+        state.bind(entries);
+        state.revision = revision;
         Ok(())
     }
 
@@ -281,7 +283,7 @@ impl NativeDataset {
         })
     }
 
-    #[pyo3(signature = (mode, destination=None, *, axiomatic_triples=false, datatype_axioms=false))]
+    #[pyo3(signature = (mode, destination=None, *, axiomatic_triples=false, datatype_axioms=false, prior_error_messages=None))]
     fn infer(
         &self,
         py: Python<'_>,
@@ -289,7 +291,8 @@ impl NativeDataset {
         destination: Option<&str>,
         axiomatic_triples: bool,
         datatype_axioms: bool,
-    ) -> PyResult<()> {
+        prior_error_messages: Option<Vec<String>>,
+    ) -> PyResult<inference::InferenceOutcome> {
         if !matches!(mode, "rdfs" | "owlrl" | "both") {
             return Err(PyValueError::new_err(format!(
                 "Unknown inference mode: {mode}"
@@ -299,38 +302,33 @@ impl NativeDataset {
             .map(NamedNode::new)
             .transpose()
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        py.detach(|| {
+        let (request, publisher) = inference::InferenceRequest::capture(
+            py,
+            prior_error_messages,
+            crate::inference::InferenceOptions {
+                axiomatic_triples,
+                datatype_axioms,
+            },
+        )?;
+        let result = py.detach(|| {
             let mut current = self
                 .inner
                 .write()
-                .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
-            if let Some(destination) = destination {
-                inference::expand_into(
-                    &mut current,
-                    mode,
-                    destination.into(),
-                    inference::InferenceOptions {
-                        axiomatic_triples,
-                        datatype_axioms,
-                    },
-                )
-                .map_err(error)?;
+                .map_err(|_| Error::Runtime("Dataset lock poisoned".into()))?;
+            let revision = current.next_revision()?;
+            let outcome = if let Some(destination) = destination {
+                inference::expand_into(&mut current, mode, destination.into(), request)?
             } else {
-                inference::expand(
-                    &mut current,
-                    mode,
-                    inference::InferenceOptions {
-                        axiomatic_triples,
-                        datatype_axioms,
-                    },
-                )
-                .map_err(error)?;
-            }
-            Ok(())
-        })
+                inference::expand(&mut current, mode, request)?
+            };
+            outcome.bind_namespace(&mut current.namespaces);
+            current.revision = revision;
+            Ok(outcome)
+        });
+        publisher.complete(py, result)
     }
 
-    #[pyo3(signature = (mode, destination=None, *, axiomatic_triples=false, datatype_axioms=false))]
+    #[pyo3(signature = (mode, destination=None, *, axiomatic_triples=false, datatype_axioms=false, prior_error_messages=None))]
     fn infer_delta(
         &self,
         py: Python<'_>,
@@ -338,15 +336,17 @@ impl NativeDataset {
         destination: Option<&str>,
         axiomatic_triples: bool,
         datatype_axioms: bool,
-    ) -> PyResult<Self> {
+        prior_error_messages: Option<Vec<String>>,
+    ) -> PyResult<(Self, inference::InferenceOutcome)> {
         self.expand_delta(
             py,
             mode,
             destination,
-            inference::InferenceOptions {
+            crate::inference::InferenceOptions {
                 axiomatic_triples,
                 datatype_axioms,
             },
+            prior_error_messages,
         )
     }
 }
@@ -354,6 +354,7 @@ impl NativeDataset {
 #[pymodule]
 fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeDataset>()?;
+    module.add_class::<inference::InferenceOutcome>()?;
     shacl::register(module)?;
     store::register(module)?;
     Ok(())
@@ -370,3 +371,6 @@ mod store_tests;
 
 #[cfg(test)]
 mod construct_tests;
+
+#[cfg(test)]
+mod dataset_revision_tests;

@@ -12,6 +12,7 @@ from rdflib import Dataset as RDFLibDataset
 from rdflib import Graph as RDFLibGraph
 from rdflib.graph import DATASET_DEFAULT_GRAPH_ID
 from rdflib.parser import create_input_source
+from rdflib.plugins.sparql.sparql import Query
 from rdflib.query import Result
 from rdflib.store import Store as ReferenceStore
 from rdflib.util import from_n3, guess_format
@@ -19,6 +20,7 @@ from rdflib.util import from_n3, guess_format
 from ._inference import GraphInference
 from ._namespaces import NamespaceBindings
 from ._operations import _encode, _term
+from ._ownership import GraphOwnership
 from ._reads import ProjectedReads, encode, encode_graph, scoped_rows
 from .store import Store, Transaction
 
@@ -132,24 +134,41 @@ class RDFLibStore(ReferenceStore):
     def namespaces(self):
         yield from self._namespaces.items()
 
-    def _query_source(self, source, initNs, initBindings, kwargs):
+    def _query_source(self, source, initNs, kwargs):
         if not isinstance(source, str):
             raise TypeError("Native SPARQL currently requires a query string")
-        if initBindings:
-            raise NotImplementedError("Native initial query bindings are not implemented")
         if kwargs:
             raise TypeError(f"Unsupported native query options: {sorted(kwargs)}")
         return (
             "\n".join(f"PREFIX {prefix}: <{uri}>" for prefix, uri in initNs.items()) + "\n" + source
         )
 
-    def query(self, query, initNs, initBindings, queryGraph, **kwargs):
-        source = self._query_source(query, initNs, initBindings, kwargs)
-        if queryGraph == "__UNION__":
-            kind, payload = self.backend._native.query(source, True)
+    def query(self, query, initNs, initBindings, queryGraph, *, _dataset_context=False, **kwargs):
+        try:
+            if isinstance(query, Query):
+                from ._prepared import snapshot
+
+                if kwargs:
+                    raise TypeError(f"Unsupported native query options: {sorted(kwargs)}")
+                source = snapshot(query, dataset_context=_dataset_context)
+            else:
+                source = self._query_source(query, initNs, kwargs)
+            bindings = json.dumps(
+                {str(Variable(name)): _encode(term) for name, term in initBindings.items()}
+            )
+        except BaseException:
+            if isinstance(self.backend, Transaction):
+                self.backend._native.rollback()
+            raise
+        if isinstance(query, Query):
+            union = queryGraph == "__UNION__"
+            graph = None if union else "" if queryGraph is None else self._graph(queryGraph)
+            kind, payload = self.backend._native.query_prepared(source, graph, union, bindings)
+        elif queryGraph == "__UNION__":
+            kind, payload = self.backend._native.query(source, True, bindings)
         else:
             graph = "" if queryGraph is None else self._graph(queryGraph)
-            kind, payload = self.backend._native.query_graph(source, graph)
+            kind, payload = self.backend._native.query_graph(source, graph, bindings)
         result = Result(kind)
         if kind == "ASK":
             result.askAnswer = json.loads(payload)
@@ -165,10 +184,18 @@ class RDFLibStore(ReferenceStore):
         return result
 
     def update(self, update, initNs, initBindings, queryGraph, **kwargs):
-        source = self._query_source(update, initNs, initBindings, kwargs)
-        if queryGraph not in (None, "__UNION__", self.default_identifier):
-            raise NotImplementedError("Scoped named-graph SPARQL Update is not implemented")
-        self.backend.update(source)
+        try:
+            source = self._query_source(update, initNs, kwargs)
+            bindings = json.dumps(
+                {str(Variable(name)): _encode(term) for name, term in initBindings.items()}
+            )
+            if queryGraph not in (None, "__UNION__", self.default_identifier):
+                raise NotImplementedError("Scoped named-graph SPARQL Update is not implemented")
+        except BaseException:
+            if isinstance(self.backend, Transaction):
+                self.backend._native.rollback()
+            raise
+        self.backend._native.update(source, bindings)
 
     def commit(self):
         raise RuntimeError("Use Graph.transaction() or StoreDataset.transaction() scoped context")
@@ -184,7 +211,7 @@ class RDFLibStore(ReferenceStore):
         self.backend.close()
 
 
-class Graph(GraphInference, ProjectedReads, RDFLibGraph):
+class Graph(GraphOwnership, GraphInference, ProjectedReads, RDFLibGraph):
     """RDFLib Graph facade with exact-term native storage and native SPARQL."""
 
     _turbo_native_graph = True
@@ -247,15 +274,20 @@ class Graph(GraphInference, ProjectedReads, RDFLibGraph):
         use_store_provided=True,
         **kwargs,
     ):
-        if processor != "sparql" or not use_store_provided:
-            raise ValueError("Graph only supports its native SPARQL processor")
-        return self.store.update(
-            update_object,
-            dict(self.namespaces()) if initNs is None else initNs,
-            {} if initBindings is None else initBindings,
-            self.identifier,
-            **kwargs,
-        )
+        try:
+            if processor != "sparql" or not use_store_provided:
+                raise ValueError("Graph only supports its native SPARQL processor")
+            return self.store.update(
+                update_object,
+                dict(self.namespaces()) if initNs is None else initNs,
+                {} if initBindings is None else initBindings,
+                self.identifier,
+                **kwargs,
+            )
+        except BaseException:
+            if isinstance(self.store.backend, Transaction):
+                self.store.backend._native.rollback()
+            raise
 
     def parse(
         self, source=None, publicID=None, format=None, location=None, file=None, data=None, **args
@@ -315,11 +347,8 @@ class Graph(GraphInference, ProjectedReads, RDFLibGraph):
         self.store._namespaces.replace(store._namespaces)
 
 
-class StoreDataset(GraphInference, RDFLibDataset):
-    """RDFLib Dataset foundation over the transactional Store.
-
-    Inference/SHACL remain on the separate legacy Dataset until direct adapters exist.
-    """
+class StoreDataset(GraphOwnership, GraphInference, RDFLibDataset):
+    """RDFLib Dataset over the transactional native store."""
 
     _turbo_native_graph = True
 
@@ -338,14 +367,14 @@ class StoreDataset(GraphInference, RDFLibDataset):
         )
 
     def graph(self, identifier=None, base=None):
-        graph = Graph(store=self.store, identifier=identifier, base=base)
+        graph = Graph(self.store, identifier, self.namespace_manager, base)
         self.store.add_graph(graph)
         return graph
 
     def get_context(self, identifier, quoted=False, base=None):
         if quoted:
             raise ValueError("Quoted graphs are unsupported")
-        return Graph(store=self.store, identifier=identifier, base=base)
+        return Graph(self.store, identifier, self.namespace_manager, base)
 
     def query(
         self,
@@ -364,6 +393,7 @@ class StoreDataset(GraphInference, RDFLibDataset):
             dict(self.namespaces()) if initNs is None else initNs,
             {} if initBindings is None else initBindings,
             "__UNION__" if self.default_union else DATASET_DEFAULT_GRAPH_ID,
+            _dataset_context=True,
             **kwargs,
         )
 
@@ -376,15 +406,20 @@ class StoreDataset(GraphInference, RDFLibDataset):
         use_store_provided=True,
         **kwargs,
     ):
-        if processor != "sparql" or not use_store_provided:
-            raise ValueError("StoreDataset only supports its native SPARQL processor")
-        return self.store.update(
-            update_object,
-            dict(self.namespaces()) if initNs is None else initNs,
-            {} if initBindings is None else initBindings,
-            DATASET_DEFAULT_GRAPH_ID,
-            **kwargs,
-        )
+        try:
+            if processor != "sparql" or not use_store_provided:
+                raise ValueError("StoreDataset only supports its native SPARQL processor")
+            return self.store.update(
+                update_object,
+                dict(self.namespaces()) if initNs is None else initNs,
+                {} if initBindings is None else initBindings,
+                DATASET_DEFAULT_GRAPH_ID,
+                **kwargs,
+            )
+        except BaseException:
+            if isinstance(self.store.backend, Transaction):
+                self.store.backend._native.rollback()
+            raise
 
     parse = Graph.parse
 

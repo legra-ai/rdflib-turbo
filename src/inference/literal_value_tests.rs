@@ -80,7 +80,7 @@ fn rdfs_substitutes_equal_string_values_across_datatypes_and_languages() {
             GraphName::DefaultGraph,
         )
     }));
-    expand(&mut data, "rdfs", super::InferenceOptions::default()).unwrap();
+    expand(&mut data, "rdfs", super::InferenceRequest::default()).unwrap();
     for (subject, _) in values.iter().enumerate() {
         for (replacement, value) in values.iter().enumerate() {
             let expected = subject == replacement || (subject < 7 && replacement < 7);

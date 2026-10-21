@@ -2,14 +2,49 @@
 
 import hashlib
 import importlib
+import re
 import subprocess
 import sys
 import tempfile
 import tomllib
+from email.parser import Parser
 from pathlib import Path
 from zipfile import ZipFile
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def companion_source():
+    """Require the Python consumer and native engine to use one immutable source."""
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text())
+    cargo = tomllib.loads((ROOT / "Cargo.toml").read_text())
+    source = project.get("tool", {}).get("uv", {}).get("sources", {}).get("pyshacl-turbo")
+    engine = cargo.get("dependencies", {}).get("pyshacl-turbo-engine")
+    if (
+        not isinstance(source, dict)
+        or set(source) != {"git", "rev"}
+        or not isinstance(source["git"], str)
+        or not source["git"]
+        or not isinstance(source["rev"], str)
+        or re.fullmatch(r"[0-9a-fA-F]{40}", source["rev"]) is None
+        or not isinstance(engine, dict)
+        or any(engine.get(key) != source[key] for key in ("git", "rev"))
+    ):
+        raise ValueError(
+            "Python companion source must match the immutable native engine Git source"
+        )
+    return source["git"], source["rev"]
+
+
+def verify_metadata(wheel):
+    """Source overrides are test configuration, never public Git requirements."""
+    with ZipFile(wheel) as archive:
+        members = [name for name in archive.namelist() if name.endswith(".dist-info/METADATA")]
+        if len(members) != 1:
+            raise ValueError("Expected exactly one wheel METADATA file")
+        metadata = Parser().parsestr(archive.read(members[0]).decode())
+    if any("git+" in value.lower() for value in metadata.get_all("Requires-Dist", [])):
+        raise ValueError("Wheel Requires-Dist must not contain a Git source")
 
 
 def supported_python_versions():
@@ -85,12 +120,29 @@ def verify_loaded_package(wheel, python, environment):
 
 
 def test_installed_wheel(wheel, version):
+    url, revision = companion_source()
+    verify_metadata(wheel)
     major, minor = map(int, version.split("."))
     python_range = f">={version},<{major}.{minor + 1}"
     verify_licenses(wheel)
     with tempfile.TemporaryDirectory() as directory:
         project = Path(directory) / "project"
+        dependencies = Path(directory) / "requirements.lock"
         commands = [
+            [
+                "uv",
+                "export",
+                "--project",
+                str(ROOT),
+                "--locked",
+                "--group",
+                "coverage",
+                "--no-dev",
+                "--no-emit-project",
+                "--no-hashes",
+                "--output-file",
+                str(dependencies),
+            ],
             [
                 "uv",
                 "init",
@@ -103,8 +155,35 @@ def test_installed_wheel(wheel, version):
                 str(project),
             ],
             ["uv", "python", "pin", "--project", str(project), version],
+            [
+                "uv",
+                "add",
+                "--project",
+                str(project),
+                "--no-sync",
+                "--requirements",
+                str(dependencies),
+            ],
             ["uv", "add", "--project", str(project), "--extra", "test", "--no-sync", str(wheel)],
-            ["uv", "sync", "--project", str(project), "--locked"],
+            [
+                "uv",
+                "add",
+                "--project",
+                str(project),
+                "--no-sync",
+                "--rev",
+                revision,
+                "git+" + url,
+            ],
+            [
+                "uv",
+                "sync",
+                "--project",
+                str(project),
+                "--locked",
+                "--config-settings-package",
+                "pyshacl-turbo:maturin.build-args=--locked --profile dev",
+            ],
             [
                 "uv",
                 "run",

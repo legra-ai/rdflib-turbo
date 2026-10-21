@@ -4,6 +4,8 @@
 #![doc(html_favicon_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/main/logo.svg")]
 #![doc(html_logo_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/main/logo.svg")]
 
+#[cfg(test)]
+mod construct_tests;
 mod dataset;
 mod error;
 mod eval;
@@ -12,8 +14,10 @@ mod model;
 #[cfg(feature = "cached-query-plans")]
 mod plan_cache;
 mod service;
+mod source_identity;
 mod update;
 
+mod prepared_algebra;
 #[cfg(feature = "sparql-12")]
 pub use crate::dataset::ExpressionTriple;
 pub use crate::dataset::{ExpressionTerm, InternalQuad, QueryableDataset, ScopedCustomFunction};
@@ -26,14 +30,17 @@ use crate::expression::{
 pub use crate::model::{QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter};
 use crate::service::ServiceHandlerRegistry;
 pub use crate::service::{DefaultServiceHandler, ServiceHandler};
+pub use crate::source_identity::implementation_fingerprint;
 pub use crate::update::{DeleteInsertIter, DeleteInsertQuad};
 use json_event_parser::{JsonEvent, WriterJsonSerializer};
 use oxiri::Iri;
 use oxrdf::{GraphName, Literal, NamedNode, NamedOrBlankNode, Term, Variable};
 use oxsdatatypes::{DateTime, DayTimeDuration, Float};
+pub use prepared_algebra::RdfLibPreparedAlgebra;
 use spargebra::Query;
 use spargebra::algebra::QueryDataset;
 use spargebra::term::{GroundQuadPattern, QuadPattern};
+#[cfg(not(feature = "cached-query-plans"))]
 use sparopt::Optimizer;
 use sparopt::algebra::GraphPattern;
 use std::collections::HashMap;
@@ -75,6 +82,8 @@ pub struct QueryEvaluator {
     without_optimizations: bool,
     run_stats: bool,
     cancellation_token: Option<CancellationToken>,
+    initial_bindings: Option<Arc<HashMap<Variable, Term>>>,
+    prepared_algebra: Option<Arc<RdfLibPreparedAlgebra>>,
 }
 
 impl QueryEvaluator {
@@ -84,23 +93,61 @@ impl QueryEvaluator {
         Self::default()
     }
 
+    /// Select an owned prepared RDFLib plan with explicit supplied metadata.
+    /// Execution rejects a different source tree instead of reanalysing it.
+    #[must_use]
+    pub fn with_rdflib_prepared_algebra(mut self, algebra: RdfLibPreparedAlgebra) -> Self {
+        self.prepared_algebra = Some(Arc::new(algebra));
+        self.initial_bindings
+            .get_or_insert_with(|| Arc::new(HashMap::new()));
+        self
+    }
+
+    /// Set RDFLib-compatible initial bindings, including hidden query variables.
+    /// Enables context semantics even for an empty mapping. Unused parameters
+    /// do not extend projections; projected bindings may be replaced by BIND.
+    /// This does not change the existing strict substitution API.
+    #[must_use]
+    pub fn with_initial_bindings(
+        mut self,
+        bindings: impl IntoIterator<Item = (Variable, Term)>,
+    ) -> Self {
+        let bindings: HashMap<_, _> = bindings.into_iter().collect();
+        self.initial_bindings = Some(Arc::new(bindings));
+        self
+    }
+
     fn prepare_pattern(
         &self,
         pattern: &spargebra::algebra::GraphPattern,
         substitutions: &HashMap<Variable, Term>,
     ) -> Arc<GraphPattern> {
+        if let Some(algebra) = &self.prepared_algebra {
+            return Arc::clone(&algebra.pattern);
+        }
+        // RDFLib initial bindings make nested projections correlated and BIND
+        // replacement order-sensitive. SPARQL join reordering assumes the
+        // uncorrelated, conflict-rejecting algebra and is not valid in this mode.
+        if self.initial_bindings.is_some() {
+            return Arc::new(if self.without_optimizations {
+                GraphPattern::from_rdflib_algebra_unoptimized(pattern)
+            } else {
+                GraphPattern::from_rdflib_algebra(pattern)
+            });
+        }
         if self.without_optimizations {
             return Arc::new(GraphPattern::from(pattern));
         }
+        let bound_variables = substitutions.keys().cloned().collect::<Vec<_>>();
         #[cfg(feature = "cached-query-plans")]
         {
-            plan_cache::prepare(pattern, substitutions.keys().cloned().collect())
+            plan_cache::prepare(pattern, bound_variables)
         }
         #[cfg(not(feature = "cached-query-plans"))]
         {
             Arc::new(Optimizer::optimize_graph_pattern_with_bound_variables(
                 GraphPattern::from(pattern),
-                substitutions.keys().cloned(),
+                bound_variables,
             ))
         }
     }
@@ -599,7 +646,7 @@ impl QueryEvaluator {
         dataset_spec: QueryDatasetSpecification,
         base_iri: &Option<Iri<String>>,
     ) -> Result<SimpleEvaluator<'a, D>, QueryEvaluationError> {
-        SimpleEvaluator::new(
+        Ok(SimpleEvaluator::new(
             dataset,
             base_iri.clone().map(Arc::new),
             Rc::new(self.service_handler.clone()),
@@ -608,7 +655,8 @@ impl QueryEvaluator {
             self.cancellation_token.clone().unwrap_or_default(),
             dataset_spec,
             self.run_stats,
-        )
+        )?
+        .with_initial_bindings(self.initial_bindings.clone()))
     }
 }
 
@@ -705,6 +753,24 @@ impl PreparedQuery<'_> {
         QueryExplanation,
     ) {
         let start_planning = Timer::now();
+        if self
+            .evaluator
+            .prepared_algebra
+            .as_ref()
+            .is_some_and(|algebra| !algebra.matches(self.query))
+        {
+            return (
+                Err(QueryEvaluationError::Unexpected(Box::new(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "Prepared RDFLib algebra does not match its query",
+                )))),
+                QueryExplanation {
+                    inner: Rc::new(EvalNodeWithStats::empty()),
+                    with_stats: self.evaluator.run_stats,
+                    planning_duration: start_planning.elapsed(),
+                },
+            );
+        }
         let (results, plan_node_with_stats, planning_duration) = match self.query {
             Query::Select {
                 pattern, base_iri, ..
@@ -877,15 +943,37 @@ impl PreparedDeleteInsertUpdate<'_> {
         self,
         dataset: impl QueryableDataset<'b>,
     ) -> Result<DeleteInsertIter<'b>, QueryEvaluationError> {
-        let mut pattern = GraphPattern::from(self.pattern);
-        if !self.evaluator.without_optimizations {
-            pattern = Optimizer::optimize_graph_pattern(pattern);
+        if self.evaluator.prepared_algebra.is_some() {
+            return Err(QueryEvaluationError::Unexpected(Box::new(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Prepared RDFLib query algebra cannot configure an UPDATE",
+            ))));
+        }
+        let mut pattern = self
+            .evaluator
+            .prepare_pattern(self.pattern, &HashMap::new());
+        if let Some(bindings) = &self.evaluator.initial_bindings {
+            // bounded: variables in the update algebra and supplied parameters.
+            // Templates may reference globals absent from WHERE, whereas SELECT
+            // must hide those same variables from its public result projection.
+            let mut variables = bindings.keys().cloned().collect::<Vec<_>>();
+            pattern.lookup_used_variables(&mut |variable| {
+                if !variables.contains(variable) {
+                    variables.push(variable.clone());
+                }
+            });
+            pattern = Arc::new(GraphPattern::project((*pattern).clone(), variables));
         }
         let (solutions, _) = self
             .evaluator
             .simple_evaluator(dataset, self.dataset, &self.base_iri)?
             .evaluate_select(&pattern, []);
-        Ok(DeleteInsertIter::new(solutions?, self.delete, self.insert))
+        Ok(DeleteInsertIter::new(
+            solutions?,
+            self.delete,
+            self.insert,
+            self.evaluator.initial_bindings.clone(),
+        ))
     }
 }
 
@@ -1101,6 +1189,60 @@ mod tests {
     use oxrdf::vocab::xsd;
     use oxrdf::{Literal, Term};
     use sparopt::algebra::{Expression, GraphPattern};
+
+    #[test]
+    fn update_templates_use_initial_context_with_local_bind_overrides() {
+        let data = oxrdf::Dataset::new();
+        let literal = Literal::new_typed_literal("01", xsd::INTEGER);
+        let evaluator = QueryEvaluator::new().with_initial_bindings([
+            (
+                Variable::new("s").unwrap(),
+                NamedNode::new("urn:a").unwrap().into(),
+            ),
+            (Variable::new("v").unwrap(), literal.clone().into()),
+        ]);
+        for (source, subject) in [
+            ("INSERT {?s <urn:p> ?v} WHERE {}", "urn:a"),
+            (
+                "INSERT {?s <urn:p> ?v} WHERE {BIND(<urn:b> AS ?s)}",
+                "urn:b",
+            ),
+            (
+                "INSERT {?s <urn:p> ?v} WHERE {{SELECT ?v WHERE {BIND(\"01\"^^<http://www.w3.org/2001/XMLSchema#integer> AS ?v)}}}",
+                "urn:a",
+            ),
+            ("INSERT {?s <urn:p> ?v} WHERE {}", "urn:a"),
+        ] {
+            let update = spargebra::SparqlParser::new()
+                .with_rdflib_query_context()
+                .parse_update(source)
+                .unwrap();
+            let spargebra::GraphUpdateOperation::DeleteInsert {
+                delete,
+                insert,
+                pattern,
+                ..
+            } = &update.operations[0]
+            else {
+                panic!("delete/insert")
+            };
+            let mutations = evaluator
+                .prepare_delete_insert(delete.clone(), insert.clone(), None, None, pattern)
+                .execute(&data)
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap();
+            assert_eq!(
+                mutations,
+                vec![DeleteInsertQuad::Insert(oxrdf::Quad::new(
+                    NamedNode::new(subject).unwrap(),
+                    NamedNode::new("urn:p").unwrap(),
+                    literal.clone(),
+                    GraphName::DefaultGraph,
+                ))]
+            );
+        }
+    }
 
     #[cfg(feature = "cached-query-plans")]
     #[test]
@@ -1436,4 +1578,11 @@ mod tests {
 }
 
 #[cfg(test)]
-mod construct_tests;
+mod source_identity_tests {
+    #[test]
+    fn compiled_evaluator_identity_is_a_compact_build_digest() {
+        let digest = super::implementation_fingerprint();
+        assert_eq!(digest.len(), 64);
+        assert!(digest.bytes().all(|byte| byte.is_ascii_hexdigit()));
+    }
+}

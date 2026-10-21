@@ -644,6 +644,14 @@ pub enum GraphPattern {
         inner: Box<Self>,
         variables: Vec<Variable>,
     },
+    /// Execution projection with original SubSelect source scope retained for
+    /// RDFLib EXISTS metadata. Wildcard source projection has an empty scope.
+    /// Produced only by the explicit RDFLib parser context.
+    ProjectWithSourceScope {
+        inner: Box<Self>,
+        variables: Vec<Variable>,
+        source_variables: Vec<Variable>,
+    },
     /// [Distinct](https://www.w3.org/TR/sparql11-query/#defn_algDistinct).
     Distinct { inner: Box<Self> },
     /// [Reduced](https://www.w3.org/TR/sparql11-query/#defn_algReduced).
@@ -964,7 +972,10 @@ impl GraphPattern {
                 inner.fmt_sse(f)?;
                 f.write_str(")")
             }
-            Self::Project { inner, variables } => {
+            Self::Project { inner, variables }
+            | Self::ProjectWithSourceScope {
+                inner, variables, ..
+            } => {
                 f.write_str("(project (")?;
                 for (i, v) in variables.iter().enumerate() {
                     if i > 0 {
@@ -1068,7 +1079,9 @@ impl GraphPattern {
                     callback(v);
                 }
             }
-            Self::Values { variables, .. } | Self::Project { variables, .. } => {
+            Self::Values { variables, .. }
+            | Self::Project { variables, .. }
+            | Self::ProjectWithSourceScope { variables, .. } => {
                 for v in variables {
                     callback(v);
                 }
@@ -1158,7 +1171,9 @@ impl GraphPattern {
                     expr.lookup_used_variables(callback);
                 }
             }
-            Self::Values { variables, .. } | Self::Project { variables, .. } => {
+            Self::Values { variables, .. }
+            | Self::Project { variables, .. }
+            | Self::ProjectWithSourceScope { variables, .. } => {
                 for v in variables {
                     callback(v);
                 }
@@ -1234,6 +1249,14 @@ impl fmt::Display for SparqlGraphRootPattern<'_> {
             match child {
                 GraphPattern::OrderBy { inner, expression } => {
                     order = Some(expression);
+                    child = inner;
+                }
+                GraphPattern::ProjectWithSourceScope {
+                    inner,
+                    source_variables,
+                    ..
+                } if project.is_empty() => {
+                    project.extend(source_variables.iter().map(|v| (v, None)));
                     child = inner;
                 }
                 GraphPattern::Project { inner, variables } if project.is_empty() => {

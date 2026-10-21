@@ -34,3 +34,6 @@ pub use oxiri::IriParseError;
 pub type Subject = NamedOrBlankNode;
 #[deprecated(note = "Use `NamedOrBlankNodeRef` instead", since = "0.5.0")]
 pub type SubjectRef<'a> = NamedOrBlankNodeRef<'a>;
+
+mod source_identity;
+pub use source_identity::implementation_fingerprint;

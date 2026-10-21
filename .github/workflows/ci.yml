@@ -88,8 +88,9 @@ jobs:
   wheels:
     needs: [prepare, sdist]
     runs-on: ${{ matrix.os }}
-    # Includes cold native compilation, all five interpreter wheels and verification.
-    timeout-minutes: 60
+    # Cold Intel builds can use an hour before installed verification starts.
+    # Keep all five interpreter builds and their verification inside one bounded job.
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -180,6 +181,8 @@ jobs:
           components: rustfmt
       - run: cargo +nightly-2026-10-16 fmt --check
       - run: cargo clippy --locked -- -D warnings
+      - name: Immutable native engine source metadata
+        run: make test-build-metadata
       - name: Patched datatype parser regressions
         run: cargo test --locked -p oxsdatatypes --lib
       - name: CONSTRUCT ownership and identity regressions

@@ -1,4 +1,5 @@
 use oxigraph::io::{RdfFormat, RdfParser};
+use oxigraph::model::Dataset;
 use oxigraph::sparql::SparqlEvaluator;
 use oxigraph::store::Transaction;
 use pyshacl_turbo_engine::{CompiledShapes, Options};
@@ -20,7 +21,8 @@ pub(super) enum Operation {
     Remove(String),
     Match(String),
     Count(String),
-    QueryGraph(String, String),
+    QueryGraph(String, String, Option<String>),
+    QueryPrepared(String, Option<String>, bool, Option<String>),
     LoadGraph {
         source: String,
         format: RdfFormat,
@@ -29,6 +31,7 @@ pub(super) enum Operation {
         allow_named_graphs: bool,
     },
     Graphs,
+    ForkGraph(Option<String>),
     ContainsGraph(TermTuple),
     GraphLen(Option<TermTuple>),
     Graph(String, bool),
@@ -38,27 +41,58 @@ pub(super) enum Operation {
         format: RdfFormat,
         base: Option<String>,
     },
-    Update(String),
-    Infer(String, Option<String>, crate::inference::InferenceOptions),
+    Update(String, Option<String>),
+    Infer(String, Option<String>, crate::inference::InferenceRequest),
     InferGraph {
         mode: String,
         source: Option<String>,
         destination: String,
+        request: crate::inference::InferenceRequest,
     },
-    Query(String, bool),
+    Query(String, bool, Option<String>),
     Dump(RdfFormat),
 }
 
 pub(super) enum Reply {
     Validation(Box<crate::shacl::Report>),
+    StagedValidation(Box<(crate::shacl::Report, Dataset)>),
+    PreparedValidation(Box<(crate::shacl::Report, u64)>),
     Done,
+    Store(oxigraph::store::Store),
     Bool(bool),
     Count(usize),
     Text(String),
     Query(String, String),
+    Inference(crate::inference::InferenceOutcome),
 }
 
 impl Operation {
+    // Exhaustive classification: adding an operation requires an explicit mutation policy.
+    pub fn mutates(&self) -> bool {
+        match self {
+            Self::InsertTerms(_)
+            | Self::Remove(_)
+            | Self::LoadGraph { .. }
+            | Self::Graph(_, _)
+            | Self::Load { .. }
+            | Self::Update(..)
+            | Self::Infer(..)
+            | Self::InferGraph { .. } => true,
+            Self::Validate { .. }
+            | Self::Match(_)
+            | Self::Count(_)
+            | Self::QueryGraph(..)
+            | Self::Graphs
+            | Self::ForkGraph(_)
+            | Self::ContainsGraph(_)
+            | Self::GraphLen(_)
+            | Self::Len
+            | Self::Query(..)
+            | Self::QueryPrepared(..)
+            | Self::Dump(_) => false,
+        }
+    }
+
     pub fn execute(self, transaction: &mut Transaction<'_>) -> Result<Reply> {
         match self {
             Self::Validate {
@@ -66,13 +100,14 @@ impl Operation {
                 options,
                 inplace,
             } => {
-                let result = if inplace {
-                    shapes.validate_transaction(transaction, options)?
+                let outcome = shapes.validate_delta(&*transaction, options)?;
+                let report = crate::shacl::Report::try_new(outcome.report)?;
+                let additions = if inplace {
+                    outcome.additions
                 } else {
-                    shapes.validate_staged(&*transaction, options)?
+                    Dataset::new()
                 };
-                crate::shacl::Report::try_new(result)
-                    .map(|report| Reply::Validation(Box::new(report)))
+                Ok(Reply::StagedValidation(Box::new((report, additions))))
             }
             Self::Count(source) => {
                 let pattern = Pattern::parse(&source)?;
@@ -115,6 +150,7 @@ impl Operation {
                     .map(Reply::Text)
                     .map_err(runtime)
             }
+            Self::ForkGraph(graph) => super::fork::fork(transaction, graph).map(Reply::Store),
             Self::Graphs => {
                 let graphs = transaction
                     .named_graphs()
@@ -172,13 +208,29 @@ impl Operation {
                 ))
                 .map(Reply::Text)
             }
-            Self::QueryGraph(source, graph) => {
-                let (mut query, kind) = prepare_query(&source, false)?;
+            Self::QueryPrepared(source, graph, union, bindings) => {
+                let bindings = super::bindings::InitialBindings::parse(bindings.as_deref())?;
+                let (mut query, kind) = super::prepared::prepare(&source, union, bindings.names())?;
+                if let Some(graph) = graph
+                    && query.dataset().is_default_dataset()
+                {
+                    query
+                        .dataset_mut()
+                        .set_default_graph(vec![pattern::graph(&graph)?]);
+                }
+                let query = bindings.apply(query)?;
+                let (kind, output) =
+                    query_output(query.on_transaction(transaction).execute()?, kind)?;
+                Ok(Reply::Query(kind, output))
+            }
+            Self::QueryGraph(source, graph, bindings) => {
+                let (mut query, kind) = prepare_query(&source, false, bindings.is_some())?;
                 if query.dataset().is_default_dataset() {
                     query
                         .dataset_mut()
                         .set_default_graph(vec![pattern::graph(&graph)?]);
                 }
+                let query = super::bindings::apply(query, bindings.as_deref())?;
                 let results = query.on_transaction(transaction).execute()?;
                 let (kind, output) = query_output(results, kind)?;
                 Ok(Reply::Query(kind, output))
@@ -202,6 +254,7 @@ impl Operation {
                 mode,
                 source,
                 destination,
+                request,
             } => {
                 if !matches!(mode.as_str(), "rdfs" | "owlrl" | "both") {
                     return Err(Error::Invalid(format!("Unknown inference mode: {mode}")));
@@ -211,10 +264,11 @@ impl Operation {
                     &mode,
                     source.as_deref().map(pattern::graph).transpose()?,
                     pattern::graph(&destination)?,
-                )?;
-                Ok(Reply::Done)
+                    request,
+                )
+                .map(Reply::Inference)
             }
-            Self::Infer(mode, destination, options) => {
+            Self::Infer(mode, destination, request) => {
                 if !matches!(mode.as_str(), "rdfs" | "owlrl" | "both") {
                     return Err(Error::Invalid(format!("Unknown inference mode: {mode}")));
                 }
@@ -223,20 +277,31 @@ impl Operation {
                     .transpose()
                     .map_err(invalid)?
                     .map_or(oxigraph::model::GraphName::DefaultGraph, Into::into);
-                crate::inference::expand_transaction(transaction, &mode, destination, options)?;
-                Ok(Reply::Done)
+                crate::inference::expand_transaction(transaction, &mode, destination, request)
+                    .map(Reply::Inference)
             }
-            Self::Update(source) => {
-                SparqlEvaluator::new()
-                    .parse_update(&source)
-                    .map_err(invalid)?
+            Self::Update(source, bindings) => {
+                let evaluator = SparqlEvaluator::new();
+                let evaluator = if bindings.is_some() {
+                    evaluator.with_rdflib_query_context()
+                } else {
+                    evaluator
+                };
+                let update = evaluator.parse_update(&source).map_err(invalid)?;
+                let update = if let Some(bindings) = bindings {
+                    update.with_initial_bindings(super::bindings::decode(&bindings)?)
+                } else {
+                    update
+                };
+                update
                     .on_transaction(transaction)
                     .execute()
                     .map_err(runtime)?;
                 Ok(Reply::Done)
             }
-            Self::Query(source, union) => {
-                let (query, kind) = prepare_query(&source, union)?;
+            Self::Query(source, union, bindings) => {
+                let (query, kind) = prepare_query(&source, union, bindings.is_some())?;
+                let query = super::bindings::apply(query, bindings.as_deref())?;
                 let results = query.on_transaction(transaction).execute()?;
                 let (kind, output) = query_output(results, kind)?;
                 Ok(Reply::Query(kind, output))

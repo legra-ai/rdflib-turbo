@@ -36,6 +36,7 @@ pub struct SparqlParser {
     prefixes: HashMap<String, String>,
     custom_aggregate_functions: HashSet<NamedNode>,
     external_variables: HashSet<Variable>,
+    rdflib_query_context: bool,
 }
 
 impl SparqlParser {
@@ -112,6 +113,13 @@ impl SparqlParser {
         self
     }
 
+    /// Preserve RDFLib's unsimplified group joins inside EXISTS/NOT EXISTS.
+    /// Ordinary query groups and the default parser retain standard SPARQL algebra.
+    pub fn with_rdflib_query_context(mut self) -> Self {
+        self.rdflib_query_context = true;
+        self
+    }
+
     /// Parse the given query string using the already set options.
     ///
     /// ```
@@ -133,6 +141,7 @@ impl SparqlParser {
             self.custom_aggregate_functions,
         );
         state.external_variables = self.external_variables;
+        state.rdflib_query_context = self.rdflib_query_context;
         #[cfg(feature = "standard-unicode-escaping")]
         let query = unescape_unicode_codepoints(query);
         Ok(parser::QueryUnit(&query, &mut state).map_err(SparqlSyntaxErrorKind::Syntax)?)
@@ -626,6 +635,7 @@ fn build_select(
     offset_limit: Option<(usize, Option<usize>)>,
     values: Option<GraphPattern>,
     state: &mut ParserState,
+    source_variables: Option<Vec<Variable>>,
 ) -> Result<GraphPattern, &'static str> {
     let mut p = r#where;
     let mut with_aggregate = false;
@@ -738,9 +748,16 @@ fn build_select(
 
     // PROJECT
     if with_project {
-        m = GraphPattern::Project {
-            inner: Box::new(m),
-            variables: pv,
+        m = match source_variables {
+            Some(source_variables) => GraphPattern::ProjectWithSourceScope {
+                inner: Box::new(m),
+                variables: pv,
+                source_variables,
+            },
+            None => GraphPattern::Project {
+                inner: Box::new(m),
+                variables: pv,
+            },
         };
     }
     match select.option {
@@ -842,7 +859,10 @@ fn add_defined_variables<'a>(pattern: &'a GraphPattern, set: &mut HashSet<&'a Va
                 set.insert(v);
             }
         }
-        GraphPattern::Project { variables, inner } => {
+        GraphPattern::Project { variables, inner }
+        | GraphPattern::ProjectWithSourceScope {
+            variables, inner, ..
+        } => {
             let mut inner_variables = HashSet::new();
             add_defined_variables(inner, &mut inner_variables);
             for v in inner_variables {
@@ -943,6 +963,8 @@ enum Either<L, R> {
 }
 
 pub struct ParserState {
+    rdflib_query_context: bool,
+    exists_depth: usize,
     base_iri: Option<Iri<String>>,
     prefixes: HashMap<String, String>,
     custom_aggregate_functions: HashSet<NamedNode>,
@@ -959,6 +981,8 @@ impl ParserState {
         custom_aggregate_functions: HashSet<NamedNode>,
     ) -> Self {
         Self {
+            rdflib_query_context: false,
+            exists_depth: 0,
             base_iri,
             prefixes,
             custom_aggregate_functions,
@@ -1092,13 +1116,21 @@ parser! {
         rule SelectQuery() -> Query = s:SelectClause() _ d:DatasetClauses() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {?
             Ok(Query::Select {
                 dataset: d,
-                pattern: build_select(s, w, g, h, o, l, v, state)?,
+                pattern: build_select(s, w, g, h, o, l, v, state, None)?,
                 base_iri: state.base_iri.clone()
             })
         }
 
         rule SubSelect() -> GraphPattern = s:SelectClause() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {?
-            build_select(s, w, g, h, o, l, v, state)
+            let source_variables = if state.rdflib_query_context && state.exists_depth > 0 {
+                Some(match &s.variables {
+                    SelectionVariables::Explicit(members) => members.iter().map(|member| match member {
+                        SelectionMember::Variable(variable) | SelectionMember::Expression(_, variable) => variable.clone(),
+                    }).collect(),
+                    SelectionVariables::Star => Vec::new(),
+                })
+            } else { None };
+            build_select(s, w, g, h, o, l, v, state, source_variables)
         }
 
         rule SelectClause() -> Selection = i("SELECT") _ Selection_init() o:SelectClause_option() _ v:SelectClause_variables() {
@@ -1126,7 +1158,7 @@ parser! {
                 Ok(Query::Construct {
                     template: c,
                     dataset: d,
-                    pattern: build_select(Selection::default(), w, g, h, o, l, v, state)?,
+                    pattern: build_select(Selection::default(), w, g, h, o, l, v, state, None)?,
                     base_iri: state.base_iri.clone()
                 })
             } /
@@ -1138,7 +1170,7 @@ parser! {
                         Selection::default(),
                         GraphPattern::Bgp { patterns: c },
                         g, h, o, l, v, state
-                    )?,
+                    , None)?,
                     base_iri: state.base_iri.clone()
                 })
             }
@@ -1152,7 +1184,7 @@ parser! {
             i("DESCRIBE") _ "*" _ d:DatasetClauses() _ w:WhereClause()? _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {?
                 Ok(Query::Describe {
                     dataset: d,
-                    pattern: build_select(Selection::default(), w.unwrap_or_default(), g, h, o, l, v, state)?,
+                    pattern: build_select(Selection::default(), w.unwrap_or_default(), g, h, o, l, v, state, None)?,
                     base_iri: state.base_iri.clone()
                 })
             } /
@@ -1165,7 +1197,7 @@ parser! {
                             NamedNodePattern::NamedNode(n) => SelectionMember::Expression(n.into(), variable()),
                             NamedNodePattern::Variable(v) => SelectionMember::Variable(v)
                         }).collect())
-                    }, w.unwrap_or_default(), g, h, o, l, v, state)?,
+                    }, w.unwrap_or_default(), g, h, o, l, v, state, None)?,
                     base_iri: state.base_iri.clone()
                 })
             }
@@ -1174,7 +1206,7 @@ parser! {
         rule AskQuery() -> Query = i("ASK") _ d:DatasetClauses() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {?
             Ok(Query::Ask {
                 dataset: d,
-                pattern: build_select(Selection::default(), w, g, h, o, l, v, state)?,
+                pattern: build_select(Selection::default(), w, g, h, o, l, v, state, None)?,
                 base_iri: state.base_iri.clone()
             })
         }
@@ -1521,7 +1553,13 @@ parser! {
                     } else {
                         expr
                     }),
-                    PartialGraphPattern::Other(e) => g = new_join(g, e),
+                    PartialGraphPattern::Other(e) => {
+                        g = if state.rdflib_query_context && state.exists_depth > 0 {
+                            GraphPattern::Join { left: Box::new(g), right: Box::new(e) }
+                        } else {
+                            new_join(g, e)
+                        };
+                    }
                 }
             }
 
@@ -2342,9 +2380,14 @@ parser! {
             i("REPLACE") _ "(" _ a:Expression() _ "," _ b:Expression() _ "," _ c:Expression() _ "," _ d:Expression() _ ")" { Expression::FunctionCall(Function::Replace, vec![a, b, c, d]) } /
             i("REPLACE") _ "(" _ a:Expression() _ "," _ b:Expression() _ "," _ c:Expression() _ ")" { Expression::FunctionCall(Function::Replace, vec![a, b, c]) }
 
-        rule ExistsFunc() -> Expression = i("EXISTS") _ p:GroupGraphPattern() { Expression::Exists(Box::new(p)) }
+        // Enter only after the opening-group lookahead. A prefixed function
+        // such as EXISTS:custom() must not change scope on PEG backtracking.
+        rule Exists_enter() = &"{" { state.exists_depth += 1; }
+        rule Exists_leave() = { state.exists_depth -= 1; }
 
-        rule NotExistsFunc() -> Expression = i("NOT") _ i("EXISTS") _ p:GroupGraphPattern() { Expression::Not(Box::new(Expression::Exists(Box::new(p)))) }
+        rule ExistsFunc() -> Expression = i("EXISTS") _ Exists_enter() p:GroupGraphPattern() Exists_leave() { Expression::Exists(Box::new(p)) }
+
+        rule NotExistsFunc() -> Expression = i("NOT") _ i("EXISTS") _ Exists_enter() p:GroupGraphPattern() Exists_leave() { Expression::Not(Box::new(Expression::Exists(Box::new(p)))) }
 
         rule Aggregate() -> AggregateExpression =
             i("COUNT") _ "(" _ i("DISTINCT") _ "*" _ ")" { AggregateExpression::CountSolutions { distinct: true } } /

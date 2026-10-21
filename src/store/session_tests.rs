@@ -10,7 +10,79 @@ fn control() -> Arc<Mutex<Control>> {
 }
 
 fn insert() -> Operation {
-    Operation::Update("INSERT DATA { <urn:s> <urn:p> <urn:o> }".into())
+    Operation::Update("INSERT DATA { <urn:s> <urn:p> <urn:o> }".into(), None)
+}
+
+#[test]
+fn update_initial_context_preserves_terms_overrides_and_statement_isolation() {
+    let control = control();
+    let session = Session::start(control).unwrap();
+    let bindings = r#"{"s":{"type":"uri","value":"urn:a"},"v":{"type":"literal","value":"01","datatype":"http://www.w3.org/2001/XMLSchema#integer"}}"#;
+    session.execute(Operation::Update(
+        "INSERT {?s <urn:p> ?v} WHERE {}; INSERT {?s <urn:q> ?v} WHERE {BIND(<urn:b> AS ?s)}; INSERT {?s <urn:r> ?v} WHERE {}".into(),
+        Some(bindings.into()),
+    )).unwrap();
+    let Reply::Query(_, result) = session
+        .execute(Operation::Query(
+            "ASK { <urn:a> <urn:p> ?v; <urn:r> ?v . <urn:b> <urn:q> ?v FILTER(STR(?v) = '01') }"
+                .into(),
+            false,
+            None,
+        ))
+        .unwrap()
+    else {
+        panic!("query reply")
+    };
+    assert!(result.contains("true"));
+    session
+        .execute(Operation::Update(
+            "INSERT {?s <urn:hidden> ?v} WHERE {{SELECT ?v WHERE {BIND('projected' AS ?v)}}}"
+                .into(),
+            Some(bindings.into()),
+        ))
+        .unwrap();
+    let Reply::Query(_, result) = session
+        .execute(Operation::Query(
+            "ASK { <urn:a> <urn:hidden> 'projected' }".into(),
+            false,
+            None,
+        ))
+        .unwrap()
+    else {
+        panic!("query reply")
+    };
+    assert!(result.contains("true"));
+    session
+        .execute(Operation::Update(
+            "DELETE WHERE {?s <urn:p> ?v}".into(),
+            Some(bindings.into()),
+        ))
+        .unwrap();
+    assert!(matches!(
+        session.execute(Operation::Len).unwrap(),
+        Reply::Count(3)
+    ));
+    session.finish(true).unwrap();
+}
+
+#[test]
+fn invalid_update_bindings_abort_prior_pending_mutations() {
+    let control = control();
+    let store = control.lock().unwrap().read().unwrap();
+    for bindings in ["{", r#"{"s":{"type":"invalid","value":"urn:a"}}"#] {
+        let session = Session::start(control.clone()).unwrap();
+        session.execute(insert()).unwrap();
+        assert!(
+            session
+                .execute(Operation::Update(
+                    "INSERT {} WHERE {}".into(),
+                    Some(bindings.into()),
+                ))
+                .is_err()
+        );
+        assert!(session.finish(true).is_err());
+        assert!(store.is_empty().unwrap());
+    }
 }
 
 #[test]
@@ -43,7 +115,7 @@ fn native_operation_error_aborts_before_the_next_writer_can_start() {
     session.execute(insert()).unwrap();
     assert!(
         session
-            .execute(Operation::Update("INVALID UPDATE".into()))
+            .execute(Operation::Update("INVALID UPDATE".into(), None))
             .is_err()
     );
     assert_eq!(store.len().unwrap(), 0);
@@ -92,7 +164,7 @@ fn inference_uses_pending_writes_and_the_same_commit_boundary() {
     let store = control.lock().unwrap().read().unwrap();
     for commit in [false, true] {
         let session = Session::start(control.clone()).unwrap();
-        session.execute(Operation::Update("INSERT DATA { GRAPH <urn:g> { <urn:a> a <urn:C> . <urn:C> <http://www.w3.org/2000/01/rdf-schema#subClassOf> <urn:D> } }".into())).unwrap();
+        session.execute(Operation::Update("INSERT DATA { GRAPH <urn:g> { <urn:a> a <urn:C> . <urn:C> <http://www.w3.org/2000/01/rdf-schema#subClassOf> <urn:D> } }".into(), None)).unwrap();
         session
             .execute(Operation::Infer(
                 "rdfs".into(),
@@ -104,6 +176,7 @@ fn inference_uses_pending_writes_and_the_same_commit_boundary() {
             .execute(Operation::Query(
                 "ASK { GRAPH <urn:inferred> { <urn:a> a <urn:D> } }".into(),
                 false,
+                None,
             ))
             .unwrap()
         else {
@@ -146,7 +219,10 @@ fn implicit_mutations_commit_abort_and_release_the_writer_without_an_owner_threa
     assert!(
         Session::execute_inline(
             control.clone(),
-            Operation::Update("INSERT DATA { <urn:s2> <urn:p> <urn:o> }; INVALID".into())
+            Operation::Update(
+                "INSERT DATA { <urn:s2> <urn:p> <urn:o> }; INVALID".into(),
+                None
+            )
         )
         .is_err()
     );
@@ -218,4 +294,96 @@ fn memory_only_native_build_rejects_persistent_paths() {
                 .contains("no RocksDB persistence support")
         );
     });
+}
+
+#[test]
+fn validation_additions_are_private_until_report_acceptance() {
+    let session = Session::start(control()).unwrap();
+    session.execute(insert()).unwrap();
+    let shapes = pyshacl_turbo_engine::CompiledShapes::compile(
+        pyshacl_turbo_engine::parse_graph(
+            "@prefix sh:<http://www.w3.org/ns/shacl#>. <urn:S> sh:targetNode <urn:s>; sh:rule [a sh:TripleRule; sh:subject sh:this; sh:predicate <urn:derived>; sh:object true].",
+            oxigraph::io::RdfFormat::Turtle,
+            None,
+        ).unwrap(),
+        true,
+    ).unwrap();
+    session
+        .execute(Operation::Validate {
+            shapes: Arc::new(shapes),
+            options: pyshacl_turbo_engine::Options::default(),
+            inplace: true,
+        })
+        .unwrap();
+    assert!(matches!(
+        session.execute(Operation::Len).unwrap(),
+        Reply::Count(1)
+    ));
+    session.finish(false).unwrap();
+}
+
+#[test]
+fn every_mutation_attempt_invalidates_prepared_validation() {
+    let options = crate::inference::InferenceOptions::default();
+    let mutations = [
+        Operation::Update("INSERT DATA {}".into(), None),
+        Operation::Load {
+            source: String::new(),
+            format: oxigraph::io::RdfFormat::Turtle,
+            base: None,
+        },
+        Operation::LoadGraph {
+            source: String::new(),
+            format: oxigraph::io::RdfFormat::Turtle,
+            base: None,
+            graph: String::new(),
+            allow_named_graphs: false,
+        },
+        Operation::Remove("[null,null,null,null]".into()),
+        Operation::Graph("{\"type\":\"uri\",\"value\":\"urn:empty\"}".into(), false),
+        Operation::Graph("{\"type\":\"uri\",\"value\":\"urn:empty\"}".into(), true),
+        Operation::InsertTerms(Box::new(super::typed::QuadInput::new(
+            ("uri".into(), "urn:s".into(), None, None),
+            ("uri".into(), "urn:p".into(), None, None),
+            ("uri".into(), "urn:o".into(), None, None),
+            None,
+        ))),
+        Operation::Infer("rdfs".into(), None, options.into()),
+        Operation::InferGraph {
+            mode: "rdfs".into(),
+            source: Some("{\"type\":\"uri\",\"value\":\"urn:empty\"}".into()),
+            destination: "{\"type\":\"uri\",\"value\":\"urn:empty\"}".into(),
+            request: Default::default(),
+        },
+    ];
+    for mutation in mutations {
+        let control = control();
+        let store = control.lock().unwrap().read().unwrap();
+        let session = Session::start(control).unwrap();
+        session.execute(insert()).unwrap();
+        let shapes =
+            pyshacl_turbo_engine::CompiledShapes::compile(oxigraph::model::Dataset::new(), false)
+                .unwrap();
+        let Reply::PreparedValidation(report) = session
+            .execute(Operation::Validate {
+                shapes: Arc::new(shapes),
+                options: Default::default(),
+                inplace: true,
+            })
+            .unwrap()
+        else {
+            panic!("Expected prepared report")
+        };
+        let (_, revision) = *report;
+        session.execute(mutation).unwrap();
+        assert!(
+            session
+                .accept_validation(revision)
+                .unwrap_err()
+                .to_string()
+                .contains("changed")
+        );
+        assert!(session.finish(true).is_err());
+        assert_eq!(store.len().unwrap(), 0);
+    }
 }

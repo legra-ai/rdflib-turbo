@@ -1,7 +1,11 @@
 """SHACL borrows the dataset runtime; data never crosses a Python conversion."""
 
+import tomllib
+from pathlib import Path
+
 import pytest
-from rdflib import Graph
+from packaging.requirements import Requirement
+from rdflib import BNode, Graph, Literal, URIRef
 from rdflib.compare import isomorphic
 from rdflib_turbo import Dataset
 from rdflib_turbo._native import SharedShapes
@@ -10,6 +14,23 @@ SHAPES = """@prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix ex: <urn:example:> .
 ex:S sh:targetNode ex:s; sh:property [sh:path ex:p; sh:minCount 1].
 """
+
+
+def report_graph(batch):
+    records, quads = batch
+    terms = []
+    for kind, value, datatype, language in records:
+        assert kind in (0, 1, 2)
+        terms.append(
+            Literal(value, lang=language, datatype=datatype, normalize=False)
+            if kind == 2
+            else (URIRef(value) if kind == 0 else BNode(value))
+        )
+    graph = Graph()
+    for subject, predicate, obj, context in quads:
+        assert context is None
+        graph.add((terms[subject], terms[predicate], terms[obj]))
+    return graph
 
 
 def test_namespace_loading_is_atomic_and_survives_copies():
@@ -45,11 +66,9 @@ def test_shared_validation_reports_without_serializing_or_copying_dataset(monkey
     assert not conforms and "Conforms: False" in text
     assert not warnings
     assert "Focus Node: ex:s" in text
-    graph = Graph().parse(data=report, format="nt")
+    graph = report_graph(report)
     assert len(graph) > 1
-    assert isomorphic(
-        graph, Graph().parse(data=program.validate(data._native, "{}", False)[1], format="nt")
-    )
+    assert isomorphic(graph, report_graph(program.validate(data._native, "{}", False)[1]))
 
 
 def test_invalid_options_fail_and_subsequent_mutations_are_visible():
@@ -112,3 +131,21 @@ def test_unknown_settings_and_invalid_focus_iris_are_hard_errors():
     for settings in ('{"focus_nodes":["not an IRI"]}', '{"max_rule_iterations":-1}', "[]"):
         with pytest.raises(ValueError):
             program.validate(data._native, settings, False)
+
+
+def test_python_test_companion_uses_the_embedded_engine_revision():
+    root = Path(__file__).resolve().parents[1]
+    cargo = tomllib.loads((root / "Cargo.toml").read_text())
+    python = tomllib.loads((root / "pyproject.toml").read_text())
+    engine = cargo["dependencies"]["pyshacl-turbo-engine"]
+    companion = python["tool"]["uv"]["sources"]["pyshacl-turbo"]
+    assert companion["git"] == engine["git"]
+    assert companion["rev"] == engine["rev"]
+
+
+def test_python_test_companion_allows_the_next_minor_release():
+    root = Path(__file__).resolve().parents[1]
+    project = tomllib.loads((root / "pyproject.toml").read_text())
+    requirements = map(Requirement, project["project"]["optional-dependencies"]["test"])
+    companion = next(item for item in requirements if item.name == "pyshacl-turbo")
+    assert "0.6.0" in companion.specifier

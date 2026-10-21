@@ -19,7 +19,9 @@ Issues = "https://github.com/legra-ai/rdflib-turbo/issues"
 
 [project.optional-dependencies]
 test = [
+    "packaging>=26.3",
     "owlrl==7.6.2",
+    "pyshacl-turbo>=0.5.0",
     "pytest<10,>=8",
     "pytest-cov>=7.1,<8",
     "ruff>=0.12",
@@ -32,7 +34,7 @@ editable-profile = "release"
 features = ["pyo3/extension-module", "persistence"]
 python-source = "python"
 module-name = "rdflib_turbo._native"
-include = [{path = ".cargo/config.toml", format = "sdist"}, {path = "uv.lock", format = "sdist"}, {path = "vendor/**/*", format = "sdist"}, {path = "tests/**/*", format = "sdist"}, {path = "docs/**/*", format = "sdist"}, {path = "scripts/**/*", format = "sdist"}, {path = ".github/**/*", format = "sdist"}, {path = "rust-toolchain.toml", format = "sdist"}]
+include = [{path = ".cargo/config.toml", format = "sdist"}, {path = "uv.lock", format = "sdist"}, {path = "build_support/**/*", format = "sdist"}, {path = "vendor/**/*", format = "sdist"}, {path = "tests/**/*", format = "sdist"}, {path = "docs/**/*", format = "sdist"}, {path = "scripts/**/*", format = "sdist"}, {path = ".github/**/*", format = "sdist"}, {path = "rust-toolchain.toml", format = "sdist"}]
 exclude = ["**/target/**/*", "**/__pycache__/**/*", "docs/plans/**", "docs/parity-evidence/**"]
 
 # Apply the same SDK minimum to user source builds and wheel tags, not just CI.
@@ -59,6 +61,17 @@ branch = true
 fail_under = 100
 show_missing = true
 
+[tool.uv.sources]
+pyshacl-turbo = { git = "https://github.com/legra-ai/pyshacl-turbo", rev = "665bf494eab65501affd6e16b08b94ef8a41900c" }
+
 [dependency-groups]
 dev = ["mypy>=1.15,<3"]
-coverage = ["rdflib==7.6.0", "owlrl==7.6.2", "pyshacl==0.40.1", "pyshacl-turbo==0.3.1", "pytest==9.1.1", "pytest-cov==7.1.0", "ruff==0.17.1"]
+coverage = [
+    "rdflib==7.6.0",
+    "owlrl==7.6.2",
+    "pyshacl==0.40.1",
+    "pyshacl-turbo==0.5.1",
+    "pytest==9.1.1",
+    "pytest-cov==7.1.0",
+    "ruff==0.17.1",
+]

@@ -84,6 +84,7 @@ pub fn infer_graph_pattern_types(
             );
             types
         }
+        GraphPattern::RdfLibFilter { inner, .. } => infer_graph_pattern_types(inner, types),
         GraphPattern::Filter { inner, expression } => {
             let mut types = infer_graph_pattern_types(inner, types);
             refine_positive_filter_bindings(expression, &mut types);
@@ -111,7 +112,11 @@ pub fn infer_graph_pattern_types(
                     .inner
                     .into_iter()
                     .filter(|(v, _)| variables.contains(v))
-                    .chain(aggregates.iter().map(|(v, _)| (v.clone(), VariableType::ANY))) //TODO: guess from aggregate
+                    .chain(
+                        aggregates
+                            .iter()
+                            .map(|(v, _)| (v.clone(), VariableType::ANY)),
+                    ) //TODO: guess from aggregate
                     .collect(),
             }
         }
@@ -333,7 +338,12 @@ pub struct VariableTypes {
 
 impl VariableTypes {
     pub(crate) fn with_bound_variables(variables: impl IntoIterator<Item = Variable>) -> Self {
-        Self { inner: variables.into_iter().map(|v| (v, VariableType::TERM)).collect() }
+        Self {
+            inner: variables
+                .into_iter()
+                .map(|v| (v, VariableType::TERM))
+                .collect(),
+        }
     }
 
     pub fn get(&self, variable: &Variable) -> VariableType {
