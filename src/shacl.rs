@@ -18,8 +18,8 @@ mod report;
 pub(crate) use report::Report;
 
 mod commit;
+mod dataset_validation;
 mod expansion;
-use commit::Prepared;
 
 pyo3::create_exception!(_native, SharedValidationFailure, PyValueError);
 
@@ -217,48 +217,19 @@ impl SharedShapes {
         settings: &str,
         inplace: bool,
     ) -> PyResult<Output> {
-        let mut options = Settings::parse(settings)?;
-        let prepared = py.detach(|| -> PyResult<Prepared<Output>> {
-            if !inplace || !self.inner.has_active_rules(&options) {
-                let data = dataset
-                    .inner
-                    .read()
-                    .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
-                options.namespaces = data.namespaces.clone();
-                return Ok(Prepared::report(output(
-                    self.inner
-                        .validate_staged(&data.data, options)
-                        .map_err(error)?,
-                )?));
-            }
-            let mut data = dataset
-                .inner
-                .write()
-                .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
-            options.namespaces = data.namespaces.clone();
-            let revision = data.next_revision()?;
-            let outcome = self
-                .inner
-                .validate_delta(&data.data, options)
-                .map_err(error)?;
-            let mut result = output(outcome.report)?;
-            if result.3.is_empty() {
-                data.extend(outcome.additions.iter());
-                data.revision = revision;
-                Ok(Prepared::report(result))
-            } else {
-                let warnings = std::mem::take(&mut result.3);
-                Ok(Prepared::staged(
-                    result,
-                    outcome.additions,
-                    data.revision,
-                    warnings,
-                ))
-            }
-        })?;
-        // The source adapter adds a generator and contextlib frame.
-        prepared.finish(py, dataset, 4)
+        self.validate_dataset(py, dataset, settings, inplace)
     }
+
+    fn prepare_dataset(
+        &self,
+        py: Python<'_>,
+        dataset: Py<NativeDataset>,
+        settings: &str,
+        inplace: bool,
+    ) -> PyResult<dataset_validation::PreparedDatasetValidation> {
+        self.prepare_dataset_validation(py, dataset, settings, inplace)
+    }
+
     fn validate_store(
         &self,
         py: Python<'_>,
@@ -314,6 +285,7 @@ impl SharedShapes {
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<SharedShapes>()?;
+    module.add_class::<dataset_validation::PreparedDatasetValidation>()?;
     module.add_class::<crate::store::PreparedValidation>()?;
     module.add("SHARED_SHACL_PROTOCOL", 1)?;
     module.add(

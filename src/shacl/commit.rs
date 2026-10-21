@@ -7,9 +7,57 @@ use super::Output;
 use crate::NativeDataset;
 use oxigraph::model::Dataset;
 
-struct Pending {
-    additions: Dataset,
+pub(super) struct Pending {
+    additions: Option<Dataset>,
     expected_revision: u64,
+}
+
+impl Pending {
+    pub(super) fn new(additions: Dataset, expected_revision: u64) -> Self {
+        Self {
+            additions: Some(additions),
+            expected_revision,
+        }
+    }
+
+    pub(super) fn readonly(expected_revision: u64) -> Self {
+        Self {
+            additions: None,
+            expected_revision,
+        }
+    }
+
+    pub(super) fn apply(self, py: Python<'_>, dataset: &NativeDataset) -> PyResult<()> {
+        py.detach(|| {
+            if self.additions.is_none() {
+                let current = dataset
+                    .inner
+                    .read()
+                    .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
+                return self.check_revision(current.revision);
+            }
+            let mut current = dataset
+                .inner
+                .write()
+                .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
+            self.check_revision(current.revision)?;
+            if let Some(additions) = self.additions {
+                let revision = current.next_revision()?;
+                current.extend(additions.iter());
+                current.revision = revision;
+            }
+            Ok(())
+        })
+    }
+
+    fn check_revision(&self, actual: u64) -> PyResult<()> {
+        if actual != self.expected_revision {
+            return Err(PyRuntimeError::new_err(
+                "Dataset changed while processing validation warnings or report output",
+            ));
+        }
+        Ok(())
+    }
 }
 
 pub(super) struct Prepared<T> {
@@ -36,10 +84,7 @@ impl<T> Prepared<T> {
         Self {
             output,
             warnings,
-            pending: Some(Pending {
-                additions,
-                expected_revision,
-            }),
+            pending: Some(Pending::new(additions, expected_revision)),
         }
     }
 
@@ -51,21 +96,7 @@ impl<T> Prepared<T> {
     ) -> PyResult<T> {
         self.emit_warnings(py, warning_stacklevel)?;
         if let Some(pending) = self.pending {
-            py.detach(|| {
-                let mut current = dataset
-                    .inner
-                    .write()
-                    .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
-                if current.revision != pending.expected_revision {
-                    return Err(PyRuntimeError::new_err(
-                        "Dataset changed while processing validation warnings",
-                    ));
-                }
-                let revision = current.next_revision()?;
-                current.extend(pending.additions.iter());
-                current.revision = revision;
-                Ok(())
-            })?;
+            pending.apply(py, dataset)?;
         }
         Ok(self.output)
     }
