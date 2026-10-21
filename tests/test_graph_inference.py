@@ -9,6 +9,27 @@ from rdflib_turbo import Graph, Store, StoreDataset
 EX = Namespace("urn:scoped-inference:")
 
 
+@pytest.mark.parametrize("union", [False, True])
+@pytest.mark.parametrize("mode", ["rdfs", "owlrl", "both"])
+def test_literal_identity_publication_uses_destination_membership(union, mode):
+    source = StoreDataset() if union else Graph(store=Store(), identifier=EX.source)
+    input_graph = source.graph(EX.source) if union else source
+    statement = (EX.x, EX.label, Literal("label"))
+    input_graph.add(statement)
+    destination = (
+        source.graph(EX.destination)
+        if union
+        else Graph(store=source.store, identifier=EX.destination)
+    )
+    source.infer(inference=mode, destination=destination)
+    assert (statement in destination) is (mode == "rdfs")
+    assert statement in input_graph
+    # Repeated reference closure may add schema facts, but never duplicate this SPO.
+    source.infer(inference=mode, destination=destination)
+    assert len(list(destination.triples(statement))) == (1 if mode == "rdfs" else 0)
+    assert len(input_graph) == 1
+
+
 @pytest.mark.parametrize("identifier", [None, EX.source, BNode("source")])
 def test_graph_inference_borrows_only_its_own_scope(identifier, monkeypatch):
     graph = Graph() if identifier is None else Graph(store=Store(), identifier=identifier)
