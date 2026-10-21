@@ -6,13 +6,9 @@
 //! They access no PyObject, refcount, interpreter state, error indicator or GIL.
 //! Source: https://github.com/python/cpython/blob/3.14/Objects/unicodectype.c
 
-use std::ffi::c_int;
-
-unsafe extern "C" {
-    fn _PyUnicode_IsAlpha(ch: u32) -> c_int;
-    fn _PyUnicode_IsNumeric(ch: u32) -> c_int;
-    fn _PyUnicode_IsWhitespace(ch: u32) -> c_int;
-}
+// PyO3 uses raw-dylib imports on Windows. Its import metadata covers only its
+// own declarations; these additional symbols need the same selected DLL name.
+include!(concat!(env!("OUT_DIR"), "/python_scalar_imports.rs"));
 
 pub(super) fn decimal(ch: char) -> Option<u8> {
     // SAFETY: char is a valid Unicode scalar; this pure const-table lookup

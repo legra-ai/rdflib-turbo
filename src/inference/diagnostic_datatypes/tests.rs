@@ -234,3 +234,21 @@ fn cardinality_zero_uses_rdflib_values_separately_from_alt_diagnostics() {
         assert_eq!(cardinality_zero(&literal, &context), expected, "{literal}");
     }
 }
+
+#[test]
+fn unicode_scalar_imports_remain_available_on_detached_workers() {
+    pyo3::Python::initialize();
+    pyo3::Python::attach(|py| {
+        py.detach(|| {
+            std::thread::spawn(|| {
+                assert!(unicode::word('\u{2167}'));
+                assert!(unicode::word('\u{4e2d}'));
+                assert!(unicode::whitespace('\u{202f}'));
+                assert!(!unicode::whitespace('\u{200b}'));
+                assert!(!unicode::word('\u{200b}'));
+            })
+            .join()
+            .unwrap()
+        });
+    });
+}
