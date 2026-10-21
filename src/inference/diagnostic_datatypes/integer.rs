@@ -7,8 +7,15 @@ pub(super) fn digits(text: &str, radix: u8, limit: usize) -> Option<(bool, Strin
     if text.starts_with(['-', '+']) {
         text = &text[1..];
     }
-    if radix == 16 && (text.starts_with("0x") || text.starts_with("0X")) {
-        text = &text[2..];
+    let mut prefix = text.char_indices();
+    let hexadecimal_prefix_end = match (prefix.next(), prefix.next()) {
+        (Some((_, zero)), Some((offset, 'x' | 'X'))) if unicode::decimal(zero) == Some(0) => {
+            Some(offset + 1)
+        }
+        _ => None,
+    };
+    if let Some(end) = hexadecimal_prefix_end.filter(|_| radix == 16) {
+        text = &text[end..];
         if text.starts_with('_') {
             text = &text[1..];
         }

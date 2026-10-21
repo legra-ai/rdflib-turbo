@@ -258,3 +258,8 @@
 {"datatype": "http://www.w3.org/2001/XMLSchema#boolean", "lexical": " false ", "expected": "diagnostic"}
 {"datatype": "http://www.w3.org/2001/XMLSchema#token", "lexical": "a\u001cb", "expected": "valid"}
 {"datatype": "http://www.w3.org/2001/XMLSchema#token", "lexical": "a\u0085b", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#hexBinary", "lexical": "０xF", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#hexBinary", "lexical": "٠xF", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#hexBinary", "lexical": "０X_F", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#hexBinary", "lexical": "0x_F", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#hexBinary", "lexical": "٠_xF", "expected": "diagnostic"}
