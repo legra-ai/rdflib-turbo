@@ -4,6 +4,8 @@
 #![doc(html_favicon_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/main/logo.svg")]
 #![doc(html_logo_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/main/logo.svg")]
 
+#[cfg(test)]
+mod construct_tests;
 mod dataset;
 mod error;
 mod eval;
@@ -12,6 +14,7 @@ mod model;
 #[cfg(feature = "cached-query-plans")]
 mod plan_cache;
 mod service;
+mod source_identity;
 mod update;
 
 #[cfg(feature = "sparql-12")]
@@ -26,6 +29,7 @@ use crate::expression::{
 pub use crate::model::{QueryResults, QuerySolution, QuerySolutionIter, QueryTripleIter};
 use crate::service::ServiceHandlerRegistry;
 pub use crate::service::{DefaultServiceHandler, ServiceHandler};
+pub use crate::source_identity::implementation_fingerprint;
 pub use crate::update::{DeleteInsertIter, DeleteInsertQuad};
 use json_event_parser::{JsonEvent, WriterJsonSerializer};
 use oxiri::Iri;
@@ -1436,4 +1440,11 @@ mod tests {
 }
 
 #[cfg(test)]
-mod construct_tests;
+mod source_identity_tests {
+    #[test]
+    fn compiled_evaluator_identity_is_a_compact_build_digest() {
+        let digest = super::implementation_fingerprint();
+        assert_eq!(digest.len(), 64);
+        assert!(digest.bytes().all(|byte| byte.is_ascii_hexdigit()));
+    }
+}
