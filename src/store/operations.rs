@@ -39,7 +39,7 @@ pub(super) enum Operation {
         base: Option<String>,
     },
     Update(String),
-Infer(String, Option<String>, crate::inference::InferenceOptions),
+    Infer(String, Option<String>, crate::inference::InferenceOptions),
     InferGraph {
         mode: String,
         source: Option<String>,
@@ -214,7 +214,7 @@ impl Operation {
                 )?;
                 Ok(Reply::Done)
             }
-Self::Infer(mode, destination, options) => {
+            Self::Infer(mode, destination, options) => {
                 if !matches!(mode.as_str(), "rdfs" | "owlrl" | "both") {
                     return Err(Error::Invalid(format!("Unknown inference mode: {mode}")));
                 }
