@@ -10,8 +10,12 @@ check: test
 	uv run --locked --extra test ruff check python tests scripts
 	uv run --locked --extra test ruff format --check python tests scripts
 
-test:
+test: test-build-metadata
 	uv run --locked --extra test pytest tests -q --cov=rdflib_turbo --cov-branch --cov-fail-under=100
+
+.PHONY: test-build-metadata
+test-build-metadata:
+	cargo test --locked --manifest-path tests/build-metadata/Cargo.toml
 
 build:
 	uv build

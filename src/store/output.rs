@@ -45,10 +45,15 @@ impl<'a> From<&'a Term> for TermOutput<'a> {
 pub(super) fn prepare_query(
     source: &str,
     union: bool,
+    rdflib_context: bool,
 ) -> Result<(PreparedSparqlQuery, &'static str)> {
-    let parsed = spargebra::SparqlParser::new()
-        .parse_query(source)
-        .map_err(invalid)?;
+    let parser = spargebra::SparqlParser::new();
+    let parser = if rdflib_context {
+        parser.with_rdflib_query_context()
+    } else {
+        parser
+    };
+    let parsed = parser.parse_query(source).map_err(invalid)?;
     let kind = if matches!(parsed, spargebra::Query::Describe { .. }) {
         "DESCRIBE"
     } else {

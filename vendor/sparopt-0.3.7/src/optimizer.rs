@@ -22,14 +22,63 @@ impl Optimizer {
         variables: impl IntoIterator<Item = Variable>,
     ) -> GraphPattern {
         let types = VariableTypes::with_bound_variables(variables);
-        let pattern = Self::normalize_pattern(pattern, &types);
-        let pattern = Self::reorder_joins(pattern, &types);
-        Self::push_filters(pattern, Vec::new(), &types)
+        Self::optimize_preserving_scope(pattern, &types)
+    }
+
+    fn optimize_preserving_scope(mut pattern: GraphPattern, types: &VariableTypes) -> GraphPattern {
+        if pattern.contains_rdflib_scope() {
+            // Keep ancestor operator boundaries and ordering: changing the entry
+            // domain of a scoped FILTER changes inherited-vs-new bindings. Only
+            // independent children receive the ordinary optimization pipeline;
+            // no inferred facts cross this boundary.
+            match &mut pattern {
+                GraphPattern::RdfLibFilter { .. } => (),
+                GraphPattern::Join { left, right, .. }
+                | GraphPattern::LeftJoin { left, right, .. }
+                | GraphPattern::Minus { left, right, .. } => {
+                    Self::optimize_scope_child(left, types);
+                    Self::optimize_scope_child(right, types);
+                }
+                #[cfg(feature = "sep-0006")]
+                GraphPattern::Lateral { left, right } => {
+                    Self::optimize_scope_child(left, types);
+                    Self::optimize_scope_child(right, types);
+                }
+                GraphPattern::Filter { inner, .. }
+                | GraphPattern::Extend { inner, .. }
+                | GraphPattern::OrderBy { inner, .. }
+                | GraphPattern::Project { inner, .. }
+                | GraphPattern::Distinct { inner }
+                | GraphPattern::Reduced { inner }
+                | GraphPattern::Slice { inner, .. }
+                | GraphPattern::Service { inner, .. }
+                | GraphPattern::Group { inner, .. } => Self::optimize_scope_child(inner, types),
+                GraphPattern::Union { inner } => {
+                    for child in inner {
+                        Self::optimize_scope_child(child, types);
+                    }
+                }
+                GraphPattern::QuadPattern { .. }
+                | GraphPattern::Path { .. }
+                | GraphPattern::Graph { .. }
+                | GraphPattern::Values { .. } => unreachable!("leaf has no RDFLib scope"),
+            }
+            return pattern;
+        }
+        let pattern = Self::normalize_pattern(pattern, types);
+        let pattern = Self::reorder_joins(pattern, types);
+        Self::push_filters(pattern, Vec::new(), types)
+    }
+
+    fn optimize_scope_child(pattern: &mut GraphPattern, types: &VariableTypes) {
+        let owned = std::mem::replace(pattern, GraphPattern::empty());
+        *pattern = Self::optimize_preserving_scope(owned, types);
     }
 
     /// Normalize the pattern, discarding any join ordering information
     fn normalize_pattern(pattern: GraphPattern, input_types: &VariableTypes) -> GraphPattern {
         match pattern {
+            pattern @ GraphPattern::RdfLibFilter { .. } => pattern,
             GraphPattern::QuadPattern {
                 subject,
                 predicate,
@@ -288,6 +337,16 @@ impl Optimizer {
         input_types: &VariableTypes,
     ) -> GraphPattern {
         match pattern {
+            pattern @ GraphPattern::RdfLibFilter { .. } => {
+                if filters.is_empty() {
+                    pattern
+                } else {
+                    GraphPattern::Filter {
+                        inner: Box::new(pattern),
+                        expression: Expression::and_all(filters),
+                    }
+                }
+            }
             GraphPattern::QuadPattern { .. }
             | GraphPattern::Path { .. }
             | GraphPattern::Graph { .. }
@@ -487,6 +546,7 @@ impl Optimizer {
 
     fn reorder_joins(pattern: GraphPattern, input_types: &VariableTypes) -> GraphPattern {
         match pattern {
+            pattern @ GraphPattern::RdfLibFilter { .. } => pattern,
             GraphPattern::QuadPattern { .. }
             | GraphPattern::Path { .. }
             | GraphPattern::Values { .. }
@@ -743,6 +803,7 @@ fn is_fit_for_for_loop_join(
 ) -> bool {
     // TODO: think more about it
     match pattern {
+        GraphPattern::RdfLibFilter { .. } => false,
         GraphPattern::Values { .. }
         | GraphPattern::QuadPattern { .. }
         | GraphPattern::Path { .. }
@@ -939,6 +1000,12 @@ fn estimate_graph_pattern_size(pattern: &GraphPattern, input_types: &VariableTyp
             algorithm,
             ..
         } => match algorithm {
+            LeftJoinAlgorithm::RdfLib { .. } => estimate_lateral_cost(
+                left,
+                &infer_graph_pattern_types(left, input_types.clone()),
+                right,
+                input_types,
+            ),
             LeftJoinAlgorithm::HashBuildRightProbeLeft { keys } => {
                 let left_size = estimate_graph_pattern_size(left, input_types);
                 max(
@@ -965,6 +1032,7 @@ fn estimate_graph_pattern_size(pattern: &GraphPattern, input_types: &VariableTyp
             .fold(0, usize::saturating_add),
         GraphPattern::Minus { left, .. } => estimate_graph_pattern_size(left, input_types),
         GraphPattern::Filter { inner, .. }
+        | GraphPattern::RdfLibFilter { inner, .. }
         | GraphPattern::Extend { inner, .. }
         | GraphPattern::OrderBy { inner, .. }
         | GraphPattern::Project { inner, .. }
@@ -994,6 +1062,12 @@ fn estimate_join_cost(
     input_types: &VariableTypes,
 ) -> usize {
     match algorithm {
+        JoinAlgorithm::RdfLibLazy => {
+            let left_types = infer_graph_pattern_types(left, input_types.clone());
+            estimate_lateral_cost(left, &left_types, right, input_types)
+        }
+        JoinAlgorithm::RdfLibIndependent => estimate_graph_pattern_size(left, input_types)
+            .saturating_mul(estimate_graph_pattern_size(right, input_types)),
         JoinAlgorithm::HashBuildLeftProbeRight { keys } => {
             estimate_graph_pattern_size(left, input_types)
                 .saturating_mul(estimate_graph_pattern_size(right, input_types))

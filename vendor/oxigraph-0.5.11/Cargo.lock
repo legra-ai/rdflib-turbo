@@ -1019,6 +1019,7 @@ dependencies = [
  "oxsdatatypes",
  "rand",
  "rustc-hash",
+ "sha2",
  "siphasher",
  "sparesults",
  "spareval",
@@ -1108,6 +1109,7 @@ name = "oxsdatatypes"
 version = "0.2.3"
 dependencies = [
  "js-sys",
+ "sha2",
  "thiserror 1.0.69",
 ]
 
@@ -1704,6 +1706,7 @@ dependencies = [
  "oxrdf",
  "peg",
  "rand",
+ "sha2",
  "thiserror 1.0.69",
 ]
 
@@ -1713,6 +1716,7 @@ version = "0.3.7"
 dependencies = [
  "oxrdf",
  "rand",
+ "sha2",
  "spargebra",
 ]
 
@@ -2203,4 +2207,4 @@ checksum = "b8848ee67ecc8aedbaf3e4122217aff892639231befc6a1b58d29fff4c2cabaa"
 [[patch.unused]]
 name = "fancy-regex"
 version = "0.19.2"
-source = "git+https://github.com/legra-ai/pyshacl-turbo?rev=ce41f79d23561690fb760fda252af0e197187731#ce41f79d23561690fb760fda252af0e197187731"
+source = "git+https://github.com/legra-ai/pyshacl-turbo?rev=665bf494eab65501affd6e16b08b94ef8a41900c#665bf494eab65501affd6e16b08b94ef8a41900c"

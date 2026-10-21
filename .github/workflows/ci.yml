@@ -181,6 +181,8 @@ jobs:
           components: rustfmt
       - run: cargo +nightly-2026-10-16 fmt --check
       - run: cargo clippy --locked -- -D warnings
+      - name: Immutable native engine source metadata
+        run: make test-build-metadata
       - name: Patched datatype parser regressions
         run: cargo test --locked -p oxsdatatypes --lib
       - name: CONSTRUCT ownership and identity regressions

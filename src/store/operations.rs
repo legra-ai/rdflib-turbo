@@ -21,7 +21,8 @@ pub(super) enum Operation {
     Remove(String),
     Match(String),
     Count(String),
-    QueryGraph(String, String),
+    QueryGraph(String, String, Option<String>),
+    QueryPrepared(String, Option<String>, bool, Option<String>),
     LoadGraph {
         source: String,
         format: RdfFormat,
@@ -39,14 +40,14 @@ pub(super) enum Operation {
         format: RdfFormat,
         base: Option<String>,
     },
-    Update(String),
+    Update(String, Option<String>),
     Infer(String, Option<String>, crate::inference::InferenceOptions),
     InferGraph {
         mode: String,
         source: Option<String>,
         destination: String,
     },
-    Query(String, bool),
+    Query(String, bool, Option<String>),
     Dump(RdfFormat),
 }
 
@@ -70,7 +71,7 @@ impl Operation {
             | Self::LoadGraph { .. }
             | Self::Graph(_, _)
             | Self::Load { .. }
-            | Self::Update(_)
+            | Self::Update(..)
             | Self::Infer(..)
             | Self::InferGraph { .. } => true,
             Self::Validate { .. }
@@ -82,6 +83,7 @@ impl Operation {
             | Self::GraphLen(_)
             | Self::Len
             | Self::Query(..)
+            | Self::QueryPrepared(..)
             | Self::Dump(_) => false,
         }
     }
@@ -200,13 +202,29 @@ impl Operation {
                 ))
                 .map(Reply::Text)
             }
-            Self::QueryGraph(source, graph) => {
-                let (mut query, kind) = prepare_query(&source, false)?;
+            Self::QueryPrepared(source, graph, union, bindings) => {
+                let bindings = super::bindings::InitialBindings::parse(bindings.as_deref())?;
+                let (mut query, kind) = super::prepared::prepare(&source, union, bindings.names())?;
+                if let Some(graph) = graph
+                    && query.dataset().is_default_dataset()
+                {
+                    query
+                        .dataset_mut()
+                        .set_default_graph(vec![pattern::graph(&graph)?]);
+                }
+                let query = bindings.apply(query)?;
+                let (kind, output) =
+                    query_output(query.on_transaction(transaction).execute()?, kind)?;
+                Ok(Reply::Query(kind, output))
+            }
+            Self::QueryGraph(source, graph, bindings) => {
+                let (mut query, kind) = prepare_query(&source, false, bindings.is_some())?;
                 if query.dataset().is_default_dataset() {
                     query
                         .dataset_mut()
                         .set_default_graph(vec![pattern::graph(&graph)?]);
                 }
+                let query = super::bindings::apply(query, bindings.as_deref())?;
                 let results = query.on_transaction(transaction).execute()?;
                 let (kind, output) = query_output(results, kind)?;
                 Ok(Reply::Query(kind, output))
@@ -254,17 +272,28 @@ impl Operation {
                 crate::inference::expand_transaction(transaction, &mode, destination, options)?;
                 Ok(Reply::Done)
             }
-            Self::Update(source) => {
-                SparqlEvaluator::new()
-                    .parse_update(&source)
-                    .map_err(invalid)?
+            Self::Update(source, bindings) => {
+                let evaluator = SparqlEvaluator::new();
+                let evaluator = if bindings.is_some() {
+                    evaluator.with_rdflib_query_context()
+                } else {
+                    evaluator
+                };
+                let update = evaluator.parse_update(&source).map_err(invalid)?;
+                let update = if let Some(bindings) = bindings {
+                    update.with_initial_bindings(super::bindings::decode(&bindings)?)
+                } else {
+                    update
+                };
+                update
                     .on_transaction(transaction)
                     .execute()
                     .map_err(runtime)?;
                 Ok(Reply::Done)
             }
-            Self::Query(source, union) => {
-                let (query, kind) = prepare_query(&source, union)?;
+            Self::Query(source, union, bindings) => {
+                let (query, kind) = prepare_query(&source, union, bindings.is_some())?;
+                let query = super::bindings::apply(query, bindings.as_deref())?;
                 let results = query.on_transaction(transaction).execute()?;
                 let (kind, output) = query_output(results, kind)?;
                 Ok(Reply::Query(kind, output))

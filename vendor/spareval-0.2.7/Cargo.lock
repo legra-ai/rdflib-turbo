@@ -139,6 +139,7 @@ dependencies = [
  "oxiri",
  "oxsdatatypes",
  "rand",
+ "sha2",
  "thiserror",
 ]
 
@@ -146,6 +147,7 @@ dependencies = [
 name = "oxsdatatypes"
 version = "0.2.3"
 dependencies = [
+ "sha2",
  "thiserror",
 ]
 
@@ -376,6 +378,7 @@ dependencies = [
  "oxrdf",
  "peg",
  "rand",
+ "sha2",
  "thiserror",
 ]
 
@@ -385,6 +388,7 @@ version = "0.3.7"
 dependencies = [
  "oxrdf",
  "rand",
+ "sha2",
  "spargebra",
 ]
 
@@ -480,7 +484,7 @@ dependencies = [
 [[patch.unused]]
 name = "fancy-regex"
 version = "0.19.2"
-source = "git+https://github.com/legra-ai/pyshacl-turbo?rev=ce41f79d23561690fb760fda252af0e197187731#ce41f79d23561690fb760fda252af0e197187731"
+source = "git+https://github.com/legra-ai/pyshacl-turbo?rev=665bf494eab65501affd6e16b08b94ef8a41900c#665bf494eab65501affd6e16b08b94ef8a41900c"
 
 [[patch.unused]]
 name = "oxigraph"

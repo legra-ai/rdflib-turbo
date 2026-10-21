@@ -155,6 +155,15 @@ def test_wrong_interpreter_is_rejected(tmp_path, monkeypatch):
         driver(monkeypatch).verify_loaded_package(wheel, "3.99", environment)
 
 
+def metadata_wheel(path):
+    with ZipFile(path, "w") as archive:
+        archive.writestr(
+            "rdflib_turbo-0.0.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: rdflib-turbo\nVersion: 0.0.0\n",
+        )
+    return path
+
+
 def test_wheel_environment_imports_locked_companion_before_artifact(tmp_path, monkeypatch):
     module = driver(monkeypatch)
     commands = []
@@ -162,7 +171,7 @@ def test_wheel_environment_imports_locked_companion_before_artifact(tmp_path, mo
     monkeypatch.setattr(
         module.subprocess, "run", lambda command, **kwargs: commands.append(command)
     )
-    wheel = tmp_path / "candidate.whl"
+    wheel = metadata_wheel(tmp_path / "candidate.whl")
     module.test_installed_wheel(wheel, "3.13")
     export = next(command for command in commands if command[:2] == ["uv", "export"])
     assert "--locked" in export and "--no-emit-project" in export
@@ -187,7 +196,7 @@ def test_dependency_export_failure_stops_wheel_installation(tmp_path, monkeypatc
 
     monkeypatch.setattr(module.subprocess, "run", fail)
     with pytest.raises(subprocess.CalledProcessError):
-        module.test_installed_wheel(tmp_path / "candidate.whl", "3.13")
+        module.test_installed_wheel(metadata_wheel(tmp_path / "candidate.whl"), "3.13")
     assert len(commands) == 1
 
 
@@ -195,6 +204,7 @@ def test_dependency_export_failure_stops_wheel_installation(tmp_path, monkeypatc
 def test_isolated_project_is_bounded_to_its_native_wheel_abi(tmp_path, monkeypatch, version, upper):
     module = driver(monkeypatch)
     commands = []
+    monkeypatch.setattr(module, "verify_metadata", lambda wheel: None)
     monkeypatch.setattr(module, "verify_licenses", lambda wheel: None)
     monkeypatch.setattr(
         module.subprocess, "run", lambda command, **kwargs: commands.append(command)

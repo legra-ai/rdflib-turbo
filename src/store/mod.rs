@@ -1,8 +1,10 @@
 //! Native storage and transaction handles, owned by this extension only.
+mod bindings;
 mod input_terms;
 mod operations;
 pub(crate) mod output;
 mod pattern;
+mod prepared;
 mod read;
 mod read_input;
 mod session;
@@ -234,21 +236,50 @@ impl NativeStore {
         .map_err(error)
     }
 
-    fn update(&self, py: Python<'_>, source: String) -> PyResult<()> {
-        py.detach(|| self.mutate(Operation::Update(source)))
+    #[pyo3(signature = (source, bindings=None))]
+    fn update(&self, py: Python<'_>, source: String, bindings: Option<String>) -> PyResult<()> {
+        py.detach(|| self.mutate(Operation::Update(source, bindings)))
             .map_err(error)
     }
 
-    #[pyo3(signature = (source, default_union=false))]
+    #[pyo3(signature = (source, graph=None, union=false, bindings=None))]
+    fn query_prepared(
+        &self,
+        py: Python<'_>,
+        source: &str,
+        graph: Option<&str>,
+        union: bool,
+        bindings: Option<&str>,
+    ) -> PyResult<(String, String)> {
+        py.detach(|| {
+            let store = self.snapshot()?;
+            let bindings = bindings::InitialBindings::parse(bindings)?;
+            let (mut query, kind) = prepared::prepare(source, union, bindings.names())?;
+            if let Some(graph) = graph
+                && query.dataset().is_default_dataset()
+            {
+                query
+                    .dataset_mut()
+                    .set_default_graph(vec![pattern::graph(graph)?]);
+            }
+            let query = bindings.apply(query)?;
+            output::query_output(query.on_store(&store).execute()?, kind)
+        })
+        .map_err(error)
+    }
+
+    #[pyo3(signature = (source, default_union=false, bindings=None))]
     fn query(
         &self,
         py: Python<'_>,
         source: &str,
         default_union: bool,
+        bindings: Option<&str>,
     ) -> PyResult<(String, String)> {
         py.detach(|| {
             let store = self.snapshot()?;
-            let (query, kind) = output::prepare_query(source, default_union)?;
+            let (query, kind) = output::prepare_query(source, default_union, bindings.is_some())?;
+            let query = bindings::apply(query, bindings)?;
             output::query_output(query.on_store(&store).execute()?, kind)
         })
         .map_err(error)
@@ -347,15 +378,23 @@ impl NativeStore {
         .map_err(error)
     }
 
-    fn query_graph(&self, py: Python<'_>, source: &str, graph: &str) -> PyResult<(String, String)> {
+    #[pyo3(signature = (source, graph, bindings=None))]
+    fn query_graph(
+        &self,
+        py: Python<'_>,
+        source: &str,
+        graph: &str,
+        bindings: Option<&str>,
+    ) -> PyResult<(String, String)> {
         py.detach(|| {
             let store = self.snapshot()?;
-            let (mut query, kind) = output::prepare_query(source, false)?;
+            let (mut query, kind) = output::prepare_query(source, false, bindings.is_some())?;
             if query.dataset().is_default_dataset() {
                 query
                     .dataset_mut()
                     .set_default_graph(vec![pattern::graph(graph)?]);
             }
+            let query = bindings::apply(query, bindings)?;
             output::query_output(query.on_store(&store).execute()?, kind)
         })
         .map_err(error)

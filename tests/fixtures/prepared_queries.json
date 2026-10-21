@@ -1,0 +1,516 @@
+[
+  {
+    "name": "select",
+    "snapshot": "{\"form\":\"select\",\"base\":null,\"pattern\":{\"kind\":\"project\",\"inner\":{\"kind\":\"bgp\",\"triples\":[[{\"variable\":\"s\"},{\"term\":{\"type\":\"uri\",\"value\":\"urn:p\"}},{\"variable\":\"o\"}]]},\"variables\":[\"s\"]},\"template\":[],\"describe\":[],\"dataset\":[]}",
+    "count": 2,
+    "source": "SELECT ?s WHERE {?s <urn:p> ?o}"
+  },
+  {
+    "name": "ask",
+    "snapshot": "{\"form\":\"ask\",\"base\":null,\"pattern\":{\"kind\":\"project\",\"inner\":{\"kind\":\"bgp\",\"triples\":[[{\"variable\":\"s\"},{\"term\":{\"type\":\"uri\",\"value\":\"urn:p\"}},{\"variable\":\"o\"}]]},\"variables\":[\"o\",\"s\"]},\"template\":[],\"describe\":[],\"dataset\":[]}",
+    "count": 1,
+    "source": "ASK {?s <urn:p> ?o}"
+  },
+  {
+    "name": "construct",
+    "snapshot": "{\"form\":\"construct\",\"base\":null,\"pattern\":{\"kind\":\"project\",\"inner\":{\"kind\":\"bgp\",\"triples\":[[{\"variable\":\"s\"},{\"term\":{\"type\":\"uri\",\"value\":\"urn:p\"}},{\"variable\":\"o\"}]]},\"variables\":[\"o\",\"s\"]},\"template\":[[{\"variable\":\"s\"},{\"term\":{\"type\":\"uri\",\"value\":\"urn:q\"}},{\"variable\":\"o\"}]],\"describe\":[],\"dataset\":[]}",
+    "count": 2,
+    "source": "CONSTRUCT {?s <urn:q> ?o} WHERE {?s <urn:p> ?o}"
+  },
+  {
+    "name": "describe",
+    "snapshot": "{\"form\":\"describe\",\"base\":null,\"pattern\":{\"kind\":\"bgp\",\"triples\":[]},\"template\":[],\"describe\":[{\"term\":{\"type\":\"uri\",\"value\":\"urn:a\"}}],\"dataset\":[]}",
+    "count": 2,
+    "source": "DESCRIBE <urn:a>"
+  },
+  {
+    "name": "optional",
+    "snapshot": "{\"form\":\"select\",\"base\":null,\"pattern\":{\"kind\":\"project\",\"inner\":{\"kind\":\"optional\",\"left\":{\"kind\":\"bgp\",\"triples\":[[{\"variable\":\"s\"},{\"term\":{\"type\":\"uri\",\"value\":\"urn:p\"}},{\"variable\":\"o\"}]]},\"right\":{\"kind\":\"bgp\",\"triples\":[[{\"variable\":\"s\"},{\"term\":{\"type\":\"uri\",\"value\":\"urn:q\"}},{\"variable\":\"v\"}]]},\"expression\":{\"kind\":\"binary\",\"operator\":\"=\",\"left\":{\"kind\":\"atom\",\"value\":{\"variable\":\"v\"}},\"right\":{\"kind\":\"atom\",\"value\":{\"term\":{\"type\":\"literal\",\"value\":\"no\"}}}},\"variables\":{\"state\":\"present\",\"keys\":[{\"kind\":\"variable\",\"name\":\"o\"},{\"kind\":\"variable\",\"name\":\"s\"}]}},\"variables\":[\"s\",\"v\"]},\"template\":[],\"describe\":[],\"dataset\":[]}",
+    "count": 2,
+    "source": "SELECT ?s ?v WHERE {?s <urn:p> ?o OPTIONAL {?s <urn:q> ?v FILTER(?v=\"no\")}}"
+  },
+  {
+    "name": "exists",
+    "snapshot": "{\"form\":\"select\",\"base\":null,\"pattern\":{\"kind\":\"project\",\"inner\":{\"kind\":\"filter\",\"inner\":{\"kind\":\"bgp\",\"triples\":[[{\"variable\":\"s\"},{\"term\":{\"type\":\"uri\",\"value\":\"urn:p\"}},{\"variable\":\"o\"}]]},\"expression\":{\"kind\":\"exists\",\"pattern\":{\"kind\":\"join\",\"left\":{\"kind\":\"bgp\",\"triples\":[]},\"right\":{\"kind\":\"bgp\",\"triples\":[[{\"variable\":\"s\"},{\"term\":{\"type\":\"uri\",\"value\":\"urn:q\"}},{\"variable\":\"v\"}]]},\"lazy\":false}},\"variables\":{\"state\":\"present\",\"keys\":[{\"kind\":\"variable\",\"name\":\"o\"},{\"kind\":\"variable\",\"name\":\"s\"},{\"kind\":\"variable\",\"name\":\"v\"}]},\"no_isolated_scope\":false},\"variables\":[\"s\"]},\"template\":[],\"describe\":[],\"dataset\":[]}",
+    "count": 1,
+    "source": "SELECT ?s WHERE {?s <urn:p> ?o FILTER EXISTS {?s <urn:q> ?v}}"
+  },
+  {
+    "name": "notexists",
+    "snapshot": "{\"form\":\"select\",\"base\":null,\"pattern\":{\"kind\":\"project\",\"inner\":{\"kind\":\"filter\",\"inner\":{\"kind\":\"bgp\",\"triples\":[[{\"variable\":\"s\"},{\"term\":{\"type\":\"uri\",\"value\":\"urn:p\"}},{\"variable\":\"o\"}]]},\"expression\":{\"kind\":\"unary\",\"operator\":\"!\",\"inner\":{\"kind\":\"exists\",\"pattern\":{\"kind\":\"join\",\"left\":{\"kind\":\"bgp\",\"triples\":[]},\"right\":{\"kind\":\"bgp\",\"triples\":[[{\"variable\":\"s\"},{\"term\":{\"type\":\"uri\",\"value\":\"urn:q\"}},{\"variable\":\"v\"}]]},\"lazy\":false}}},\"variables\":{\"state\":\"present\",\"keys\":[{\"kind\":\"variable\",\"name\":\"o\"},{\"kind\":\"variable\",\"name\":\"s\"},{\"kind\":\"variable\",\"name\":\"v\"}]},\"no_isolated_scope\":false},\"variables\":[\"s\"]},\"template\":[],\"describe\":[],\"dataset\":[]}",
+    "count": 1,
+    "source": "SELECT ?s WHERE {?s <urn:p> ?o FILTER NOT EXISTS {?s <urn:q> ?v}}"
+  },
+  {
+    "name": "offset",
+    "snapshot": "{\"form\":\"select\",\"base\":null,\"pattern\":{\"kind\":\"slice\",\"inner\":{\"kind\":\"project\",\"inner\":{\"kind\":\"orderby\",\"inner\":{\"kind\":\"bgp\",\"triples\":[[{\"variable\":\"s\"},{\"term\":{\"type\":\"uri\",\"value\":\"urn:p\"}},{\"variable\":\"o\"}]]},\"expressions\":[{\"descending\":false,\"expression\":{\"kind\":\"atom\",\"value\":{\"variable\":\"s\"}}}]},\"variables\":[\"s\"]},\"start\":1,\"length\":null},\"template\":[],\"describe\":[],\"dataset\":[]}",
+    "count": 1,
+    "source": "SELECT ?s WHERE {?s <urn:p> ?o} ORDER BY ?s OFFSET 1"
+  },
+  {
+    "name": "nested",
+    "snapshot": "{\"form\":\"select\",\"base\":null,\"pattern\":{\"kind\":\"project\",\"inner\":{\"kind\":\"slice\",\"inner\":{\"kind\":\"distinct\",\"inner\":{\"kind\":\"project\",\"inner\":{\"kind\":\"orderby\",\"inner\":{\"kind\":\"bgp\",\"triples\":[[{\"variable\":\"s\"},{\"term\":{\"type\":\"uri\",\"value\":\"urn:p\"}},{\"variable\":\"o\"}]]},\"expressions\":[{\"descending\":false,\"expression\":{\"kind\":\"atom\",\"value\":{\"variable\":\"s\"}}}]},\"variables\":[\"s\"]}},\"start\":0,\"length\":1},\"variables\":[\"s\"]},\"template\":[],\"describe\":[],\"dataset\":[]}",
+    "count": 1,
+    "source": "SELECT ?s WHERE {{SELECT DISTINCT ?s WHERE {?s <urn:p> ?o} ORDER BY ?s LIMIT 1}}"
+  },
+  {
+    "name": "lexical",
+    "snapshot": "{\"form\":\"select\",\"base\":null,\"pattern\":{\"kind\":\"project\",\"inner\":{\"kind\":\"values\",\"variables\":[\"v\"],\"rows\":[[{\"term\":{\"type\":\"literal\",\"value\":\"01\",\"datatype\":\"http://www.w3.org/2001/XMLSchema#integer\"}}]]},\"variables\":[\"v\"]},\"template\":[],\"describe\":[],\"dataset\":[]}",
+    "count": 1,
+    "source": "SELECT ?v WHERE {VALUES ?v {\"01\"^^<http://www.w3.org/2001/XMLSchema#integer>}}"
+  },
+  {
+    "name": "supplied_lazy",
+    "snapshot": "{\"form\":\"select\",\"base\":null,\"pattern\":{\"kind\":\"project\",\"inner\":{\"kind\":\"join\",\"left\":{\"kind\":\"values\",\"variables\":[\"s\"],\"rows\":[[{\"term\":{\"type\":\"uri\",\"value\":\"urn:a\"}}]]},\"right\":{\"kind\":\"project\",\"inner\":{\"kind\":\"extend\",\"inner\":{\"kind\":\"bgp\",\"triples\":[]},\"variable\":\"s\",\"expression\":{\"kind\":\"atom\",\"value\":{\"term\":{\"type\":\"uri\",\"value\":\"urn:b\"}}}},\"variables\":[\"s\"]},\"lazy\":true},\"variables\":[\"s\"]},\"template\":[],\"describe\":[],\"dataset\":[]}",
+    "count": 1
+  },
+  {
+    "name": "supplied_independent",
+    "snapshot": "{\"form\":\"select\",\"base\":null,\"pattern\":{\"kind\":\"project\",\"inner\":{\"kind\":\"join\",\"left\":{\"kind\":\"values\",\"variables\":[\"s\"],\"rows\":[[{\"term\":{\"type\":\"uri\",\"value\":\"urn:a\"}}]]},\"right\":{\"kind\":\"project\",\"inner\":{\"kind\":\"extend\",\"inner\":{\"kind\":\"bgp\",\"triples\":[]},\"variable\":\"s\",\"expression\":{\"kind\":\"atom\",\"value\":{\"term\":{\"type\":\"uri\",\"value\":\"urn:b\"}}}},\"variables\":[\"s\"]},\"lazy\":false},\"variables\":[\"s\"]},\"template\":[],\"describe\":[],\"dataset\":[]}",
+    "count": 0
+  },
+  {
+    "name": "describe_generated_name_collision",
+    "snapshot": "{\"form\":\"describe\",\"base\":null,\"pattern\":{\"kind\":\"distinct\",\"inner\":{\"kind\":\"project\",\"inner\":{\"kind\":\"extend\",\"inner\":{\"kind\":\"bgp\",\"triples\":[]},\"variable\":\"__describe_0\",\"expression\":{\"kind\":\"atom\",\"value\":{\"term\":{\"type\":\"uri\",\"value\":\"urn:b\"}}}},\"variables\":[\"__describe_0\",\"urn:a\"]}},\"template\":[],\"describe\":[{\"term\":{\"type\":\"uri\",\"value\":\"urn:a\"}},{\"variable\":\"__describe_0\"}],\"dataset\":[]}",
+    "count": 3
+  },
+  {
+    "name": "actual_slice_attribute_override",
+    "snapshot": "{\"form\":\"select\",\"base\":null,\"pattern\":{\"kind\":\"slice\",\"inner\":{\"kind\":\"project\",\"inner\":{\"kind\":\"orderby\",\"inner\":{\"kind\":\"bgp\",\"triples\":[[{\"variable\":\"s\"},{\"term\":{\"type\":\"uri\",\"value\":\"urn:p\"}},{\"variable\":\"o\"}]]},\"expressions\":[{\"descending\":false,\"expression\":{\"kind\":\"atom\",\"value\":{\"variable\":\"s\"}}}]},\"variables\":[\"s\"]},\"start\":0,\"length\":2},\"template\":[],\"describe\":[],\"dataset\":[]}",
+    "count": 2
+  },
+  {
+    "name": "filter_scope_0",
+    "snapshot": "{\"form\":\"select\",\"base\":null,\"pattern\":{\"kind\":\"project\",\"inner\":{\"kind\":\"filter\",\"inner\":{\"kind\":\"extend\",\"inner\":{\"kind\":\"bgp\",\"triples\":[]},\"variable\":\"s\",\"expression\":{\"kind\":\"atom\",\"value\":{\"term\":{\"type\":\"uri\",\"value\":\"urn:a\"}}}},\"expression\":{\"kind\":\"exists\",\"pattern\":{\"kind\":\"join\",\"left\":{\"kind\":\"bgp\",\"triples\":[]},\"right\":{\"kind\":\"filter\",\"inner\":{\"kind\":\"bgp\",\"triples\":[]},\"expression\":{\"kind\":\"binary\",\"operator\":\"=\",\"left\":{\"kind\":\"atom\",\"value\":{\"variable\":\"s\"}},\"right\":{\"kind\":\"atom\",\"value\":{\"term\":{\"type\":\"uri\",\"value\":\"urn:a\"}}}},\"variables\":{\"state\":\"absent\"},\"no_isolated_scope\":false},\"lazy\":false}},\"variables\":{\"state\":\"present\",\"keys\":[{\"kind\":\"variable\",\"name\":\"s\"}]},\"no_isolated_scope\":false},\"variables\":[\"s\"]},\"template\":[],\"describe\":[],\"dataset\":[]}",
+    "source": "SELECT ?s WHERE {BIND(<urn:a> AS ?s) FILTER EXISTS {{FILTER(?s=<urn:a>)}}}",
+    "bindings": "{}",
+    "count": 0
+  },
+  {
+    "name": "filter_scope_1",
+    "snapshot": "{\"form\":\"select\",\"base\":null,\"pattern\":{\"kind\":\"project\",\"inner\":{\"kind\":\"filter\",\"inner\":{\"kind\":\"extend\",\"inner\":{\"kind\":\"bgp\",\"triples\":[]},\"variable\":\"s\",\"expression\":{\"kind\":\"atom\",\"value\":{\"term\":{\"type\":\"uri\",\"value\":\"urn:a\"}}}},\"expression\":{\"kind\":\"exists\",\"pattern\":{\"kind\":\"filter\",\"inner\":{\"kind\":\"bgp\",\"triples\":[]},\"expression\":{\"kind\":\"binary\",\"operator\":\"=\",\"left\":{\"kind\":\"atom\",\"value\":{\"variable\":\"s\"}},\"right\":{\"kind\":\"atom\",\"value\":{\"term\":{\"type\":\"uri\",\"value\":\"urn:a\"}}}},\"variables\":{\"state\":\"absent\"},\"no_isolated_scope\":true}},\"variables\":{\"state\":\"present\",\"keys\":[{\"kind\":\"variable\",\"name\":\"s\"}]},\"no_isolated_scope\":false},\"variables\":[\"s\"]},\"template\":[],\"describe\":[],\"dataset\":[]}",
+    "source": "SELECT ?s WHERE {BIND(<urn:a> AS ?s) FILTER EXISTS {FILTER(?s=<urn:a>)}}",
+    "bindings": "{}",
+    "count": 1
+  },
+  {
+    "name": "filter_scope_2",
+    "snapshot": "{\"form\":\"select\",\"base\":null,\"pattern\":{\"kind\":\"project\",\"inner\":{\"kind\":\"filter\",\"inner\":{\"kind\":\"extend\",\"inner\":{\"kind\":\"bgp\",\"triples\":[]},\"variable\":\"s\",\"expression\":{\"kind\":\"atom\",\"value\":{\"term\":{\"type\":\"uri\",\"value\":\"urn:a\"}}}},\"expression\":{\"kind\":\"exists\",\"pattern\":{\"kind\":\"join\",\"left\":{\"kind\":\"bgp\",\"triples\":[]},\"right\":{\"kind\":\"filter\",\"inner\":{\"kind\":\"extend\",\"inner\":{\"kind\":\"bgp\",\"triples\":[]},\"variable\":\"v\",\"expression\":{\"kind\":\"atom\",\"value\":{\"term\":{\"type\":\"uri\",\"value\":\"urn:a\"}}}},\"expression\":{\"kind\":\"binary\",\"operator\":\"=\",\"left\":{\"kind\":\"atom\",\"value\":{\"variable\":\"v\"}},\"right\":{\"kind\":\"atom\",\"value\":{\"term\":{\"type\":\"uri\",\"value\":\"urn:a\"}}}},\"variables\":{\"state\":\"absent\"},\"no_isolated_scope\":false},\"lazy\":false}},\"variables\":{\"state\":\"present\",\"keys\":[{\"kind\":\"variable\",\"name\":\"s\"},{\"kind\":\"variable\",\"name\":\"v\"}]},\"no_isolated_scope\":false},\"variables\":[\"s\"]},\"template\":[],\"describe\":[],\"dataset\":[]}",
+    "source": "SELECT ?s WHERE {BIND(<urn:a> AS ?s) FILTER EXISTS {{BIND(<urn:a> AS ?v) FILTER(?v=<urn:a>)}}}",
+    "bindings": "{}",
+    "count": 1
+  },
+  {
+    "name": "filter_scope_3",
+    "snapshot": "{\"form\":\"select\",\"base\":null,\"pattern\":{\"kind\":\"project\",\"inner\":{\"kind\":\"filter\",\"inner\":{\"kind\":\"bgp\",\"triples\":[]},\"expression\":{\"kind\":\"exists\",\"pattern\":{\"kind\":\"join\",\"left\":{\"kind\":\"bgp\",\"triples\":[]},\"right\":{\"kind\":\"filter\",\"inner\":{\"kind\":\"extend\",\"inner\":{\"kind\":\"bgp\",\"triples\":[]},\"variable\":\"s\",\"expression\":{\"kind\":\"atom\",\"value\":{\"term\":{\"type\":\"uri\",\"value\":\"urn:b\"}}}},\"expression\":{\"kind\":\"binary\",\"operator\":\"=\",\"left\":{\"kind\":\"atom\",\"value\":{\"variable\":\"s\"}},\"right\":{\"kind\":\"atom\",\"value\":{\"term\":{\"type\":\"uri\",\"value\":\"urn:b\"}}}},\"variables\":{\"state\":\"absent\"},\"no_isolated_scope\":false},\"lazy\":false}},\"variables\":{\"state\":\"present\",\"keys\":[{\"kind\":\"variable\",\"name\":\"s\"}]},\"no_isolated_scope\":false},\"variables\":[\"s\"]},\"template\":[],\"describe\":[],\"dataset\":[]}",
+    "source": "SELECT ?s WHERE {FILTER EXISTS {{BIND(<urn:b> AS ?s) FILTER(?s=<urn:b>)}}}",
+    "bindings": "{\"s\": {\"type\": \"uri\", \"value\": \"urn:a\"}}",
+    "count": 0
+  },
+  {
+    "name": "filter_scope_4",
+    "snapshot": "{\"form\":\"select\",\"base\":null,\"pattern\":{\"kind\":\"project\",\"inner\":{\"kind\":\"filter\",\"inner\":{\"kind\":\"extend\",\"inner\":{\"kind\":\"bgp\",\"triples\":[]},\"variable\":\"s\",\"expression\":{\"kind\":\"atom\",\"value\":{\"term\":{\"type\":\"uri\",\"value\":\"urn:a\"}}}},\"expression\":{\"kind\":\"exists\",\"pattern\":{\"kind\":\"join\",\"left\":{\"kind\":\"bgp\",\"triples\":[]},\"right\":{\"kind\":\"project\",\"inner\":{\"kind\":\"filter\",\"inner\":{\"kind\":\"bgp\",\"triples\":[]},\"expression\":{\"kind\":\"binary\",\"operator\":\"=\",\"left\":{\"kind\":\"atom\",\"value\":{\"variable\":\"s\"}},\"right\":{\"kind\":\"atom\",\"value\":{\"term\":{\"type\":\"uri\",\"value\":\"urn:a\"}}}},\"variables\":{\"state\":\"absent\"},\"no_isolated_scope\":false},\"variables\":[\"v\"]},\"lazy\":false}},\"variables\":{\"state\":\"present\",\"keys\":[{\"kind\":\"variable\",\"name\":\"s\"},{\"kind\":\"variable\",\"name\":\"v\"}]},\"no_isolated_scope\":false},\"variables\":[\"s\"]},\"template\":[],\"describe\":[],\"dataset\":[]}",
+    "source": "SELECT ?s WHERE {BIND(<urn:a> AS ?s) FILTER EXISTS {{SELECT ?v WHERE {FILTER(?s=<urn:a>)}}}}",
+    "bindings": "{}",
+    "count": 0
+  },
+  {
+    "name": "blank_same_label_join",
+    "snapshot": "{\"form\": \"ask\", \"base\": null, \"pattern\": {\"kind\": \"project\", \"inner\": {\"kind\": \"join\", \"left\": {\"kind\": \"bgp\", \"triples\": [[{\"term\": {\"type\": \"bnode\", \"value\": \"b\"}}, {\"term\": {\"type\": \"uri\", \"value\": \"urn:p\"}}, {\"term\": {\"type\": \"literal\", \"value\": \"A\"}}]]}, \"right\": {\"kind\": \"bgp\", \"triples\": [[{\"term\": {\"type\": \"bnode\", \"value\": \"b\"}}, {\"term\": {\"type\": \"uri\", \"value\": \"urn:q\"}}, {\"term\": {\"type\": \"literal\", \"value\": \"yes\"}}]]}, \"lazy\": true}, \"variables\": []}, \"template\": [], \"describe\": [], \"dataset\": []}",
+    "count": 0,
+    "source": null,
+    "bindings": null,
+    "data": [
+      [
+        "a",
+        "p",
+        "A"
+      ],
+      [
+        "b",
+        "q",
+        "yes"
+      ]
+    ]
+  },
+  {
+    "name": "blank_distinct_labels_join",
+    "snapshot": "{\"form\": \"ask\", \"base\": null, \"pattern\": {\"kind\": \"project\", \"inner\": {\"kind\": \"join\", \"left\": {\"kind\": \"bgp\", \"triples\": [[{\"term\": {\"type\": \"bnode\", \"value\": \"b\"}}, {\"term\": {\"type\": \"uri\", \"value\": \"urn:p\"}}, {\"term\": {\"type\": \"literal\", \"value\": \"A\"}}]]}, \"right\": {\"kind\": \"bgp\", \"triples\": [[{\"term\": {\"type\": \"bnode\", \"value\": \"c\"}}, {\"term\": {\"type\": \"uri\", \"value\": \"urn:q\"}}, {\"term\": {\"type\": \"literal\", \"value\": \"yes\"}}]]}, \"lazy\": true}, \"variables\": []}, \"template\": [], \"describe\": [], \"dataset\": []}",
+    "count": 1,
+    "source": null,
+    "bindings": null,
+    "data": [
+      [
+        "a",
+        "p",
+        "A"
+      ],
+      [
+        "b",
+        "q",
+        "yes"
+      ]
+    ]
+  },
+  {
+    "name": "blank_same_label_exists",
+    "snapshot": "{\"form\": \"ask\", \"base\": null, \"pattern\": {\"kind\": \"project\", \"inner\": {\"kind\": \"filter\", \"inner\": {\"kind\": \"bgp\", \"triples\": [[{\"term\": {\"type\": \"bnode\", \"value\": \"b\"}}, {\"term\": {\"type\": \"uri\", \"value\": \"urn:p\"}}, {\"term\": {\"type\": \"literal\", \"value\": \"A\"}}]]}, \"expression\": {\"kind\": \"exists\", \"pattern\": {\"kind\": \"join\", \"left\": {\"kind\": \"bgp\", \"triples\": []}, \"right\": {\"kind\": \"bgp\", \"triples\": [[{\"term\": {\"type\": \"bnode\", \"value\": \"b\"}}, {\"term\": {\"type\": \"uri\", \"value\": \"urn:q\"}}, {\"term\": {\"type\": \"literal\", \"value\": \"yes\"}}]]}, \"lazy\": false}}, \"variables\": {\"state\": \"present\", \"keys\": []}, \"no_isolated_scope\": false}, \"variables\": []}, \"template\": [], \"describe\": [], \"dataset\": []}",
+    "count": 0,
+    "source": null,
+    "bindings": null,
+    "data": [
+      [
+        "a",
+        "p",
+        "A"
+      ],
+      [
+        "b",
+        "q",
+        "yes"
+      ]
+    ]
+  },
+  {
+    "name": "blank_same_label_not_exists",
+    "snapshot": "{\"form\": \"ask\", \"base\": null, \"pattern\": {\"kind\": \"project\", \"inner\": {\"kind\": \"filter\", \"inner\": {\"kind\": \"bgp\", \"triples\": [[{\"term\": {\"type\": \"bnode\", \"value\": \"b\"}}, {\"term\": {\"type\": \"uri\", \"value\": \"urn:p\"}}, {\"term\": {\"type\": \"literal\", \"value\": \"A\"}}]]}, \"expression\": {\"kind\": \"unary\", \"operator\": \"!\", \"inner\": {\"kind\": \"exists\", \"pattern\": {\"kind\": \"join\", \"left\": {\"kind\": \"bgp\", \"triples\": []}, \"right\": {\"kind\": \"bgp\", \"triples\": [[{\"term\": {\"type\": \"bnode\", \"value\": \"b\"}}, {\"term\": {\"type\": \"uri\", \"value\": \"urn:q\"}}, {\"term\": {\"type\": \"literal\", \"value\": \"yes\"}}]]}, \"lazy\": false}}}, \"variables\": {\"state\": \"present\", \"keys\": []}, \"no_isolated_scope\": false}, \"variables\": []}, \"template\": [], \"describe\": [], \"dataset\": []}",
+    "count": 1,
+    "source": null,
+    "bindings": null,
+    "data": [
+      [
+        "a",
+        "p",
+        "A"
+      ],
+      [
+        "b",
+        "q",
+        "yes"
+      ]
+    ]
+  },
+  {
+    "name": "blank_plain_subselect",
+    "snapshot": "{\"form\": \"select\", \"base\": null, \"pattern\": {\"kind\": \"project\", \"inner\": {\"kind\": \"join\", \"left\": {\"kind\": \"bgp\", \"triples\": [[{\"term\": {\"type\": \"bnode\", \"value\": \"b\"}}, {\"term\": {\"type\": \"uri\", \"value\": \"urn:p\"}}, {\"term\": {\"type\": \"literal\", \"value\": \"A\"}}]]}, \"right\": {\"kind\": \"project\", \"inner\": {\"kind\": \"extend\", \"inner\": {\"kind\": \"bgp\", \"triples\": [[{\"term\": {\"type\": \"bnode\", \"value\": \"b\"}}, {\"term\": {\"type\": \"uri\", \"value\": \"urn:q\"}}, {\"term\": {\"type\": \"literal\", \"value\": \"yes\"}}]]}, \"variable\": \"x\", \"expression\": {\"kind\": \"atom\", \"value\": {\"term\": {\"type\": \"literal\", \"value\": \"1\", \"datatype\": \"http://www.w3.org/2001/XMLSchema#integer\"}}}}, \"variables\": [\"x\"]}, \"lazy\": true}, \"variables\": [\"x\"]}, \"template\": [], \"describe\": [], \"dataset\": []}",
+    "count": 0,
+    "source": null,
+    "bindings": null,
+    "data": [
+      [
+        "a",
+        "p",
+        "A"
+      ],
+      [
+        "b",
+        "q",
+        "yes"
+      ]
+    ]
+  },
+  {
+    "name": "blank_distinct_subselect",
+    "snapshot": "{\"form\": \"select\", \"base\": null, \"pattern\": {\"kind\": \"project\", \"inner\": {\"kind\": \"join\", \"left\": {\"kind\": \"bgp\", \"triples\": [[{\"term\": {\"type\": \"bnode\", \"value\": \"b\"}}, {\"term\": {\"type\": \"uri\", \"value\": \"urn:p\"}}, {\"term\": {\"type\": \"literal\", \"value\": \"A\"}}]]}, \"right\": {\"kind\": \"distinct\", \"inner\": {\"kind\": \"project\", \"inner\": {\"kind\": \"extend\", \"inner\": {\"kind\": \"bgp\", \"triples\": [[{\"term\": {\"type\": \"bnode\", \"value\": \"b\"}}, {\"term\": {\"type\": \"uri\", \"value\": \"urn:q\"}}, {\"term\": {\"type\": \"literal\", \"value\": \"yes\"}}]]}, \"variable\": \"x\", \"expression\": {\"kind\": \"atom\", \"value\": {\"term\": {\"type\": \"literal\", \"value\": \"1\", \"datatype\": \"http://www.w3.org/2001/XMLSchema#integer\"}}}}, \"variables\": [\"x\"]}}, \"lazy\": false}, \"variables\": [\"x\"]}, \"template\": [], \"describe\": [], \"dataset\": []}",
+    "count": 1,
+    "source": null,
+    "bindings": null,
+    "data": [
+      [
+        "a",
+        "p",
+        "A"
+      ],
+      [
+        "b",
+        "q",
+        "yes"
+      ]
+    ]
+  },
+  {
+    "name": "blank_sliced_subselect",
+    "snapshot": "{\"form\": \"select\", \"base\": null, \"pattern\": {\"kind\": \"project\", \"inner\": {\"kind\": \"join\", \"left\": {\"kind\": \"bgp\", \"triples\": [[{\"term\": {\"type\": \"bnode\", \"value\": \"b\"}}, {\"term\": {\"type\": \"uri\", \"value\": \"urn:p\"}}, {\"term\": {\"type\": \"literal\", \"value\": \"A\"}}]]}, \"right\": {\"kind\": \"slice\", \"inner\": {\"kind\": \"project\", \"inner\": {\"kind\": \"extend\", \"inner\": {\"kind\": \"bgp\", \"triples\": [[{\"term\": {\"type\": \"bnode\", \"value\": \"b\"}}, {\"term\": {\"type\": \"uri\", \"value\": \"urn:q\"}}, {\"term\": {\"type\": \"literal\", \"value\": \"yes\"}}]]}, \"variable\": \"x\", \"expression\": {\"kind\": \"atom\", \"value\": {\"term\": {\"type\": \"literal\", \"value\": \"1\", \"datatype\": \"http://www.w3.org/2001/XMLSchema#integer\"}}}}, \"variables\": [\"x\"]}, \"start\": 0, \"length\": 1}, \"lazy\": false}, \"variables\": [\"x\"]}, \"template\": [], \"describe\": [], \"dataset\": []}",
+    "count": 1,
+    "source": null,
+    "bindings": null,
+    "data": [
+      [
+        "a",
+        "p",
+        "A"
+      ],
+      [
+        "b",
+        "q",
+        "yes"
+      ]
+    ]
+  },
+  {
+    "name": "blank_projected_away_blank",
+    "snapshot": "{\"form\": \"select\", \"base\": null, \"pattern\": {\"kind\": \"project\", \"inner\": {\"kind\": \"join\", \"left\": {\"kind\": \"project\", \"inner\": {\"kind\": \"extend\", \"inner\": {\"kind\": \"bgp\", \"triples\": [[{\"term\": {\"type\": \"bnode\", \"value\": \"b\"}}, {\"term\": {\"type\": \"uri\", \"value\": \"urn:p\"}}, {\"term\": {\"type\": \"literal\", \"value\": \"A\"}}]]}, \"variable\": \"x\", \"expression\": {\"kind\": \"atom\", \"value\": {\"term\": {\"type\": \"literal\", \"value\": \"1\", \"datatype\": \"http://www.w3.org/2001/XMLSchema#integer\"}}}}, \"variables\": [\"x\"]}, \"right\": {\"kind\": \"bgp\", \"triples\": [[{\"term\": {\"type\": \"bnode\", \"value\": \"b\"}}, {\"term\": {\"type\": \"uri\", \"value\": \"urn:q\"}}, {\"term\": {\"type\": \"literal\", \"value\": \"yes\"}}]]}, \"lazy\": true}, \"variables\": [\"x\"]}, \"template\": [], \"describe\": [], \"dataset\": []}",
+    "count": 1,
+    "source": null,
+    "bindings": null,
+    "data": [
+      [
+        "a",
+        "p",
+        "A"
+      ],
+      [
+        "b",
+        "q",
+        "yes"
+      ]
+    ]
+  },
+  {
+    "name": "blank_user_variable_collision",
+    "snapshot": "{\"form\": \"select\", \"base\": null, \"pattern\": {\"kind\": \"project\", \"inner\": {\"kind\": \"join\", \"left\": {\"kind\": \"extend\", \"inner\": {\"kind\": \"bgp\", \"triples\": []}, \"variable\": \"__prepared_blank_0\", \"expression\": {\"kind\": \"atom\", \"value\": {\"term\": {\"type\": \"uri\", \"value\": \"urn:user\"}}}}, \"right\": {\"kind\": \"bgp\", \"triples\": [[{\"term\": {\"type\": \"bnode\", \"value\": \"b\"}}, {\"term\": {\"type\": \"uri\", \"value\": \"urn:p\"}}, {\"term\": {\"type\": \"literal\", \"value\": \"A\"}}]]}, \"lazy\": true}, \"variables\": [\"__prepared_blank_0\"]}, \"template\": [], \"describe\": [], \"dataset\": []}",
+    "count": 1,
+    "source": null,
+    "bindings": null,
+    "data": [
+      [
+        "a",
+        "p",
+        "A"
+      ],
+      [
+        "b",
+        "q",
+        "yes"
+      ]
+    ]
+  },
+  {
+    "name": "blank_template_blank_freshness",
+    "snapshot": "{\"form\": \"construct\", \"base\": null, \"pattern\": {\"kind\": \"project\", \"inner\": {\"kind\": \"bgp\", \"triples\": [[{\"term\": {\"type\": \"bnode\", \"value\": \"b\"}}, {\"term\": {\"type\": \"uri\", \"value\": \"urn:p\"}}, {\"variable\": \"v\"}]]}, \"variables\": [\"v\"]}, \"template\": [[{\"term\": {\"type\": \"bnode\", \"value\": \"b\"}}, {\"term\": {\"type\": \"uri\", \"value\": \"urn:copy\"}}, {\"variable\": \"v\"}]], \"describe\": [], \"dataset\": []}",
+    "count": 1,
+    "source": null,
+    "bindings": null,
+    "data": [
+      [
+        "a",
+        "p",
+        "A"
+      ],
+      [
+        "b",
+        "q",
+        "yes"
+      ]
+    ]
+  },
+  {
+    "name": "blank_unused_initial_parameter",
+    "snapshot": "{\"form\": \"ask\", \"base\": null, \"pattern\": {\"kind\": \"project\", \"inner\": {\"kind\": \"bgp\", \"triples\": [[{\"term\": {\"type\": \"bnode\", \"value\": \"b\"}}, {\"term\": {\"type\": \"uri\", \"value\": \"urn:p\"}}, {\"term\": {\"type\": \"literal\", \"value\": \"A\"}}]]}, \"variables\": []}, \"template\": [], \"describe\": [], \"dataset\": []}",
+    "count": 1,
+    "source": null,
+    "bindings": "{\"__prepared_blank_0\": {\"type\": \"uri\", \"value\": \"urn:unrelated\"}}",
+    "data": [
+      [
+        "a",
+        "p",
+        "A"
+      ],
+      [
+        "b",
+        "q",
+        "yes"
+      ]
+    ]
+  },
+  {
+    "name": "blank_template_only_variable",
+    "snapshot": "{\"form\": \"construct\", \"base\": null, \"pattern\": {\"kind\": \"project\", \"inner\": {\"kind\": \"bgp\", \"triples\": [[{\"term\": {\"type\": \"bnode\", \"value\": \"b\"}}, {\"term\": {\"type\": \"uri\", \"value\": \"urn:p\"}}, {\"term\": {\"type\": \"literal\", \"value\": \"A\"}}]]}, \"variables\": []}, \"template\": [[{\"variable\": \"__prepared_blank_0\"}, {\"term\": {\"type\": \"uri\", \"value\": \"urn:copy\"}}, {\"term\": {\"type\": \"literal\", \"value\": \"x\"}}]], \"describe\": [], \"dataset\": []}",
+    "count": 0,
+    "source": null,
+    "bindings": null,
+    "data": [
+      [
+        "a",
+        "p",
+        "A"
+      ],
+      [
+        "b",
+        "q",
+        "yes"
+      ]
+    ]
+  },
+  {
+    "name": "optional_scope_False_Variable",
+    "snapshot": "{\"form\": \"select\", \"base\": null, \"pattern\": {\"kind\": \"project\", \"inner\": {\"kind\": \"optional\", \"left\": {\"kind\": \"extend\", \"inner\": {\"kind\": \"extend\", \"inner\": {\"kind\": \"bgp\", \"triples\": []}, \"variable\": \"b\", \"expression\": {\"kind\": \"atom\", \"value\": {\"term\": {\"type\": \"uri\", \"value\": \"urn:a\"}}}}, \"variable\": \"x\", \"expression\": {\"kind\": \"atom\", \"value\": {\"term\": {\"type\": \"literal\", \"value\": \"1\", \"datatype\": \"http://www.w3.org/2001/XMLSchema#integer\"}}}}, \"right\": {\"kind\": \"bgp\", \"triples\": [[{\"variable\": \"b\"}, {\"term\": {\"type\": \"uri\", \"value\": \"urn:q\"}}, {\"term\": {\"type\": \"literal\", \"value\": \"yes\"}}]]}, \"expression\": {\"kind\": \"atom\", \"value\": {\"term\": {\"type\": \"literal\", \"value\": \"true\", \"datatype\": \"http://www.w3.org/2001/XMLSchema#boolean\"}}}, \"variables\": {\"state\": \"present\", \"keys\": [{\"kind\": \"variable\", \"name\": \"b\"}, {\"kind\": \"variable\", \"name\": \"x\"}]}}, \"variables\": [\"x\"]}, \"template\": [], \"describe\": [], \"dataset\": []}",
+    "count": 1,
+    "source": null,
+    "bindings": null,
+    "data": [
+      [
+        "a",
+        "p",
+        "A"
+      ],
+      [
+        "b",
+        "q",
+        "yes"
+      ]
+    ]
+  },
+  {
+    "name": "optional_scope_False_BNode",
+    "snapshot": "{\"form\": \"select\", \"base\": null, \"pattern\": {\"kind\": \"project\", \"inner\": {\"kind\": \"optional\", \"left\": {\"kind\": \"extend\", \"inner\": {\"kind\": \"extend\", \"inner\": {\"kind\": \"bgp\", \"triples\": []}, \"variable\": \"b\", \"expression\": {\"kind\": \"atom\", \"value\": {\"term\": {\"type\": \"uri\", \"value\": \"urn:a\"}}}}, \"variable\": \"x\", \"expression\": {\"kind\": \"atom\", \"value\": {\"term\": {\"type\": \"literal\", \"value\": \"1\", \"datatype\": \"http://www.w3.org/2001/XMLSchema#integer\"}}}}, \"right\": {\"kind\": \"bgp\", \"triples\": [[{\"variable\": \"b\"}, {\"term\": {\"type\": \"uri\", \"value\": \"urn:q\"}}, {\"term\": {\"type\": \"literal\", \"value\": \"yes\"}}]]}, \"expression\": {\"kind\": \"atom\", \"value\": {\"term\": {\"type\": \"literal\", \"value\": \"true\", \"datatype\": \"http://www.w3.org/2001/XMLSchema#boolean\"}}}, \"variables\": {\"state\": \"present\", \"keys\": [{\"kind\": \"blank\", \"label\": \"b\"}, {\"kind\": \"variable\", \"name\": \"x\"}]}}, \"variables\": [\"x\"]}, \"template\": [], \"describe\": [], \"dataset\": []}",
+    "count": 0,
+    "source": null,
+    "bindings": null,
+    "data": [
+      [
+        "a",
+        "p",
+        "A"
+      ],
+      [
+        "b",
+        "q",
+        "yes"
+      ]
+    ]
+  },
+  {
+    "name": "optional_scope_False_str",
+    "snapshot": "{\"form\": \"select\", \"base\": null, \"pattern\": {\"kind\": \"project\", \"inner\": {\"kind\": \"optional\", \"left\": {\"kind\": \"extend\", \"inner\": {\"kind\": \"extend\", \"inner\": {\"kind\": \"bgp\", \"triples\": []}, \"variable\": \"b\", \"expression\": {\"kind\": \"atom\", \"value\": {\"term\": {\"type\": \"uri\", \"value\": \"urn:a\"}}}}, \"variable\": \"x\", \"expression\": {\"kind\": \"atom\", \"value\": {\"term\": {\"type\": \"literal\", \"value\": \"1\", \"datatype\": \"http://www.w3.org/2001/XMLSchema#integer\"}}}}, \"right\": {\"kind\": \"bgp\", \"triples\": [[{\"variable\": \"b\"}, {\"term\": {\"type\": \"uri\", \"value\": \"urn:q\"}}, {\"term\": {\"type\": \"literal\", \"value\": \"yes\"}}]]}, \"expression\": {\"kind\": \"atom\", \"value\": {\"term\": {\"type\": \"literal\", \"value\": \"true\", \"datatype\": \"http://www.w3.org/2001/XMLSchema#boolean\"}}}, \"variables\": {\"state\": \"present\", \"keys\": [{\"kind\": \"string\", \"value\": \"b\"}, {\"kind\": \"variable\", \"name\": \"x\"}]}}, \"variables\": [\"x\"]}, \"template\": [], \"describe\": [], \"dataset\": []}",
+    "count": 0,
+    "source": null,
+    "bindings": null,
+    "data": [
+      [
+        "a",
+        "p",
+        "A"
+      ],
+      [
+        "b",
+        "q",
+        "yes"
+      ]
+    ]
+  },
+  {
+    "name": "optional_scope_True_Variable",
+    "snapshot": "{\"form\": \"select\", \"base\": null, \"pattern\": {\"kind\": \"project\", \"inner\": {\"kind\": \"optional\", \"left\": {\"kind\": \"extend\", \"inner\": {\"kind\": \"bgp\", \"triples\": [[{\"term\": {\"type\": \"bnode\", \"value\": \"b\"}}, {\"term\": {\"type\": \"uri\", \"value\": \"urn:p\"}}, {\"term\": {\"type\": \"literal\", \"value\": \"A\"}}]]}, \"variable\": \"x\", \"expression\": {\"kind\": \"atom\", \"value\": {\"term\": {\"type\": \"literal\", \"value\": \"1\", \"datatype\": \"http://www.w3.org/2001/XMLSchema#integer\"}}}}, \"right\": {\"kind\": \"bgp\", \"triples\": [[{\"term\": {\"type\": \"bnode\", \"value\": \"b\"}}, {\"term\": {\"type\": \"uri\", \"value\": \"urn:q\"}}, {\"term\": {\"type\": \"literal\", \"value\": \"yes\"}}]]}, \"expression\": {\"kind\": \"atom\", \"value\": {\"term\": {\"type\": \"literal\", \"value\": \"true\", \"datatype\": \"http://www.w3.org/2001/XMLSchema#boolean\"}}}, \"variables\": {\"state\": \"present\", \"keys\": [{\"kind\": \"variable\", \"name\": \"b\"}, {\"kind\": \"variable\", \"name\": \"x\"}]}}, \"variables\": [\"x\"]}, \"template\": [], \"describe\": [], \"dataset\": []}",
+    "count": 0,
+    "source": null,
+    "bindings": null,
+    "data": [
+      [
+        "a",
+        "p",
+        "A"
+      ],
+      [
+        "b",
+        "q",
+        "yes"
+      ]
+    ]
+  },
+  {
+    "name": "optional_scope_True_BNode",
+    "snapshot": "{\"form\": \"select\", \"base\": null, \"pattern\": {\"kind\": \"project\", \"inner\": {\"kind\": \"optional\", \"left\": {\"kind\": \"extend\", \"inner\": {\"kind\": \"bgp\", \"triples\": [[{\"term\": {\"type\": \"bnode\", \"value\": \"b\"}}, {\"term\": {\"type\": \"uri\", \"value\": \"urn:p\"}}, {\"term\": {\"type\": \"literal\", \"value\": \"A\"}}]]}, \"variable\": \"x\", \"expression\": {\"kind\": \"atom\", \"value\": {\"term\": {\"type\": \"literal\", \"value\": \"1\", \"datatype\": \"http://www.w3.org/2001/XMLSchema#integer\"}}}}, \"right\": {\"kind\": \"bgp\", \"triples\": [[{\"term\": {\"type\": \"bnode\", \"value\": \"b\"}}, {\"term\": {\"type\": \"uri\", \"value\": \"urn:q\"}}, {\"term\": {\"type\": \"literal\", \"value\": \"yes\"}}]]}, \"expression\": {\"kind\": \"atom\", \"value\": {\"term\": {\"type\": \"literal\", \"value\": \"true\", \"datatype\": \"http://www.w3.org/2001/XMLSchema#boolean\"}}}, \"variables\": {\"state\": \"present\", \"keys\": [{\"kind\": \"blank\", \"label\": \"b\"}, {\"kind\": \"variable\", \"name\": \"x\"}]}}, \"variables\": [\"x\"]}, \"template\": [], \"describe\": [], \"dataset\": []}",
+    "count": 1,
+    "source": null,
+    "bindings": null,
+    "data": [
+      [
+        "a",
+        "p",
+        "A"
+      ],
+      [
+        "b",
+        "q",
+        "yes"
+      ]
+    ]
+  },
+  {
+    "name": "optional_scope_True_str",
+    "snapshot": "{\"form\": \"select\", \"base\": null, \"pattern\": {\"kind\": \"project\", \"inner\": {\"kind\": \"optional\", \"left\": {\"kind\": \"extend\", \"inner\": {\"kind\": \"bgp\", \"triples\": [[{\"term\": {\"type\": \"bnode\", \"value\": \"b\"}}, {\"term\": {\"type\": \"uri\", \"value\": \"urn:p\"}}, {\"term\": {\"type\": \"literal\", \"value\": \"A\"}}]]}, \"variable\": \"x\", \"expression\": {\"kind\": \"atom\", \"value\": {\"term\": {\"type\": \"literal\", \"value\": \"1\", \"datatype\": \"http://www.w3.org/2001/XMLSchema#integer\"}}}}, \"right\": {\"kind\": \"bgp\", \"triples\": [[{\"term\": {\"type\": \"bnode\", \"value\": \"b\"}}, {\"term\": {\"type\": \"uri\", \"value\": \"urn:q\"}}, {\"term\": {\"type\": \"literal\", \"value\": \"yes\"}}]]}, \"expression\": {\"kind\": \"atom\", \"value\": {\"term\": {\"type\": \"literal\", \"value\": \"true\", \"datatype\": \"http://www.w3.org/2001/XMLSchema#boolean\"}}}, \"variables\": {\"state\": \"present\", \"keys\": [{\"kind\": \"string\", \"value\": \"b\"}, {\"kind\": \"variable\", \"name\": \"x\"}]}}, \"variables\": [\"x\"]}, \"template\": [], \"describe\": [], \"dataset\": []}",
+    "count": 0,
+    "source": null,
+    "bindings": null,
+    "data": [
+      [
+        "a",
+        "p",
+        "A"
+      ],
+      [
+        "b",
+        "q",
+        "yes"
+      ]
+    ]
+  },
+  {
+    "name": "filter_scope_Variable",
+    "snapshot": "{\"form\": \"select\", \"base\": null, \"pattern\": {\"kind\": \"project\", \"inner\": {\"kind\": \"filter\", \"inner\": {\"kind\": \"extend\", \"inner\": {\"kind\": \"bgp\", \"triples\": []}, \"variable\": \"s\", \"expression\": {\"kind\": \"atom\", \"value\": {\"term\": {\"type\": \"uri\", \"value\": \"urn:a\"}}}}, \"expression\": {\"kind\": \"exists\", \"pattern\": {\"kind\": \"join\", \"left\": {\"kind\": \"bgp\", \"triples\": []}, \"right\": {\"kind\": \"filter\", \"inner\": {\"kind\": \"bgp\", \"triples\": []}, \"expression\": {\"kind\": \"binary\", \"operator\": \"=\", \"left\": {\"kind\": \"atom\", \"value\": {\"variable\": \"s\"}}, \"right\": {\"kind\": \"atom\", \"value\": {\"term\": {\"type\": \"uri\", \"value\": \"urn:a\"}}}}, \"variables\": {\"state\": \"present\", \"keys\": [{\"kind\": \"variable\", \"name\": \"s\"}]}, \"no_isolated_scope\": false}, \"lazy\": false}}, \"variables\": {\"state\": \"present\", \"keys\": [{\"kind\": \"variable\", \"name\": \"s\"}]}, \"no_isolated_scope\": false}, \"variables\": [\"s\"]}, \"template\": [], \"describe\": [], \"dataset\": []}",
+    "count": 1,
+    "source": null,
+    "bindings": null,
+    "data": [
+      [
+        "a",
+        "p",
+        "A"
+      ],
+      [
+        "b",
+        "q",
+        "yes"
+      ]
+    ]
+  },
+  {
+    "name": "filter_scope_BNode",
+    "snapshot": "{\"form\": \"select\", \"base\": null, \"pattern\": {\"kind\": \"project\", \"inner\": {\"kind\": \"filter\", \"inner\": {\"kind\": \"extend\", \"inner\": {\"kind\": \"bgp\", \"triples\": []}, \"variable\": \"s\", \"expression\": {\"kind\": \"atom\", \"value\": {\"term\": {\"type\": \"uri\", \"value\": \"urn:a\"}}}}, \"expression\": {\"kind\": \"exists\", \"pattern\": {\"kind\": \"join\", \"left\": {\"kind\": \"bgp\", \"triples\": []}, \"right\": {\"kind\": \"filter\", \"inner\": {\"kind\": \"bgp\", \"triples\": []}, \"expression\": {\"kind\": \"binary\", \"operator\": \"=\", \"left\": {\"kind\": \"atom\", \"value\": {\"variable\": \"s\"}}, \"right\": {\"kind\": \"atom\", \"value\": {\"term\": {\"type\": \"uri\", \"value\": \"urn:a\"}}}}, \"variables\": {\"state\": \"present\", \"keys\": [{\"kind\": \"blank\", \"label\": \"s\"}]}, \"no_isolated_scope\": false}, \"lazy\": false}}, \"variables\": {\"state\": \"present\", \"keys\": [{\"kind\": \"variable\", \"name\": \"s\"}]}, \"no_isolated_scope\": false}, \"variables\": [\"s\"]}, \"template\": [], \"describe\": [], \"dataset\": []}",
+    "count": 0,
+    "source": null,
+    "bindings": null,
+    "data": [
+      [
+        "a",
+        "p",
+        "A"
+      ],
+      [
+        "b",
+        "q",
+        "yes"
+      ]
+    ]
+  },
+  {
+    "name": "filter_scope_str",
+    "snapshot": "{\"form\": \"select\", \"base\": null, \"pattern\": {\"kind\": \"project\", \"inner\": {\"kind\": \"filter\", \"inner\": {\"kind\": \"extend\", \"inner\": {\"kind\": \"bgp\", \"triples\": []}, \"variable\": \"s\", \"expression\": {\"kind\": \"atom\", \"value\": {\"term\": {\"type\": \"uri\", \"value\": \"urn:a\"}}}}, \"expression\": {\"kind\": \"exists\", \"pattern\": {\"kind\": \"join\", \"left\": {\"kind\": \"bgp\", \"triples\": []}, \"right\": {\"kind\": \"filter\", \"inner\": {\"kind\": \"bgp\", \"triples\": []}, \"expression\": {\"kind\": \"binary\", \"operator\": \"=\", \"left\": {\"kind\": \"atom\", \"value\": {\"variable\": \"s\"}}, \"right\": {\"kind\": \"atom\", \"value\": {\"term\": {\"type\": \"uri\", \"value\": \"urn:a\"}}}}, \"variables\": {\"state\": \"present\", \"keys\": [{\"kind\": \"string\", \"value\": \"s\"}]}, \"no_isolated_scope\": false}, \"lazy\": false}}, \"variables\": {\"state\": \"present\", \"keys\": [{\"kind\": \"variable\", \"name\": \"s\"}]}, \"no_isolated_scope\": false}, \"variables\": [\"s\"]}, \"template\": [], \"describe\": [], \"dataset\": []}",
+    "count": 0,
+    "source": null,
+    "bindings": null,
+    "data": [
+      [
+        "a",
+        "p",
+        "A"
+      ],
+      [
+        "b",
+        "q",
+        "yes"
+      ]
+    ]
+  }
+]

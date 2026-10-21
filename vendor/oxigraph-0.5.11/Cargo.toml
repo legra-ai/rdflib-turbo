@@ -15,7 +15,7 @@ rust-version = "1.87"
 name = "oxigraph"
 version = "0.5.11"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
-build = false
+build = "build.rs"
 autolib = false
 autobins = false
 autoexamples = false
@@ -67,7 +67,7 @@ rdf-12 = [
     "oxrdfio/rdf-12",
     "spareval/sparql-12",
 ]
-rocksdb = ["oxrocksdb-sys"]
+rocksdb = ["dep:oxrocksdb-sys"]
 rocksdb-debug = []
 rocksdb-pkg-config = ["oxrocksdb-sys/pkg-config"]
 
@@ -394,3 +394,6 @@ unused_import_braces = "warn"
 unused_lifetimes = "warn"
 unused_macro_rules = "warn"
 unused_qualifications = "warn"
+
+[build-dependencies.sha2]
+version = "0.11"
