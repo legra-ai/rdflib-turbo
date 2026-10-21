@@ -60,7 +60,7 @@ fail_under = 100
 show_missing = true
 
 [tool.uv.sources]
-pyshacl-turbo = { git = "https://github.com/legra-ai/pyshacl-turbo", rev = "fbd07aa18ac46edd2795f5fb341c2d8ca2886fd3" }
+pyshacl-turbo = { git = "https://github.com/legra-ai/pyshacl-turbo", rev = "b27ec5ca407c7fd447f6314efae765a57de00894" }
 
 [dependency-groups]
 dev = ["mypy>=1.15,<3"]
