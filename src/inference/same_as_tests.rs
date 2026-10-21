@@ -49,6 +49,7 @@ impl Graph for Measured<'_> {
         p: Option<NamedNodeRef<'a>>,
         o: Option<TermRef<'a>>,
     ) -> impl Iterator<Item = Result<Quad>> + 'a {
+        self.work.set(self.work.get() + 1);
         self.data
             .quads_for_pattern(s, p, o, Some(GraphNameRef::DefaultGraph))
             .map(|q| {
@@ -329,3 +330,6 @@ fn full_closure_matches_frozen_ordinary_rule_engine() {
         assert_eq!(data, reference, "closure case {case}");
     }
 }
+
+#[path = "same_as_dense_tests.rs"]
+mod dense;
