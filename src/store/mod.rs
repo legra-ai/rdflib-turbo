@@ -1,10 +1,12 @@
 //! Native storage and transaction handles, owned by this extension only.
+mod fork;
 mod input_terms;
 mod operations;
 pub(crate) mod output;
 mod pattern;
 mod read;
 mod read_input;
+mod registration;
 mod session;
 mod shacl;
 mod shacl_read;
@@ -21,6 +23,7 @@ use pyo3::prelude::*;
 
 use crate::{error, format};
 use operations::{Operation, runtime};
+pub(crate) use registration::register;
 use session::{Control, Session, lock};
 pub(crate) use transaction::NativeTransaction;
 use typed::{QuadInput, TermTuple};
@@ -128,28 +131,14 @@ impl NativeStore {
     #[new]
     #[pyo3(signature = (path=None))]
     fn new(py: Python<'_>, path: Option<String>) -> PyResult<Self> {
-        py.detach(|| {
-            let store = match path {
-                None => Store::new().map_err(runtime)?,
-                Some(path) => {
-                    #[cfg(feature = "persistence")]
-                    {
-                        Store::open(path).map_err(runtime)?
-                    }
-                    #[cfg(not(feature = "persistence"))]
-                    {
-                        let _ = path;
-                        return Err(crate::Error::Unsupported(
-                            "This build has no RocksDB persistence support".into(),
-                        ));
-                    }
-                }
-            };
-            Ok(Self {
-                control: Arc::new(Mutex::new(Control::new(store))),
-            })
-        })
-        .map_err(error)
+        py.detach(|| Self::open(path)).map_err(error)
+    }
+
+    #[pyo3(signature = (graph=None))]
+    fn fork_graph(&self, py: Python<'_>, graph: Option<String>) -> PyResult<Self> {
+        py.detach(|| Session::execute_inline(self.control.clone(), Operation::ForkGraph(graph)))
+            .map(Self::from_copy_reply)
+            .map_err(error)
     }
 
     fn ensure_open(&self) -> PyResult<()> {
@@ -221,18 +210,24 @@ impl NativeStore {
         publisher.complete(py, result)
     }
 
-    #[pyo3(signature = (mode, source_graph, destination_graph))]
+    #[pyo3(signature = (mode, graphs, *, axiomatic_triples=false, datatype_axioms=false, prior_error_messages=None))]
     fn infer_graph(
         &self,
         py: Python<'_>,
         mode: String,
-        source_graph: Option<String>,
-        destination_graph: String,
+        graphs: (Option<String>, String),
+        axiomatic_triples: bool,
+        datatype_axioms: bool,
+        prior_error_messages: Option<Vec<String>>,
     ) -> PyResult<crate::inference::InferenceOutcome> {
+        let (source_graph, destination_graph) = graphs;
         let (request, publisher) = crate::inference::InferenceRequest::capture(
             py,
-            None,
-            crate::inference::InferenceOptions::default(),
+            prior_error_messages,
+            crate::inference::InferenceOptions {
+                axiomatic_triples,
+                datatype_axioms,
+            },
         )?;
         let result = py.detach(|| {
             match Session::execute_inline(
@@ -377,15 +372,6 @@ impl NativeStore {
         })
         .map_err(error)
     }
-}
-
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_class::<term_output::NativeTermFactories>()?;
-    module.add_class::<term_output::NativeReadCursor>()?;
-    module.add_class::<NativeStore>()?;
-    module.add_class::<input_terms::NativeInputTerms>()?;
-    module.add_class::<NativeTransaction>()?;
-    Ok(())
 }
 
 #[cfg(test)]
