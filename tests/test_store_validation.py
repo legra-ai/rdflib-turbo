@@ -1,7 +1,9 @@
 """SHACL uses the same native transaction as pending writes and inference."""
 
+import json
+
 import pytest
-from rdflib_turbo import Store
+from rdflib_turbo import Dataset, Store
 from rdflib_turbo._native import SharedShapes, SharedValidationFailure
 
 SHAPES = """@prefix sh: <http://www.w3.org/ns/shacl#> .
@@ -63,3 +65,73 @@ def test_invalid_native_validation_settings_abort_pending_writes(settings):
                 with pytest.raises(ValueError):
                     shapes.validate_transaction(transaction._native, settings, True)
         assert len(store) == 0
+
+
+class Program:
+    """Test the commit gate without depending on the optional facade package."""
+
+    def __init__(self):
+        self.native = SharedShapes(SHAPES, True, [])
+
+    def validate(self, source, *, inplace, **options):
+        conforms, report, text, _ = source._validate_shared_shapes(
+            self.native, json.dumps(options), inplace
+        )
+        return conforms, report, text
+
+
+def test_validated_transaction_commits_original_and_rule_writes_together():
+    with Store() as store:
+        with store.transaction(shapes=Program(), iterate_rules=True) as transaction:
+            transaction.parse(data=SOURCE)
+        assert len(store) == 2
+
+
+def test_nonconforming_commit_gate_aborts_every_pending_write_and_retains_report():
+    from rdflib_turbo import ValidationError
+
+    with Store() as store:
+        store.parse(data="<urn:keep> <urn:p> 2.")
+        with pytest.raises(ValidationError) as failure:
+            with store.transaction(shapes=Program()) as transaction:
+                transaction.parse(data="<urn:s> <urn:other> 1.")
+        assert failure.value.report
+        assert "Conforms: False" in failure.value.text
+        assert len(store) == 1
+        assert store.query("ASK {<urn:keep> <urn:p> 2}")
+
+
+def test_commit_gate_rejects_options_without_shapes_before_starting_a_writer():
+    with Store() as store:
+        with pytest.raises(TypeError, match="shapes"):
+            with store.transaction(iterate_rules=True):
+                pytest.fail("invalid gate must fail before user writes")
+        with pytest.raises(TypeError, match="inplace"):
+            with store.transaction(shapes=Program(), inplace=False):
+                pytest.fail("gate must require transaction-local writes")
+
+
+@pytest.mark.parametrize("kind", ["dataset", "store", "transaction"])
+def test_sources_dispatch_validation_to_their_owned_native_backend(kind):
+    program = SharedShapes(SHAPES, True, [])
+    if kind == "dataset":
+        source = Dataset().parse(data=SOURCE)
+        assert source._validate_shared_shapes(program, "{}", False)[0]
+        assert len(source) == 1
+        return
+    with Store() as store:
+        if kind == "store":
+            store.parse(data=SOURCE)
+            assert store._validate_shared_shapes(program, "{}", False)[0]
+        else:
+            with store.transaction() as transaction:
+                transaction.parse(data=SOURCE)
+                assert transaction._validate_shared_shapes(program, "{}", False)[0]
+        assert len(store) == 1
+
+
+def test_invalid_compiled_shapes_fail_before_starting_the_transaction():
+    with Store() as store:
+        with pytest.raises(TypeError, match="compiled validation"):
+            with store.transaction(shapes=object()):
+                pytest.fail("invalid shapes must fail before user writes")
