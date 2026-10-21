@@ -41,7 +41,13 @@ fn used_datatypes_receive_all_ancestor_types_and_disjointness_axioms() {
     for combined in [false, true] {
         let mut expanded = data.clone();
         let mut transaction = expanded.insert_transaction();
-        owl(&mut transaction, combined).unwrap();
+        owl(
+            &mut transaction,
+            combined,
+            &mut Diagnostics::default(),
+            &LexicalContext::default(),
+        )
+        .unwrap();
         transaction.commit();
         assert!(expanded.contains(QuadRef::new(
             iri("urn:datatype:", "unsignedByte").as_ref(),

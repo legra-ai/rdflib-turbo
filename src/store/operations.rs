@@ -39,7 +39,7 @@ pub(super) enum Operation {
         base: Option<String>,
     },
     Update(String),
-    Infer(String, Option<String>, crate::inference::InferenceOptions),
+    Infer(String, Option<String>, crate::inference::InferenceRequest),
     InferGraph {
         mode: String,
         source: Option<String>,
@@ -56,6 +56,7 @@ pub(super) enum Reply {
     Count(usize),
     Text(String),
     Query(String, String),
+    Inference(crate::inference::InferenceOutcome),
 }
 
 impl Operation {
@@ -214,7 +215,7 @@ impl Operation {
                 )?;
                 Ok(Reply::Done)
             }
-            Self::Infer(mode, destination, options) => {
+            Self::Infer(mode, destination, request) => {
                 if !matches!(mode.as_str(), "rdfs" | "owlrl" | "both") {
                     return Err(Error::Invalid(format!("Unknown inference mode: {mode}")));
                 }
@@ -223,8 +224,8 @@ impl Operation {
                     .transpose()
                     .map_err(invalid)?
                     .map_or(oxigraph::model::GraphName::DefaultGraph, Into::into);
-                crate::inference::expand_transaction(transaction, &mode, destination, options)?;
-                Ok(Reply::Done)
+                crate::inference::expand_transaction(transaction, &mode, destination, request)
+                    .map(Reply::Inference)
             }
             Self::Update(source) => {
                 SparqlEvaluator::new()

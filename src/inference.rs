@@ -8,19 +8,28 @@ use crate::{Error, Result};
 mod axioms;
 mod backend;
 mod delta;
+mod diagnostic_datatypes;
+mod diagnostics;
 mod intersections;
 mod literal_values;
 mod options;
+mod outcome;
+mod request;
 mod same_as;
 pub(crate) mod scoped;
 mod traversal;
 
 pub(crate) use delta::expand_delta;
+pub(crate) use diagnostic_datatypes::LexicalFailure;
 pub(crate) use options::InferenceOptions;
 use options::PreparedOptions;
+pub(crate) use outcome::InferenceOutcome;
+pub(crate) use request::InferenceRequest;
 
 #[cfg(test)]
 mod failure_tests;
+#[cfg(test)]
+mod diagnostic_tests;
 #[cfg(test)]
 mod intersection_tests;
 #[cfg(test)]
@@ -211,14 +220,18 @@ const OWL_RULES: &[(&str, &str)] = &[
     ),
 ];
 
-pub(crate) fn expand(data: &mut Dataset, mode: &str, options: InferenceOptions) -> Result<()> {
+pub(crate) fn expand(
+    data: &mut Dataset,
+    mode: &str,
+    request: InferenceRequest,
+) -> Result<InferenceOutcome> {
     if data.iter().any(|q| !q.graph_name.is_default_graph()) {
-        return expand_into(data, mode, GraphName::DefaultGraph, options);
+        return expand_into(data, mode, GraphName::DefaultGraph, request);
     }
     let mut transaction = data.insert_transaction();
-    expand_configured(&mut transaction, mode, options)?;
+    let (_, outcome) = expand_configured(&mut transaction, mode, request)?;
     transaction.commit();
-    Ok(())
+    Ok(outcome)
 }
 
 /// Infer over the dataset union and put output in the exact destination.
@@ -227,31 +240,23 @@ pub(crate) fn expand_into(
     data: &mut Dataset,
     mode: &str,
     destination: GraphName,
-    options: InferenceOptions,
-) -> Result<()> {
+    request: InferenceRequest,
+) -> Result<InferenceOutcome> {
     let mut union = crate::graph::with_union(data);
     let mut transaction = union.insert_transaction();
-    let prepared = expand_configured(&mut transaction, mode, options)?;
+    let (prepared, outcome) = expand_configured(&mut transaction, mode, request)?;
     let publications = delta::literal_publications(data, mode, &destination);
     let mut destination_transaction = data.insert_transaction();
     for quad in publications.iter() {
         destination_transaction.insert(quad);
     }
     for quad in transaction.inserted() {
-        destination_transaction.insert(&Quad::new(
-            quad.subject,
-            quad.predicate,
-            quad.object,
-            destination.clone(),
-        ));
+        destination_transaction.insert(&Quad::new(quad.subject, quad.predicate, quad.object, destination.clone()));
     }
-    prepared.insert(|mut quad| {
-        quad.graph_name = destination.clone();
-        destination_transaction.insert(&quad);
-    })?;
+    prepared.insert(|mut quad| { quad.graph_name = destination.clone(); destination_transaction.insert(&quad); })?;
     destination_transaction.commit();
     transaction.commit();
-    Ok(())
+    Ok(outcome)
 }
 
 /// One round retains only distinct statements absent from its read snapshot.
@@ -297,25 +302,25 @@ fn apply_rules(
     Ok(())
 }
 
-fn expand_configured<'a>(
-    data: &mut impl Graph,
-    mode: &'a str,
-    options: InferenceOptions,
-) -> Result<PreparedOptions<'a>> {
+fn expand_configured<'a>(data: &mut impl Graph, mode: &'a str, request: InferenceRequest) -> Result<(PreparedOptions<'a>, InferenceOutcome)> {
     match mode {
-        "none" | "" => return PreparedOptions::new(data, mode, InferenceOptions::default()),
-        "rdfs" | "owlrl" | "both" => {}
+        "none" | "" => return Ok((PreparedOptions::new(data, mode, InferenceOptions::default())?, InferenceOutcome::default())),
+        "rdfs" | "owlrl" | "both" => {},
         _ => return Err(Error::Unsupported(format!("inference: {mode}"))),
     }
-    let prepared = PreparedOptions::new(data, mode, options)?;
+    let prepared = PreparedOptions::new(data, mode, request.options)?;
     prepared.insert(|quad| data.insert(quad))?;
-    expand_inner(data, mode)?;
-    Ok(prepared)
+    let outcome = expand_inner(data, mode, request)?;
+    Ok((prepared, outcome))
 }
 
-fn expand_inner(data: &mut impl Graph, mode: &str) -> Result<()> {
+fn expand_inner(
+    data: &mut impl Graph,
+    mode: &str,
+    request: InferenceRequest,
+) -> Result<InferenceOutcome> {
     match mode {
-        "none" | "" => return Ok(()),
+        "none" | "" => return Ok(InferenceOutcome::default()),
         "rdfs" | "owlrl" | "both" => {}
         _ => return Err(Error::Unsupported(format!("inference: {mode}"))),
     }
@@ -336,6 +341,7 @@ fn expand_inner(data: &mut impl Graph, mode: &str) -> Result<()> {
         }
         literal_values::strings(data)?;
     }
+    let mut diagnostics = diagnostics::Diagnostics::new(request.prior_error_messages);
     // bounded: the fixed RDFS/OWL rule tables above.
     let mut rules = Vec::new();
     if mode != "owlrl" {
@@ -343,7 +349,12 @@ fn expand_inner(data: &mut impl Graph, mode: &str) -> Result<()> {
     }
     if mode != "rdfs" {
         rules.extend_from_slice(OWL_RULES);
-        axioms::owl(data, mode == "both")?;
+        axioms::owl(
+            data,
+            mode == "both",
+            &mut diagnostics,
+            &request.lexical_context,
+        )?;
     }
     let mut initial_resources = Pending::default();
     if mode != "owlrl" {
@@ -363,6 +374,9 @@ fn expand_inner(data: &mut impl Graph, mode: &str) -> Result<()> {
         })
         .collect::<Result<Vec<_>>>()?;
     loop {
+        if mode != "rdfs" {
+            diagnostics.round(data)?;
+        }
         let mut additions = std::mem::take(&mut initial_resources);
         apply_rules(data, &queries, &mut additions, mode != "rdfs")?;
         if mode != "rdfs" {
@@ -372,7 +386,9 @@ fn expand_inner(data: &mut impl Graph, mode: &str) -> Result<()> {
             traversal::keys(data, &mut additions)?;
         }
         if additions.0.is_empty() {
-            return Ok(());
+            return diagnostics.finish(data, mode != "rdfs", |term| {
+                diagnostics::cardinality_zero(term, &request.lexical_context)
+            });
         }
         for quad in additions.0 {
             data.insert(quad);
@@ -385,15 +401,15 @@ pub(crate) fn expand_transaction(
     transaction: &mut oxigraph::store::Transaction<'_>,
     mode: &str,
     destination: GraphName,
-    options: InferenceOptions,
-) -> Result<()> {
+    request: InferenceRequest,
+) -> Result<InferenceOutcome> {
     expand_configured(
         &mut backend::TransactionGraph {
             transaction,
             destination,
         },
         mode,
-        options,
+        request,
     )
-    .map(|_| ())
+    .map(|(_, outcome)| outcome)
 }

@@ -1,0 +1,31 @@
+//! Caller-thread conversion configuration and caller-owned diagnostic history.
+
+use pyo3::prelude::*;
+
+use super::diagnostic_datatypes::LexicalContext;
+use super::InferenceOptions;
+
+#[derive(Default)]
+pub(crate) struct InferenceRequest {
+    pub(crate) options: InferenceOptions,
+    pub(super) prior_error_messages: Vec<String>,
+    pub(super) lexical_context: LexicalContext,
+}
+
+impl InferenceRequest {
+    pub(crate) fn capture(
+        py: Python<'_>,
+        prior_error_messages: Option<Vec<String>>,
+        options: InferenceOptions,
+    ) -> PyResult<Self> {
+        Ok(Self {
+            options,
+            prior_error_messages: prior_error_messages.unwrap_or_default(),
+            lexical_context: LexicalContext::capture(py)?,
+        })
+    }
+}
+
+impl From<InferenceOptions> for InferenceRequest {
+    fn from(options: InferenceOptions) -> Self { Self { options, ..Self::default() } }
+}

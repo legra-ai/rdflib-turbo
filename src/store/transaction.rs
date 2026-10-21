@@ -147,7 +147,7 @@ impl NativeTransaction {
         .map_err(error)
     }
 
-    #[pyo3(signature = (mode, destination=None, *, axiomatic_triples=false, datatype_axioms=false))]
+    #[pyo3(signature = (mode, destination=None, *, axiomatic_triples=false, datatype_axioms=false, prior_error_messages=None))]
     fn infer(
         &self,
         py: Python<'_>,
@@ -155,18 +155,23 @@ impl NativeTransaction {
         destination: Option<String>,
         axiomatic_triples: bool,
         datatype_axioms: bool,
-    ) -> PyResult<()> {
+        prior_error_messages: Option<Vec<String>>,
+    ) -> PyResult<crate::inference::InferenceOutcome> {
+        let request = match crate::inference::InferenceRequest::capture(py, prior_error_messages, crate::inference::InferenceOptions { axiomatic_triples, datatype_axioms }) {
+            Ok(request) => request,
+            Err(failure) => {
+                py.detach(|| self.session.finish(false)).map_err(error)?;
+                return Err(failure);
+            }
+        };
         py.detach(|| {
-            self.session
-                .execute(Operation::Infer(
-                    mode,
-                    destination,
-                    crate::inference::InferenceOptions {
-                        axiomatic_triples,
-                        datatype_axioms,
-                    },
-                ))
-                .map(|_| ())
+            match self
+                .session
+                .execute(Operation::Infer(mode, destination, request))?
+            {
+                Reply::Inference(outcome) => Ok(outcome),
+                _ => unreachable!("native inference reply type"),
+            }
         })
         .map_err(error)
     }

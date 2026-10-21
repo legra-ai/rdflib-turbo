@@ -34,6 +34,7 @@ oxilangtag = "=0.1.6"
 spargebra = "=0.4.7"
 spareval = { version = "=0.2.7", features = ["exact-custom-function-terms", "exact-term-builtins", "rdf-set-union"] }
 thiserror = "2"
+roxmltree = "=0.21.1"
 
 [profile.release]
 lto = "thin"

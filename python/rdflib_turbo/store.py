@@ -19,20 +19,21 @@ class ValidationError(ValueError):
 class InferenceOperations(GraphOperations):
     """Shared inference entry point for a store and its active transaction."""
 
-    def infer(
-        self, *, inference="owlrl", destination=None, axiomatic_triples=False, datatype_axioms=False
-    ):
+    def infer(self, *, inference="owlrl", destination=None, axiomatic_triples=False, datatype_axioms=False, prior_error_messages=None):
         """Expand the graph union; write new facts to destination (default graph if omitted).
 
         Execution errors abort the entire transaction, including preceding writes.
         Existing statements retain their original contexts.
         """
-        self._native.infer(
-            inference,
-            destination,
-            axiomatic_triples=axiomatic_triples,
-            datatype_axioms=datatype_axioms,
-        )
+        self._last_inference = None
+        try:
+            self._last_inference = self._native.infer(
+                inference, destination, axiomatic_triples=axiomatic_triples, datatype_axioms=datatype_axioms, prior_error_messages=prior_error_messages
+            )
+        except BaseException:
+            if isinstance(self, Transaction):
+                self._native.rollback()
+            raise
         return self
 
 
@@ -46,6 +47,7 @@ class Transaction(InferenceOperations):
 
     def __init__(self, native):
         self._native = native
+        self._last_inference = None
 
     @contextmanager
     def _validate_shared_shapes(self, program, settings, inplace):
@@ -71,6 +73,7 @@ class Store(InferenceOperations):
 
     def __init__(self, path=None):
         self._native = NativeStore(None if path is None else fspath(path))
+        self._last_inference = None
 
     @contextmanager
     def _validate_shared_shapes(self, program, settings, inplace):

@@ -9,34 +9,12 @@ use pyo3::prelude::*;
 use serde_json::{Value, json};
 
 mod dataset_inference;
+mod errors;
+use errors::{Error, Result, error};
 mod graph;
 mod inference;
 mod shacl;
 mod store;
-
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("{0}")]
-    Invalid(String),
-    #[error("Unsupported feature: {0}")]
-    Unsupported(String),
-    #[error("{0}")]
-    Runtime(String),
-    #[error(transparent)]
-    Shacl(#[from] pyshacl_turbo_engine::Error),
-    #[error("SPARQL evaluation failed: {0}")]
-    Query(#[from] oxigraph::sparql::QueryEvaluationError),
-}
-pub type Result<T> = std::result::Result<T, Error>;
-
-fn error(error: Error) -> PyErr {
-    match error {
-        Error::Shacl(cause) => shacl::error(cause),
-        Error::Invalid(_) => PyValueError::new_err(error.to_string()),
-        Error::Unsupported(_) => PyNotImplementedError::new_err(error.to_string()),
-        _ => PyRuntimeError::new_err(error.to_string()),
-    }
-}
 
 fn format(name: &str) -> PyResult<RdfFormat> {
     match name {
@@ -281,7 +259,7 @@ impl NativeDataset {
         })
     }
 
-    #[pyo3(signature = (mode, destination=None, *, axiomatic_triples=false, datatype_axioms=false))]
+    #[pyo3(signature = (mode, destination=None, *, axiomatic_triples=false, datatype_axioms=false, prior_error_messages=None))]
     fn infer(
         &self,
         py: Python<'_>,
@@ -289,7 +267,8 @@ impl NativeDataset {
         destination: Option<&str>,
         axiomatic_triples: bool,
         datatype_axioms: bool,
-    ) -> PyResult<()> {
+        prior_error_messages: Option<Vec<String>>,
+    ) -> PyResult<inference::InferenceOutcome> {
         if !matches!(mode, "rdfs" | "owlrl" | "both") {
             return Err(PyValueError::new_err(format!(
                 "Unknown inference mode: {mode}"
@@ -299,38 +278,24 @@ impl NativeDataset {
             .map(NamedNode::new)
             .transpose()
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let request = inference::InferenceRequest::capture(py, prior_error_messages, crate::inference::InferenceOptions { axiomatic_triples, datatype_axioms })?;
         py.detach(|| {
             let mut current = self
                 .inner
                 .write()
-                .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
-            if let Some(destination) = destination {
-                inference::expand_into(
-                    &mut current,
-                    mode,
-                    destination.into(),
-                    inference::InferenceOptions {
-                        axiomatic_triples,
-                        datatype_axioms,
-                    },
-                )
-                .map_err(error)?;
+                .map_err(|_| Error::Runtime("Dataset lock poisoned".into()))?;
+            let outcome = if let Some(destination) = destination {
+                inference::expand_into(&mut current, mode, destination.into(), request)?
             } else {
-                inference::expand(
-                    &mut current,
-                    mode,
-                    inference::InferenceOptions {
-                        axiomatic_triples,
-                        datatype_axioms,
-                    },
-                )
-                .map_err(error)?;
-            }
-            Ok(())
+                inference::expand(&mut current, mode, request)?
+            };
+            outcome.bind_namespace(&mut current.namespaces);
+            Ok(outcome)
         })
+        .map_err(error)
     }
 
-    #[pyo3(signature = (mode, destination=None, *, axiomatic_triples=false, datatype_axioms=false))]
+    #[pyo3(signature = (mode, destination=None, *, axiomatic_triples=false, datatype_axioms=false, prior_error_messages=None))]
     fn infer_delta(
         &self,
         py: Python<'_>,
@@ -338,22 +303,16 @@ impl NativeDataset {
         destination: Option<&str>,
         axiomatic_triples: bool,
         datatype_axioms: bool,
-    ) -> PyResult<Self> {
-        self.expand_delta(
-            py,
-            mode,
-            destination,
-            inference::InferenceOptions {
-                axiomatic_triples,
-                datatype_axioms,
-            },
-        )
+        prior_error_messages: Option<Vec<String>>,
+    ) -> PyResult<(Self, inference::InferenceOutcome)> {
+        self.expand_delta(py, mode, destination, crate::inference::InferenceOptions { axiomatic_triples, datatype_axioms }, prior_error_messages)
     }
 }
 
 #[pymodule]
 fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeDataset>()?;
+    module.add_class::<inference::InferenceOutcome>()?;
     shacl::register(module)?;
     store::register(module)?;
     Ok(())
