@@ -1196,6 +1196,8 @@ impl GraphPattern {
                     && crate::rdflib::lazy_eligible(right)
                 {
                     JoinAlgorithm::RdfLibLazy
+                } else if mode.rdflib {
+                    JoinAlgorithm::RdfLibIndependent
                 } else {
                     JoinAlgorithm::default()
                 },
@@ -1668,6 +1670,9 @@ impl From<&GraphPattern> for AlGraphPattern {
 /// The join algorithm used (c.f. [`GraphPattern::Join`]).
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum JoinAlgorithm {
+    /// Independent original RDFLib join, with initial-binding lookup outside
+    /// the explicit solution domain during directional compatibility checks.
+    RdfLibIndependent,
     /// Evaluate the original right pattern in each left solution's context,
     /// then merge the original left values over the right output.
     RdfLibLazy,

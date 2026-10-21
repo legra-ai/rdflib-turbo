@@ -1004,6 +1004,8 @@ fn estimate_join_cost(
             let left_types = infer_graph_pattern_types(left, input_types.clone());
             estimate_lateral_cost(left, &left_types, right, input_types)
         }
+        JoinAlgorithm::RdfLibIndependent => estimate_graph_pattern_size(left, input_types)
+            .saturating_mul(estimate_graph_pattern_size(right, input_types)),
         JoinAlgorithm::HashBuildLeftProbeRight { keys } => {
             estimate_graph_pattern_size(left, input_types)
                 .saturating_mul(estimate_graph_pattern_size(right, input_types))

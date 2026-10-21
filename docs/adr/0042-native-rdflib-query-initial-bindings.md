@@ -31,8 +31,11 @@ RDFLib-mode lazy joins stream the correlated right side, restore global initial
 bindings when creating its context, and merge the left row with RDFLib's
 precedence. OPTIONAL streams matches and retries with the original source
 variable scope. MINUS keeps its independently evaluated sides and retains
-global binding domains. Hidden bindings are removed only at the final public
-projection, including DESCRIBE's selected resources.
+global binding domains. Each projection restricts its explicit output domain,
+including DESCRIBE's selected resources. Independent joins check compatibility
+directionally: iterate the left explicit domain and look up each value in the
+right row, consulting initial bindings for absent keys. That lookup must not
+insert keys into the right row, because MINUS observes the explicit domain.
 
 Do not apply the ordinary SPARQL optimizer to this order-sensitive algebra.
 Its join reordering and projection assumptions are invalid for these context

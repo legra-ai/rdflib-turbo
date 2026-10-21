@@ -34,28 +34,30 @@ fn top_join(pattern: &GraphPattern) -> &JoinAlgorithm {
 }
 
 #[test]
-fn plain_subquery_is_lazy_but_distinct_and_slice_are_barriers() {
-    for (suffix, lazy) in [("", true), (" LIMIT 1", false)] {
+fn plain_subquery_is_lazy_but_distinct_and_slice_are_independent_barriers() {
+    for (selection, suffix, lazy) in [
+        ("?s", "", true),
+        ("?s", " LIMIT 1", false),
+        ("DISTINCT ?s", "", false),
+    ] {
         let original = parsed(&format!(
-            "SELECT ?s WHERE {{ VALUES ?s {{<urn:a>}} {{ SELECT ?s WHERE {{BIND(<urn:b> AS ?s)}}{suffix} }} }}"
+            "SELECT ?s WHERE {{ VALUES ?s {{<urn:a>}} {{ SELECT {selection} WHERE {{BIND(<urn:b> AS ?s)}}{suffix} }} }}"
         ));
-        let lowered = GraphPattern::from_rdflib_algebra(&original);
-        assert_eq!(
-            matches!(top_join(&lowered), JoinAlgorithm::RdfLibLazy),
-            lazy
-        );
-        assert!(!matches!(
+        for lowered in [
+            GraphPattern::from_rdflib_algebra(&original),
+            GraphPattern::from_rdflib_algebra_unoptimized(&original),
+        ] {
+            if lazy {
+                assert!(matches!(top_join(&lowered), JoinAlgorithm::RdfLibLazy));
+            } else {
+                assert!(matches!(top_join(&lowered), JoinAlgorithm::RdfLibIndependent));
+            }
+        }
+        assert!(matches!(
             top_join(&GraphPattern::from(&original)),
-            JoinAlgorithm::RdfLibLazy
+            JoinAlgorithm::HashBuildLeftProbeRight { .. }
         ));
     }
-    let original = parsed(
-        "SELECT ?s WHERE { VALUES ?s {<urn:a>} { SELECT DISTINCT ?s WHERE {BIND(<urn:b> AS ?s)} } }",
-    );
-    assert!(!matches!(
-        top_join(&GraphPattern::from_rdflib_algebra(&original)),
-        JoinAlgorithm::RdfLibLazy
-    ));
 }
 
 #[test]
@@ -76,16 +78,16 @@ fn lowering_distinguishes_bgp_internal_joins_from_original_join_barriers() {
     assert!(!matches!(
         *left,
         GraphPattern::Join {
-            algorithm: JoinAlgorithm::RdfLibLazy,
+            algorithm: JoinAlgorithm::RdfLibLazy | JoinAlgorithm::RdfLibIndependent,
             ..
         }
     ));
     let nested_join = parsed(
         "SELECT ?s WHERE { VALUES ?s {<urn:a>} { VALUES ?x {1} {SELECT ?s WHERE {BIND(<urn:b> AS ?s)}} } }",
     );
-    assert!(!matches!(
+    assert!(matches!(
         top_join(&GraphPattern::from_rdflib_algebra(&nested_join)),
-        JoinAlgorithm::RdfLibLazy
+        JoinAlgorithm::RdfLibIndependent
     ));
 }
 
@@ -113,7 +115,7 @@ fn exists_raw_syntax_does_not_block_parent_join_but_its_translated_graph_is_inde
     assert!(matches!(
         *inner,
         GraphPattern::Join {
-            algorithm: JoinAlgorithm::HashBuildLeftProbeRight { .. },
+            algorithm: JoinAlgorithm::RdfLibIndependent,
             ..
         }
     ));
@@ -201,7 +203,7 @@ fn exists_context_preserves_independent_wrapper_joins_without_analyzed_optional_
     assert!(matches!(
         *left,
         GraphPattern::Join {
-            algorithm: JoinAlgorithm::HashBuildLeftProbeRight { .. },
+            algorithm: JoinAlgorithm::RdfLibIndependent,
             ..
         }
     ));

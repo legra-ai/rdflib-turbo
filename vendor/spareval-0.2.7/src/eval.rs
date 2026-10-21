@@ -395,6 +395,22 @@ impl<T: Clone> InternalTuple<T> {
 }
 
 impl<T: Clone + Eq> InternalTuple<T> {
+    fn combine_with_rdflib(&self, other: &Self, globals: &Self) -> Option<Self> {
+        // FrozenBindings.compatible iterates only the left explicit domain;
+        // lookup on the right may read initBindings without extending its domain.
+        for (index, value) in self.inner.iter().enumerate() {
+            if let Some(value) = value
+                && let Some(other_value) = other.get(index).or_else(|| globals.get(index))
+                && value != other_value
+            {
+                return None;
+            }
+        }
+        let mut result = self.clone();
+        result.overwrite_from(other);
+        Some(result)
+    }
+
     pub fn combine_with(&self, other: &Self) -> Option<Self> {
         if self.inner.len() < other.inner.len() {
             let mut result = other.inner.clone();
@@ -1394,6 +1410,30 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
 
                 match algorithm {
                     JoinAlgorithm::RdfLibLazy => unreachable!("correlated join handled above"),
+                    JoinAlgorithm::RdfLibIndependent => {
+                        let globals = self.encode_bindings(encoded_variables, [])?;
+                        Rc::new(move |from| {
+                            let mut errors = Vec::new();
+                            let built = left(from.clone())
+                                .filter_map(|row| match row {
+                                    Ok(row) => Some(row),
+                                    Err(error) => {
+                                        errors.push(Err(error));
+                                        None
+                                    }
+                                })
+                                .collect::<Vec<_>>();
+                            if built.is_empty() && errors.is_empty() {
+                                return Box::new(empty());
+                            }
+                            Box::new(CartesianProductJoinIterator {
+                                probe_iter: right(from).peekable(),
+                                built,
+                                buffered_results: errors,
+                                rdflib_globals: Some(globals.clone()),
+                            })
+                        })
+                    }
                     JoinAlgorithm::HashBuildLeftProbeRight { keys } => {
                         let build = left;
                         let probe = right;
@@ -1423,6 +1463,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                                     probe_iter,
                                     built: built_values,
                                     buffered_results: errors,
+                                    rdflib_globals: None,
                                 })
                             })
                         } else {
@@ -4026,6 +4067,7 @@ struct CartesianProductJoinIterator<'a, T> {
     probe_iter: Peekable<InternalTuplesIterator<'a, T>>,
     built: Vec<InternalTuple<T>>,
     buffered_results: Vec<Result<InternalTuple<T>, QueryEvaluationError>>,
+    rdflib_globals: Option<InternalTuple<T>>,
 }
 
 impl<T: Clone + Eq> Iterator for CartesianProductJoinIterator<'_, T> {
@@ -4041,7 +4083,12 @@ impl<T: Clone + Eq> Iterator for CartesianProductJoinIterator<'_, T> {
                 Err(error) => return Some(Err(error)),
             };
             for built_tuple in &self.built {
-                if let Some(result_tuple) = probe_tuple.combine_with(built_tuple) {
+                let result = if let Some(globals) = &self.rdflib_globals {
+                    built_tuple.combine_with_rdflib(&probe_tuple, globals)
+                } else {
+                    probe_tuple.combine_with(built_tuple)
+                };
+                if let Some(result_tuple) = result {
                     self.buffered_results.push(Ok(result_tuple))
                 }
             }
@@ -5017,6 +5064,7 @@ fn eval_node_label(node: &GraphPattern) -> String {
             )
         }
         GraphPattern::Join { algorithm, .. } => match algorithm {
+            JoinAlgorithm::RdfLibIndependent => "Join(RdfLibIndependent)".to_owned(),
             JoinAlgorithm::RdfLibLazy => "Join(RdfLibLazy)".to_owned(),
             JoinAlgorithm::HashBuildLeftProbeRight { keys } => format!(
                 "Join(HashBuildLeftProbeRight, keys = {})",

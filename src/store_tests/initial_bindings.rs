@@ -79,6 +79,10 @@ fn rdflib_initial_bindings_cross_projections_and_allow_bind_replacement() {
         ("SELECT (?s AS ?alias) WHERE {}", Some(node("a").into())),
         ("SELECT ?s WHERE { VALUES ?s { <urn:b> } }", None),
         (
+            "SELECT ?o WHERE { BIND(<urn:b> AS ?s) { SELECT DISTINCT ?o WHERE { ?s <urn:p> ?o } } }",
+            None,
+        ),
+        (
             "SELECT ?s WHERE { BIND(<urn:b> AS ?s) }",
             Some(node("b").into()),
         ),
