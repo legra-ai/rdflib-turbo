@@ -31,3 +31,13 @@ plans without moving BIND/projection/group boundaries. The explicit unoptimized
 entry point disables even leaf optimization. Ordinary From conversion and the
 standard optimizer entry points remain unchanged. Tests cover source-node identity,
 EXISTS wrappers, OPTIONAL scope, and optimized/unoptimized leaf plans.
+
+
+Raw EXISTS scope traversal differs from translated query scope: raw Bind includes
+expression-only names, InlineData exposes its declared VALUES names, and a
+SubSelect contributes its preserved source PV rather than hidden execution names.
+The single scope walker carries an explicit raw-expression traversal mode.
+OPTIONAL metadata is optional: None denotes a translated EXISTS graph that never
+received RDFLib's `_addVars` pass and therefore skips the unmatched-row retry.
+Pinned source-set and explicit-versus-wildcard result regressions protect these
+observed distinctions; no alternate Python evaluator is used.

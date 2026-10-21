@@ -15,7 +15,7 @@ fn optional_retry_does_not_treat_values_row_keys_as_source_variables() {
     else {
         panic!("OPTIONAL")
     };
-    assert!(variables.is_empty());
+    assert!(variables.unwrap().is_empty());
 }
 
 fn parsed(text: &str) -> spargebra::algebra::GraphPattern {
@@ -135,7 +135,11 @@ fn optional_retry_retains_hidden_source_variables_but_excludes_bind_expression_o
         panic!("RDFLib optional metadata")
     };
     assert_eq!(
-        variables.iter().map(|v| v.as_str()).collect::<Vec<_>>(),
+        variables
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str())
+            .collect::<Vec<_>>(),
         ["alias", "hidden", "x"]
     );
     let original =
@@ -154,13 +158,17 @@ fn optional_retry_retains_hidden_source_variables_but_excludes_bind_expression_o
         panic!("RDFLib optional metadata")
     };
     assert_eq!(
-        variables.iter().map(|v| v.as_str()).collect::<Vec<_>>(),
+        variables
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str())
+            .collect::<Vec<_>>(),
         ["s", "x"]
     );
 }
 
 #[test]
-fn exists_context_preserves_independent_wrapper_joins_and_optional_metadata() {
+fn exists_context_preserves_independent_wrapper_joins_without_analyzed_optional_scope() {
     let Query::Select { pattern, .. } = SparqlParser::new()
         .with_rdflib_query_context()
         .parse_query(
@@ -188,10 +196,8 @@ fn exists_context_preserves_independent_wrapper_joins_and_optional_metadata() {
     else {
         panic!("optional")
     };
-    assert_eq!(
-        variables.iter().map(|v| v.as_str()).collect::<Vec<_>>(),
-        ["s"]
-    );
+    // Actual translated RDFLib EXISTS graph never receives the _addVars pass.
+    assert!(variables.is_none());
     assert!(matches!(
         *left,
         GraphPattern::Join {
@@ -260,5 +266,54 @@ fn grouped_distinct_and_sliced_exists_do_not_turn_an_outer_lazy_join_into_a_hash
             top_join(&GraphPattern::from_rdflib_algebra(&pattern)),
             JoinAlgorithm::RdfLibLazy
         ));
+    }
+}
+
+#[test]
+fn optional_retry_uses_raw_exists_scope_instead_of_translated_expression_scope() {
+    // Pinned RDFLib 7.6.0 source sets and actual result consequences are retained
+    // in the synthetic reference oracle. With outer hidden=urn:a and label A/B,
+    // these scopes respectively preserve or suppress the unmatched OPTIONAL row.
+    let cases = [
+        ("BIND(?hidden AS ?y)", vec!["hidden", "x", "y"]),
+        ("VALUES ?hidden {<urn:a>}", vec!["hidden", "x"]),
+        ("{SELECT ?y WHERE {?hidden <urn:label> ?y}}", vec!["x", "y"]),
+        (
+            "{SELECT ?hidden ?y WHERE {?hidden <urn:label> ?y}}",
+            vec!["hidden", "x", "y"],
+        ),
+        ("{SELECT * WHERE {?hidden <urn:label> ?y}}", vec!["x"]),
+    ];
+    for (body, expected) in cases {
+        let query = format!(
+            "SELECT ?x WHERE {{{{BIND(1 AS ?x) FILTER EXISTS {{{body}}}}} OPTIONAL {{?hidden <urn:label> \"B\"}}}}"
+        );
+        let Query::Select { pattern, .. } = SparqlParser::new()
+            .with_rdflib_query_context()
+            .parse_query(&query)
+            .unwrap()
+        else {
+            panic!("SELECT")
+        };
+        let GraphPattern::Project { inner, .. } = GraphPattern::from_rdflib_algebra(&pattern)
+        else {
+            panic!("projection")
+        };
+        let GraphPattern::LeftJoin {
+            algorithm: crate::algebra::LeftJoinAlgorithm::RdfLib { variables },
+            ..
+        } = *inner
+        else {
+            panic!("OPTIONAL")
+        };
+        assert_eq!(
+            variables
+                .unwrap()
+                .iter()
+                .map(|v| v.as_str())
+                .collect::<Vec<_>>(),
+            expected,
+            "{body}"
+        );
     }
 }

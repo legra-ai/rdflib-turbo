@@ -155,3 +155,36 @@ def test_initial_bindings_do_not_invoke_python_query_evaluator(monkeypatch):
     monkeypatch.setattr(rdflib.plugins.sparql.processor, "evalQuery", forbidden)
     actual = fixture(Graph()).query(QUERIES[0], initBindings={"s": EX.a})
     assert list(actual) == [(Literal("A"),)]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "BIND(?hidden AS ?y)",
+        "VALUES ?hidden { <urn:bindings:a> }",
+        "{ SELECT ?y WHERE { ?hidden <urn:bindings:label> ?y } }",
+        "{ SELECT ?hidden ?y WHERE { ?hidden <urn:bindings:label> ?y } }",
+        "{ SELECT * WHERE { ?hidden <urn:bindings:label> ?y } }",
+    ],
+)
+@pytest.mark.parametrize("bindings", [{}, {"unused": EX.a}, {"hidden": EX.a}])
+def test_optional_retry_retains_raw_exists_projection_scope(body, bindings):
+    query = (
+        "SELECT ?hidden ?x WHERE { VALUES ?hidden { <urn:bindings:a> } "
+        "{ SELECT ?x WHERE { { BIND(1 AS ?x) FILTER EXISTS { BODY } } "
+        'OPTIONAL { ?hidden <urn:bindings:label> "B" } } } }'
+    ).replace("BODY", body)
+    expected = fixture(ReferenceGraph()).query(query, initBindings=bindings)
+    actual = fixture(Graph()).query(query, initBindings=bindings)
+    assert result_value(actual) == result_value(expected)
+
+
+def test_optional_inside_exists_keeps_unmatched_left_without_analysis_retry():
+    query = (
+        "ASK { VALUES ?s { <urn:bindings:a> } FILTER EXISTS { BIND(1 AS ?x) "
+        'OPTIONAL { ?s <urn:bindings:label> "B" } } }'
+    )
+    bindings = {"unused": EX.a}
+    expected = fixture(ReferenceGraph()).query(query, initBindings=bindings)
+    actual = fixture(Graph()).query(query, initBindings=bindings)
+    assert result_value(actual) == result_value(expected)

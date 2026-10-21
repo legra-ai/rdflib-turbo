@@ -42,7 +42,7 @@ fn explicit_context_distinguishes_direct_grouped_and_subselect_exists() {
         assert!(matches!(*left, GraphPattern::Bgp { patterns } if patterns.is_empty()));
         assert!(matches!(
             *right,
-            GraphPattern::Extend { .. } | GraphPattern::Project { .. }
+            GraphPattern::Extend { .. } | GraphPattern::ProjectWithSourceScope { .. }
         ));
     }
     assert!(matches!(
@@ -115,4 +115,37 @@ fn nested_not_exists_scope_does_not_change_following_regular_group() {
     };
     assert!(matches!(*left, GraphPattern::Extend { .. }));
     assert!(matches!(*right, GraphPattern::Extend { .. }));
+}
+
+#[test]
+fn exists_subselect_preserves_raw_explicit_projection_scope_separately_from_star() {
+    for (projection, expected) in [("?hidden ?y", vec!["hidden", "y"]), ("*", vec![])] {
+        let text = format!(
+            "SELECT ?x WHERE {{FILTER EXISTS {{{{SELECT {projection} WHERE {{?hidden <urn:p> ?y}}}}}}}}"
+        );
+        let GraphPattern::Join { right, .. } = exists_body(&text, true) else {
+            panic!("EXISTS group")
+        };
+        let GraphPattern::ProjectWithSourceScope {
+            variables,
+            source_variables,
+            ..
+        } = *right
+        else {
+            panic!("source scope")
+        };
+        assert_eq!(
+            variables.iter().map(|v| v.as_str()).collect::<Vec<_>>(),
+            ["hidden", "y"]
+        );
+        assert_eq!(
+            source_variables
+                .iter()
+                .map(|v| v.as_str())
+                .collect::<Vec<_>>(),
+            expected
+        );
+        let normal = exists_body(&text, false);
+        assert!(matches!(normal, GraphPattern::Project { .. }));
+    }
 }

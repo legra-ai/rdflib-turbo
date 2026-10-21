@@ -60,6 +60,7 @@ pub(crate) fn lazy_eligible(pattern: &GraphPattern) -> bool {
         } => lazy_eligible(inner) && expression_eligible(expression),
         GraphPattern::Graph { inner, .. }
         | GraphPattern::Project { inner, .. }
+        | GraphPattern::ProjectWithSourceScope { inner, .. }
         | GraphPattern::Reduced { inner }
         | GraphPattern::Service { inner, .. } => lazy_eligible(inner),
         GraphPattern::OrderBy { inner, expression } => {
@@ -123,17 +124,23 @@ fn expression_eligible(expression: &Expression) -> bool {
 /// Extend expressions and relational-expression operands do not add scope.
 pub(crate) fn variables(pattern: &GraphPattern) -> Vec<oxrdf::Variable> {
     let mut variables = std::collections::BTreeSet::new(); // bounded: this query's finite variable vocabulary.
-    graph_variables(pattern, &mut variables);
+    graph_variables(pattern, &mut variables, false);
     variables.into_iter().collect()
 }
 
 type Variables = std::collections::BTreeSet<oxrdf::Variable>;
 
-fn graph_variables(pattern: &GraphPattern, output: &mut Variables) {
+fn graph_variables(pattern: &GraphPattern, output: &mut Variables, raw_exists: bool) {
     match pattern {
         // RDFLib's ToMultiSet stores VALUES names in row-dictionary keys;
         // _addVars does not traverse those keys.
-        GraphPattern::Values { .. } => {}
+        GraphPattern::Values { variables, .. } => {
+            // Raw InlineData declares a variable list; translated ToMultiSet
+            // keeps only row-map keys, which _addVars does not visit.
+            if raw_exists {
+                output.extend(variables.iter().cloned());
+            }
+        }
         GraphPattern::Bgp { .. } | GraphPattern::Path { .. } => {
             pattern.on_in_scope_variable(|variable| {
                 output.insert(variable.clone());
@@ -142,53 +149,64 @@ fn graph_variables(pattern: &GraphPattern, output: &mut Variables) {
         GraphPattern::Join { left, right }
         | GraphPattern::Union { left, right }
         | GraphPattern::Minus { left, right } => {
-            graph_variables(left, output);
-            graph_variables(right, output);
+            graph_variables(left, output, raw_exists);
+            graph_variables(right, output, raw_exists);
         }
         #[cfg(feature = "sep-0006")]
         GraphPattern::Lateral { left, right } => {
-            graph_variables(left, output);
-            graph_variables(right, output);
+            graph_variables(left, output, raw_exists);
+            graph_variables(right, output, raw_exists);
         }
         GraphPattern::LeftJoin {
             left,
             right,
             expression,
         } => {
-            graph_variables(left, output);
-            graph_variables(right, output);
+            graph_variables(left, output, raw_exists);
+            graph_variables(right, output, raw_exists);
             if let Some(expression) = expression {
-                expression_variables(expression, output);
+                expression_variables(expression, output, raw_exists);
             }
         }
         GraphPattern::Filter { inner, expr } => {
-            graph_variables(inner, output);
-            expression_variables(expr, output);
+            graph_variables(inner, output, raw_exists);
+            expression_variables(expr, output, raw_exists);
         }
         GraphPattern::Extend {
-            inner, variable, ..
+            inner,
+            variable,
+            expression,
         } => {
-            graph_variables(inner, output);
+            graph_variables(inner, output, raw_exists);
             output.insert(variable.clone());
+            // Raw Bind is not the translated Extend node whose expr is excluded.
+            if raw_exists {
+                expression_variables(expression, output, true);
+            }
+        }
+        GraphPattern::ProjectWithSourceScope {
+            source_variables, ..
+        } => {
+            output.extend(source_variables.iter().cloned());
         }
         GraphPattern::Project { inner, variables } => {
-            graph_variables(inner, output);
+            graph_variables(inner, output, raw_exists);
             output.extend(variables.iter().cloned());
         }
         GraphPattern::Graph { inner, name } | GraphPattern::Service { inner, name, .. } => {
-            graph_variables(inner, output);
+            graph_variables(inner, output, raw_exists);
             if let spargebra::term::NamedNodePattern::Variable(variable) = name {
                 output.insert(variable.clone());
             }
         }
         GraphPattern::Distinct { inner }
         | GraphPattern::Reduced { inner }
-        | GraphPattern::Slice { inner, .. } => graph_variables(inner, output),
+        | GraphPattern::Slice { inner, .. } => graph_variables(inner, output, raw_exists),
         GraphPattern::OrderBy { inner, expression } => {
-            graph_variables(inner, output);
+            graph_variables(inner, output, raw_exists);
             for order in expression {
                 let (OrderExpression::Asc(expression) | OrderExpression::Desc(expression)) = order;
-                expression_variables(expression, output);
+                expression_variables(expression, output, raw_exists);
             }
         }
         GraphPattern::Group {
@@ -196,19 +214,19 @@ fn graph_variables(pattern: &GraphPattern, output: &mut Variables) {
             variables,
             aggregates,
         } => {
-            graph_variables(inner, output);
+            graph_variables(inner, output, raw_exists);
             output.extend(variables.iter().cloned());
             for (variable, aggregate) in aggregates {
                 output.insert(variable.clone());
                 if let AggregateExpression::FunctionCall { expr, .. } = aggregate {
-                    expression_variables(expr, output);
+                    expression_variables(expr, output, raw_exists);
                 }
             }
         }
     }
 }
 
-fn expression_variables(expression: &Expression, output: &mut Variables) {
+fn expression_variables(expression: &Expression, output: &mut Variables, raw_exists: bool) {
     match expression {
         Expression::Variable(variable) | Expression::Bound(variable) => {
             output.insert(variable.clone());
@@ -221,7 +239,7 @@ fn expression_variables(expression: &Expression, output: &mut Variables) {
         | Expression::Less(..)
         | Expression::LessOrEqual(..)
         | Expression::In(..) => {}
-        Expression::Exists(inner) => graph_variables(inner, output),
+        Expression::Exists(inner) => graph_variables(inner, output, true),
         Expression::Or(a, b)
         | Expression::And(a, b)
         | Expression::SameTerm(a, b)
@@ -229,20 +247,20 @@ fn expression_variables(expression: &Expression, output: &mut Variables) {
         | Expression::Subtract(a, b)
         | Expression::Multiply(a, b)
         | Expression::Divide(a, b) => {
-            expression_variables(a, output);
-            expression_variables(b, output);
+            expression_variables(a, output, raw_exists);
+            expression_variables(b, output, raw_exists);
         }
         Expression::UnaryPlus(inner) | Expression::UnaryMinus(inner) | Expression::Not(inner) => {
-            expression_variables(inner, output)
+            expression_variables(inner, output, raw_exists)
         }
         Expression::If(a, b, c) => {
-            expression_variables(a, output);
-            expression_variables(b, output);
-            expression_variables(c, output);
+            expression_variables(a, output, raw_exists);
+            expression_variables(b, output, raw_exists);
+            expression_variables(c, output, raw_exists);
         }
         Expression::Coalesce(args) | Expression::FunctionCall(_, args) => {
             for argument in args {
-                expression_variables(argument, output);
+                expression_variables(argument, output, raw_exists);
             }
         }
     }

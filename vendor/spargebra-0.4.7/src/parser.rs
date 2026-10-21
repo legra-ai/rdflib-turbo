@@ -635,6 +635,7 @@ fn build_select(
     offset_limit: Option<(usize, Option<usize>)>,
     values: Option<GraphPattern>,
     state: &mut ParserState,
+    source_variables: Option<Vec<Variable>>,
 ) -> Result<GraphPattern, &'static str> {
     let mut p = r#where;
     let mut with_aggregate = false;
@@ -747,9 +748,16 @@ fn build_select(
 
     // PROJECT
     if with_project {
-        m = GraphPattern::Project {
-            inner: Box::new(m),
-            variables: pv,
+        m = match source_variables {
+            Some(source_variables) => GraphPattern::ProjectWithSourceScope {
+                inner: Box::new(m),
+                variables: pv,
+                source_variables,
+            },
+            None => GraphPattern::Project {
+                inner: Box::new(m),
+                variables: pv,
+            },
         };
     }
     match select.option {
@@ -851,7 +859,10 @@ fn add_defined_variables<'a>(pattern: &'a GraphPattern, set: &mut HashSet<&'a Va
                 set.insert(v);
             }
         }
-        GraphPattern::Project { variables, inner } => {
+        GraphPattern::Project { variables, inner }
+        | GraphPattern::ProjectWithSourceScope {
+            variables, inner, ..
+        } => {
             let mut inner_variables = HashSet::new();
             add_defined_variables(inner, &mut inner_variables);
             for v in inner_variables {
@@ -1105,13 +1116,21 @@ parser! {
         rule SelectQuery() -> Query = s:SelectClause() _ d:DatasetClauses() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {?
             Ok(Query::Select {
                 dataset: d,
-                pattern: build_select(s, w, g, h, o, l, v, state)?,
+                pattern: build_select(s, w, g, h, o, l, v, state, None)?,
                 base_iri: state.base_iri.clone()
             })
         }
 
         rule SubSelect() -> GraphPattern = s:SelectClause() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {?
-            build_select(s, w, g, h, o, l, v, state)
+            let source_variables = if state.rdflib_query_context && state.exists_depth > 0 {
+                Some(match &s.variables {
+                    SelectionVariables::Explicit(members) => members.iter().map(|member| match member {
+                        SelectionMember::Variable(variable) | SelectionMember::Expression(_, variable) => variable.clone(),
+                    }).collect(),
+                    SelectionVariables::Star => Vec::new(),
+                })
+            } else { None };
+            build_select(s, w, g, h, o, l, v, state, source_variables)
         }
 
         rule SelectClause() -> Selection = i("SELECT") _ Selection_init() o:SelectClause_option() _ v:SelectClause_variables() {
@@ -1139,7 +1158,7 @@ parser! {
                 Ok(Query::Construct {
                     template: c,
                     dataset: d,
-                    pattern: build_select(Selection::default(), w, g, h, o, l, v, state)?,
+                    pattern: build_select(Selection::default(), w, g, h, o, l, v, state, None)?,
                     base_iri: state.base_iri.clone()
                 })
             } /
@@ -1151,7 +1170,7 @@ parser! {
                         Selection::default(),
                         GraphPattern::Bgp { patterns: c },
                         g, h, o, l, v, state
-                    )?,
+                    , None)?,
                     base_iri: state.base_iri.clone()
                 })
             }
@@ -1165,7 +1184,7 @@ parser! {
             i("DESCRIBE") _ "*" _ d:DatasetClauses() _ w:WhereClause()? _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {?
                 Ok(Query::Describe {
                     dataset: d,
-                    pattern: build_select(Selection::default(), w.unwrap_or_default(), g, h, o, l, v, state)?,
+                    pattern: build_select(Selection::default(), w.unwrap_or_default(), g, h, o, l, v, state, None)?,
                     base_iri: state.base_iri.clone()
                 })
             } /
@@ -1178,7 +1197,7 @@ parser! {
                             NamedNodePattern::NamedNode(n) => SelectionMember::Expression(n.into(), variable()),
                             NamedNodePattern::Variable(v) => SelectionMember::Variable(v)
                         }).collect())
-                    }, w.unwrap_or_default(), g, h, o, l, v, state)?,
+                    }, w.unwrap_or_default(), g, h, o, l, v, state, None)?,
                     base_iri: state.base_iri.clone()
                 })
             }
@@ -1187,7 +1206,7 @@ parser! {
         rule AskQuery() -> Query = i("ASK") _ d:DatasetClauses() _ w:WhereClause() _ g:GroupClause()? _ h:HavingClause()? _ o:OrderClause()? _ l:LimitOffsetClauses()? _ v:ValuesClause() {?
             Ok(Query::Ask {
                 dataset: d,
-                pattern: build_select(Selection::default(), w, g, h, o, l, v, state)?,
+                pattern: build_select(Selection::default(), w, g, h, o, l, v, state, None)?,
                 base_iri: state.base_iri.clone()
             })
         }

@@ -1223,7 +1223,7 @@ impl GraphPattern {
                 ),
                 algorithm: if mode.rdflib {
                     LeftJoinAlgorithm::RdfLib {
-                        variables: crate::rdflib::variables(left),
+                        variables: mode.analyse_joins.then(|| crate::rdflib::variables(left)),
                     }
                 } else {
                     LeftJoinAlgorithm::default()
@@ -1324,7 +1324,10 @@ impl GraphPattern {
                     expression: expressions,
                 }
             }
-            AlGraphPattern::Project { inner, variables } => {
+            AlGraphPattern::Project { inner, variables }
+            | AlGraphPattern::ProjectWithSourceScope {
+                inner, variables, ..
+            } => {
                 let graph_name = if let Some(NamedNodePattern::Variable(graph_name)) = graph_name {
                     Some(NamedNodePattern::Variable(
                         if variables.contains(graph_name) {
@@ -1685,8 +1688,9 @@ impl Default for JoinAlgorithm {
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum LeftJoinAlgorithm {
     /// Correlated OPTIONAL with original left-side variable scope for retry.
+    /// None means the translated EXISTS graph never received scope analysis.
     RdfLib {
-        variables: Vec<Variable>,
+        variables: Option<Vec<Variable>>,
     },
     HashBuildRightProbeLeft {
         keys: Vec<Variable>,

@@ -1586,10 +1586,12 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
 
                 match algorithm {
                     LeftJoinAlgorithm::RdfLib { variables } => {
-                        let variables = variables
-                            .iter()
-                            .map(|variable| encode_variable(encoded_variables, variable))
-                            .collect::<Rc<[_]>>();
+                        let variables = variables.as_ref().map(|variables| {
+                            variables
+                                .iter()
+                                .map(|variable| encode_variable(encoded_variables, variable))
+                                .collect::<Rc<[_]>>()
+                        });
                         let globals = self.encode_bindings(encoded_variables, [])?;
                         Rc::new(move |from| {
                             Box::new(RdfLibLeftJoinIterator {
@@ -1601,7 +1603,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                                 matched: false,
                                 parent: from,
                                 globals: globals.clone(),
-                                variables: Rc::clone(&variables),
+                                variables: variables.clone(),
                             })
                         })
                     }
@@ -4183,7 +4185,7 @@ struct RdfLibLeftJoinIterator<'a, T> {
     matched: bool,
     parent: InternalTuple<T>,
     globals: InternalTuple<T>,
-    variables: Rc<[usize]>,
+    variables: Option<Rc<[usize]>>,
 }
 
 impl<T: Clone> Iterator for RdfLibLeftJoinIterator<'_, T> {
@@ -4205,8 +4207,13 @@ impl<T: Clone> Iterator for RdfLibLeftJoinIterator<'_, T> {
             if let Some(left) = self.left.take()
                 && !self.matched
             {
-                let mut remembered = InternalTuple::with_capacity(self.variables.len());
-                for &key in self.variables.iter() {
+                let Some(variables) = &self.variables else {
+                    // RDFLib does not analyse the separately translated EXISTS
+                    // graph. Its absent _vars scope skips the OPTIONAL retry.
+                    return Some(Ok(left));
+                };
+                let mut remembered = InternalTuple::with_capacity(variables.len());
+                for &key in variables.iter() {
                     if let Some(value) = left.get(key) {
                         remembered.set(key, value.clone());
                     }
@@ -5041,7 +5048,10 @@ fn eval_node_label(node: &GraphPattern) -> String {
         } => match algorithm {
             LeftJoinAlgorithm::RdfLib { variables } => format!(
                 "LeftJoin(RdfLib, retry variables = {}, expression = {})",
-                format_list(variables),
+                variables
+                    .as_ref()
+                    .map(|variables| format_list(variables))
+                    .unwrap_or_else(|| "unanalyzed".to_owned()),
                 spargebra::algebra::Expression::from(expression)
             ),
             LeftJoinAlgorithm::HashBuildRightProbeLeft { keys } => format!(
