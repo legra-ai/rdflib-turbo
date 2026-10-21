@@ -357,7 +357,7 @@ checksum = "b8848ee67ecc8aedbaf3e4122217aff892639231befc6a1b58d29fff4c2cabaa"
 [[patch.unused]]
 name = "fancy-regex"
 version = "0.19.2"
-source = "git+https://github.com/legra-ai/pyshacl-turbo?rev=b27ec5ca407c7fd447f6314efae765a57de00894#b27ec5ca407c7fd447f6314efae765a57de00894"
+source = "git+https://github.com/legra-ai/pyshacl-turbo?rev=0061e897527afec320552ee50d42919a504d2ea7#0061e897527afec320552ee50d42919a504d2ea7"
 
 [[patch.unused]]
 name = "oxigraph"
