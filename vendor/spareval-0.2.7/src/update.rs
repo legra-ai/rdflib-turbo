@@ -127,7 +127,10 @@ fn fill_term_or_var(
     })
 }
 
-fn fill_named_node_or_var(term: &NamedNodePattern, solution: &TemplateSolution<'_>) -> Option<NamedNode> {
+fn fill_named_node_or_var(
+    term: &NamedNodePattern,
+    solution: &TemplateSolution<'_>,
+) -> Option<NamedNode> {
     Some(match term {
         NamedNodePattern::NamedNode(term) => term.clone(),
         NamedNodePattern::Variable(v) => {
@@ -140,7 +143,10 @@ fn fill_named_node_or_var(term: &NamedNodePattern, solution: &TemplateSolution<'
     })
 }
 
-fn fill_graph_name_or_var(term: &GraphNamePattern, solution: &TemplateSolution<'_>) -> Option<GraphName> {
+fn fill_graph_name_or_var(
+    term: &GraphNamePattern,
+    solution: &TemplateSolution<'_>,
+) -> Option<GraphName> {
     Some(match term {
         GraphNamePattern::NamedNode(term) => term.clone().into(),
         GraphNamePattern::DefaultGraph => GraphName::DefaultGraph,
@@ -172,7 +178,10 @@ fn fill_triple_pattern(
         object: fill_term_or_var(&triple.object, solution, bnodes)?,
     })
 }
-fn fill_ground_quad_pattern(quad: &GroundQuadPattern, solution: &TemplateSolution<'_>) -> Option<Quad> {
+fn fill_ground_quad_pattern(
+    quad: &GroundQuadPattern,
+    solution: &TemplateSolution<'_>,
+) -> Option<Quad> {
     Some(Quad {
         subject: match fill_ground_term_or_var(&quad.subject, solution)? {
             Term::NamedNode(node) => node.into(),
@@ -187,7 +196,10 @@ fn fill_ground_quad_pattern(quad: &GroundQuadPattern, solution: &TemplateSolutio
     })
 }
 
-fn fill_ground_term_or_var(term: &GroundTermPattern, solution: &TemplateSolution<'_>) -> Option<Term> {
+fn fill_ground_term_or_var(
+    term: &GroundTermPattern,
+    solution: &TemplateSolution<'_>,
+) -> Option<Term> {
     Some(match term {
         GroundTermPattern::NamedNode(term) => term.clone().into(),
         GroundTermPattern::Literal(term) => term.clone().into(),

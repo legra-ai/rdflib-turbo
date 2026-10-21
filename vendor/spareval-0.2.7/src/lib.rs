@@ -905,7 +905,9 @@ impl PreparedDeleteInsertUpdate<'_> {
         self,
         dataset: impl QueryableDataset<'b>,
     ) -> Result<DeleteInsertIter<'b>, QueryEvaluationError> {
-        let mut pattern = self.evaluator.prepare_pattern(self.pattern, &HashMap::new());
+        let mut pattern = self
+            .evaluator
+            .prepare_pattern(self.pattern, &HashMap::new());
         if let Some(bindings) = &self.evaluator.initial_bindings {
             // bounded: variables in the update algebra and supplied parameters.
             // Templates may reference globals absent from WHERE, whereas SELECT
@@ -923,7 +925,10 @@ impl PreparedDeleteInsertUpdate<'_> {
             .simple_evaluator(dataset, self.dataset, &self.base_iri)?
             .evaluate_select(&pattern, []);
         Ok(DeleteInsertIter::new(
-            solutions?, self.delete, self.insert, self.evaluator.initial_bindings.clone(),
+            solutions?,
+            self.delete,
+            self.insert,
+            self.evaluator.initial_bindings.clone(),
         ))
     }
 }
@@ -1140,6 +1145,60 @@ mod tests {
     use oxrdf::vocab::xsd;
     use oxrdf::{Literal, Term};
     use sparopt::algebra::{Expression, GraphPattern};
+
+    #[test]
+    fn update_templates_use_initial_context_with_local_bind_overrides() {
+        let data = oxrdf::Dataset::new();
+        let literal = Literal::new_typed_literal("01", xsd::INTEGER);
+        let evaluator = QueryEvaluator::new().with_initial_bindings([
+            (
+                Variable::new("s").unwrap(),
+                NamedNode::new("urn:a").unwrap().into(),
+            ),
+            (Variable::new("v").unwrap(), literal.clone().into()),
+        ]);
+        for (source, subject) in [
+            ("INSERT {?s <urn:p> ?v} WHERE {}", "urn:a"),
+            (
+                "INSERT {?s <urn:p> ?v} WHERE {BIND(<urn:b> AS ?s)}",
+                "urn:b",
+            ),
+            (
+                "INSERT {?s <urn:p> ?v} WHERE {{SELECT ?v WHERE {BIND(\"01\"^^<http://www.w3.org/2001/XMLSchema#integer> AS ?v)}}}",
+                "urn:a",
+            ),
+            ("INSERT {?s <urn:p> ?v} WHERE {}", "urn:a"),
+        ] {
+            let update = spargebra::SparqlParser::new()
+                .with_rdflib_query_context()
+                .parse_update(source)
+                .unwrap();
+            let spargebra::GraphUpdateOperation::DeleteInsert {
+                delete,
+                insert,
+                pattern,
+                ..
+            } = &update.operations[0]
+            else {
+                panic!("delete/insert")
+            };
+            let mutations = evaluator
+                .prepare_delete_insert(delete.clone(), insert.clone(), None, None, pattern)
+                .execute(&data)
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap();
+            assert_eq!(
+                mutations,
+                vec![DeleteInsertQuad::Insert(oxrdf::Quad::new(
+                    NamedNode::new(subject).unwrap(),
+                    NamedNode::new("urn:p").unwrap(),
+                    literal.clone(),
+                    GraphName::DefaultGraph,
+                ))]
+            );
+        }
+    }
 
     #[cfg(feature = "cached-query-plans")]
     #[test]
