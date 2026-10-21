@@ -29,14 +29,22 @@ impl SharedShapes {
                 let revision = current.next_revision()?;
                 let expected_revision = current.revision;
                 options.namespaces = current.namespaces.clone();
-                let expansion = self.inner.expand_staged(&current.data, options).map_err(error)?;
+                let expansion = self
+                    .inner
+                    .expand_staged(&current.data, options)
+                    .map_err(error)?;
                 let warnings = expansion.recursion_warnings;
                 if warnings.is_empty() {
                     current.extend(expansion.graph.iter());
                     current.revision = revision;
                     Ok(Prepared::ready((None, Vec::new()), warnings))
                 } else {
-                    Ok(Prepared::staged((None, Vec::new()), expansion.graph, expected_revision, warnings))
+                    Ok(Prepared::staged(
+                        (None, Vec::new()),
+                        expansion.graph,
+                        expected_revision,
+                        warnings,
+                    ))
                 }
             } else {
                 let mut working = dataset
