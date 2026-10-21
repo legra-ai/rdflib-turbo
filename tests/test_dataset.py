@@ -1,8 +1,44 @@
+import subprocess
+import sys
+from importlib.metadata import version
+
 import pytest
 from rdflib import BNode, Literal, URIRef
 from rdflib import Dataset as ReferenceDataset
 from rdflib.namespace import XSD
 from rdflib_turbo import Dataset
+
+
+def test_public_version_matches_installed_distribution():
+    import rdflib_turbo
+
+    assert rdflib_turbo.__version__ == version("rdflib-turbo")
+
+
+@pytest.mark.parametrize("release", ["9.8.7", "1.2.3a4"])
+def test_public_version_follows_independently_versioned_distribution(tmp_path, release):
+    metadata = tmp_path / f"rdflib_turbo-{release}.dist-info"
+    metadata.mkdir()
+    (metadata / "METADATA").write_text(
+        f"Metadata-Version: 2.1\nName: rdflib-turbo\nVersion: {release}\n", encoding="utf-8"
+    )
+    subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-c",
+            "import sys; sys.path.insert(0, sys.argv[1]); "
+            "from importlib.metadata import version; import rdflib_turbo; "
+            "assert version('rdflib-turbo') == sys.argv[2]; "
+            "assert rdflib_turbo.__version__ == sys.argv[2], rdflib_turbo.__version__",
+            str(tmp_path),
+            release,
+        ],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
 
 
 def test_exact_literals_and_select():
