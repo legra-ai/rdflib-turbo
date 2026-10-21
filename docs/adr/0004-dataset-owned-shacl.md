@@ -55,3 +55,20 @@ hard transaction-conflict error: preserve that write, discard the outer staged
 rule changes, and never retry Python callbacks. Revision exhaustion fails before
 mutation. Validation without warnings retains its original single lock and
 working-copy cost; no additional dataset snapshot is introduced.
+
+`SharedShapes.expand(dataset, settings, inplace)` runs the pinned engine's rule
+expansion directly, without validation evaluation, report formatting or report
+term conversion. It shares the strict settings boundary and warning-before-commit
+policy with validation. Inplace expansion returns `(None, [])`; nonmutating
+expansion returns a newly owned native dataset and an empty warning list. The
+consumer retains the original inplace wrapper or wraps the new native owner.
+Names, graph contexts, exact terms and namespace metadata remain native.
+
+Active inplace rules stage one working state for rollback and the same owner
+revision comparison used by validation. A successful no-op inplace expansion
+still advances its owner's revision. When no selected rule is active, the engine
+validates options under the write lock without copying graph data. Nonmutating
+expansion necessarily owns its complete output, starts an independent revision,
+and does not snapshot the input again. Rule-only expansion never constructs a
+validation report. This extends protocol 1 using an existing pinned engine API;
+its source revision and engine fingerprint do not change.

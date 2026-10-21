@@ -18,6 +18,7 @@ mod report;
 pub(crate) use report::Report;
 
 mod commit;
+mod expansion;
 use commit::Prepared;
 
 pyo3::create_exception!(_native, SharedValidationFailure, PyValueError);
@@ -200,6 +201,16 @@ impl SharedShapes {
         .map_err(error)
     }
 
+    pub(crate) fn expand(
+        &self,
+        py: Python<'_>,
+        dataset: &NativeDataset,
+        settings: &str,
+        inplace: bool,
+    ) -> PyResult<expansion::Output> {
+        self.expand_dataset(py, dataset, settings, inplace)
+    }
+
     pub(crate) fn validate(
         &self,
         py: Python<'_>,
@@ -208,22 +219,23 @@ impl SharedShapes {
         inplace: bool,
     ) -> PyResult<Output> {
         let mut options = Settings::parse(settings)?;
-        let prepared = py.detach(|| -> PyResult<Prepared> {
+        let prepared = py.detach(|| -> PyResult<Prepared<Output>> {
             let mut data = dataset.inner.write()
                 .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
             options.namespaces = data.namespaces.clone();
             if !inplace {
-                return Ok(Prepared::ready(output(self.inner.validate_staged(&data.data, options).map_err(error)?)?));
+                return Ok(Prepared::report(output(self.inner.validate_staged(&data.data, options).map_err(error)?)?));
             }
             let revision = data.next_revision()?;
             let outcome = self.inner.validate_delta(&data.data, options).map_err(error)?;
-            let result = output(outcome.report)?;
+            let mut result = output(outcome.report)?;
             if result.3.is_empty() {
                 data.extend(outcome.additions.iter());
                 data.revision = revision;
-                Ok(Prepared::ready(result))
+                Ok(Prepared::report(result))
             } else {
-                Ok(Prepared::staged(result, outcome.additions, data.revision))
+                let warnings = std::mem::take(&mut result.3);
+                Ok(Prepared::staged(result, outcome.additions, data.revision, warnings))
             }
         })?;
         prepared.finish(py, dataset)

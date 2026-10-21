@@ -25,6 +25,7 @@ fn every_mutator_rejects_exhausted_revision_before_changes() {
             native.infer(py, "rdfs", None).unwrap_err(),
             native.infer_delta(py, "rdfs", None).err().unwrap(),
             shapes.validate(py, &native, "{}", true).unwrap_err(),
+            shapes.expand(py, &native, "{}", true).err().unwrap(),
         ];
         for failure in failures {
             assert!(failure.is_instance_of::<PyRuntimeError>(py));

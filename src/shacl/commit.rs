@@ -12,22 +12,30 @@ struct Pending {
     expected_revision: u64,
 }
 
-pub(super) struct Prepared {
-    output: Output,
+pub(super) struct Prepared<T> {
+    output: T,
+    warnings: Vec<String>,
     pending: Option<Pending>,
 }
 
-impl Prepared {
-    pub(super) fn ready(output: Output) -> Self {
+impl<T> Prepared<T> {
+    pub(super) fn ready(output: T, warnings: Vec<String>) -> Self {
         Self {
             output,
+            warnings,
             pending: None,
         }
     }
 
-    pub(super) fn staged(output: Output, additions: Dataset, expected_revision: u64) -> Self {
+    pub(super) fn staged(
+        output: T,
+        additions: Dataset,
+        expected_revision: u64,
+        warnings: Vec<String>,
+    ) -> Self {
         Self {
             output,
+            warnings,
             pending: Some(Pending {
                 additions,
                 expected_revision,
@@ -35,7 +43,7 @@ impl Prepared {
         }
     }
 
-    pub(super) fn finish(mut self, py: Python<'_>, dataset: &NativeDataset) -> PyResult<Output> {
+    pub(super) fn finish(self, py: Python<'_>, dataset: &NativeDataset) -> PyResult<T> {
         self.emit_warnings(py)?;
         if let Some(pending) = self.pending {
             py.detach(|| {
@@ -57,20 +65,26 @@ impl Prepared {
         Ok(self.output)
     }
 
-    fn emit_warnings(&mut self, py: Python<'_>) -> PyResult<()> {
-        if self.output.3.is_empty() {
+    fn emit_warnings(&self, py: Python<'_>) -> PyResult<()> {
+        if self.warnings.is_empty() {
             return Ok(());
         }
         let facade = PyModule::import(py, "pyshacl_turbo")?;
         let category = facade.getattr("ShapeRecursionWarning")?;
         let warn = PyModule::import(py, "warnings")?.getattr("warn")?;
-        for message in &self.output.3 {
+        for message in &self.warnings {
             // The public facade's helper adds one Python frame and uses level 3.
             // Native emission omits that helper frame, retaining its caller at 2.
             warn.call1((message, &category, 2))?;
         }
-        // Published consumers still process this field; do not emit twice.
-        self.output.3.clear();
         Ok(())
+    }
+}
+
+impl Prepared<Output> {
+    pub(super) fn report(mut output: Output) -> Self {
+        // Published consumers still process this field; do not emit twice.
+        let warnings = std::mem::take(&mut output.3);
+        Self::ready(output, warnings)
     }
 }
