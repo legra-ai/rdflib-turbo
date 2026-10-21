@@ -43,8 +43,13 @@ impl<T> Prepared<T> {
         }
     }
 
-    pub(super) fn finish(self, py: Python<'_>, dataset: &NativeDataset) -> PyResult<T> {
-        self.emit_warnings(py)?;
+    pub(super) fn finish(
+        self,
+        py: Python<'_>,
+        dataset: &NativeDataset,
+        warning_stacklevel: usize,
+    ) -> PyResult<T> {
+        self.emit_warnings(py, warning_stacklevel)?;
         if let Some(pending) = self.pending {
             py.detach(|| {
                 let mut current = dataset
@@ -65,7 +70,7 @@ impl<T> Prepared<T> {
         Ok(self.output)
     }
 
-    fn emit_warnings(&self, py: Python<'_>) -> PyResult<()> {
+    fn emit_warnings(&self, py: Python<'_>, stacklevel: usize) -> PyResult<()> {
         if self.warnings.is_empty() {
             return Ok(());
         }
@@ -73,9 +78,7 @@ impl<T> Prepared<T> {
         let category = facade.getattr("ShapeRecursionWarning")?;
         let warn = PyModule::import(py, "warnings")?.getattr("warn")?;
         for message in &self.warnings {
-            // The public facade's helper adds one Python frame and uses level 3.
-            // Native emission omits that helper frame, retaining its caller at 2.
-            warn.call1((message, &category, 2))?;
+            warn.call1((message, &category, stacklevel))?;
         }
         Ok(())
     }

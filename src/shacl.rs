@@ -251,7 +251,8 @@ impl SharedShapes {
                 ))
             }
         })?;
-        prepared.finish(py, dataset)
+        // The source adapter adds a generator and contextlib frame.
+        prepared.finish(py, dataset, 4)
     }
     fn validate_store(
         &self,

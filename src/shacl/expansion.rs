@@ -63,7 +63,7 @@ impl SharedShapes {
                 Ok(Prepared::ready((Some(result), Vec::new()), warnings))
             }
         })?;
-        prepared.finish(py, dataset)
+        prepared.finish(py, dataset, 2)
     }
 }
 
