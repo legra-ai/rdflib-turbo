@@ -16,6 +16,7 @@ from rdflib.query import Result
 from rdflib.store import Store as ReferenceStore
 from rdflib.util import from_n3, guess_format
 
+from ._inference import GraphInference
 from ._namespaces import NamespaceBindings
 from ._operations import _encode, _term
 from ._reads import ProjectedReads, encode, encode_graph, scoped_rows
@@ -183,7 +184,7 @@ class RDFLibStore(ReferenceStore):
         self.backend.close()
 
 
-class Graph(ProjectedReads, RDFLibGraph):
+class Graph(GraphInference, ProjectedReads, RDFLibGraph):
     """RDFLib Graph facade with exact-term native storage and native SPARQL."""
 
     _turbo_native_graph = True
@@ -314,7 +315,7 @@ class Graph(ProjectedReads, RDFLibGraph):
         self.store._namespaces.replace(store._namespaces)
 
 
-class StoreDataset(RDFLibDataset):
+class StoreDataset(GraphInference, RDFLibDataset):
     """RDFLib Dataset foundation over the transactional Store.
 
     Inference/SHACL remain on the separate legacy Dataset until direct adapters exist.

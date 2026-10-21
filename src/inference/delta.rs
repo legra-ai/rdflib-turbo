@@ -5,6 +5,26 @@ use oxigraph::model::{Dataset, GraphName, Quad};
 use super::{InferenceOptions, expand_configured};
 use crate::Result;
 
+/// Stage only direct literal publications absent from the exact output graph.
+/// The returned dataset is an output delta, never a copy of source contexts.
+pub(super) fn literal_publications(data: &Dataset, mode: &str, destination: &GraphName) -> Dataset {
+    if mode != "rdfs" {
+        return Dataset::new();
+    }
+    data.iter()
+        .filter(|quad| quad.object.is_literal())
+        .map(|quad| {
+            Quad::new(
+                quad.subject,
+                quad.predicate,
+                quad.object,
+                destination.clone(),
+            )
+        })
+        .filter(|quad| !data.contains(quad))
+        .collect()
+}
+
 pub(crate) fn expand_delta(
     data: &mut Dataset,
     mode: &str,
@@ -25,7 +45,11 @@ pub(crate) fn expand_delta(
     let mut union_transaction = union.insert_transaction();
     let prepared = expand_configured(&mut union_transaction, mode, options)?;
     let destination = destination.unwrap_or(GraphName::DefaultGraph);
+    let publications = literal_publications(data, mode, &destination);
     let mut transaction = data.insert_transaction();
+    for quad in publications.iter() {
+        transaction.insert(quad);
+    }
     for quad in union_transaction.inserted() {
         transaction.insert(&Quad::new(
             quad.subject,
