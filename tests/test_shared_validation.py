@@ -4,6 +4,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
+from packaging.requirements import Requirement
 from rdflib import BNode, Graph, Literal, URIRef
 from rdflib.compare import isomorphic
 from rdflib_turbo import Dataset
@@ -140,3 +141,11 @@ def test_python_test_companion_uses_the_embedded_engine_revision():
     companion = python["tool"]["uv"]["sources"]["pyshacl-turbo"]
     assert companion["git"] == engine["git"]
     assert companion["rev"] == engine["rev"]
+
+
+def test_python_test_companion_allows_the_next_minor_release():
+    root = Path(__file__).resolve().parents[1]
+    project = tomllib.loads((root / "pyproject.toml").read_text())
+    requirements = map(Requirement, project["project"]["optional-dependencies"]["test"])
+    companion = next(item for item in requirements if item.name == "pyshacl-turbo")
+    assert "0.6.0" in companion.specifier
