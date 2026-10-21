@@ -39,3 +39,22 @@ fn readonly_validation_can_run_while_another_reader_holds_the_dataset() {
         );
     }
 }
+
+#[test]
+fn readonly_report_acceptance_shares_existing_read_leases() {
+    Python::initialize();
+    let dataset = Arc::new(NativeDataset::new());
+    let reader = dataset.inner.read().unwrap();
+    let source = Arc::clone(&dataset);
+    let (sender, receiver) = mpsc::sync_channel(1);
+    let worker = std::thread::spawn(move || {
+        let result = Python::attach(|py| super::commit::Pending::readonly(0).apply(py, &source));
+        sender.send(result).unwrap();
+    });
+    let result = receiver.recv_timeout(Duration::from_secs(1));
+    drop(reader);
+    worker.join().unwrap();
+    result
+        .expect("readonly report acceptance requested an exclusive lock")
+        .unwrap();
+}

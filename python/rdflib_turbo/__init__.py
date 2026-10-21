@@ -35,7 +35,9 @@ class Dataset(GraphOperations):
 
     @contextmanager
     def _validate_shared_shapes(self, program, settings, inplace):
-        yield program.validate(self._native, settings, inplace)
+        prepared = program.prepare_dataset(self._native, settings, inplace)
+        yield prepared.output()
+        prepared.accept()
 
     def namespaces(self) -> Iterator[tuple[str, str]]:
         """Return namespace bindings retained atomically from parsed documents."""
