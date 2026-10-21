@@ -100,3 +100,41 @@ def test_prepared_unknown_options_abort_the_active_transaction():
             with pytest.raises(TypeError, match="Unsupported native query options"):
                 transaction.default_graph.query(prepareQuery("ASK {}"), unsupported=True)
     assert not list(dataset)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "{SELECT * WHERE {?s <urn:p> ?v}}",
+        "{SELECT DISTINCT ?s WHERE {?s <urn:p> ?v} LIMIT 1}",
+        "{SELECT REDUCED ?s WHERE {?s <urn:p> ?v} OFFSET 1}",
+        "{SELECT ?s WHERE {?s <urn:p> ?v} LIMIT 1 OFFSET 1}",
+        "?s <urn:p> ?v FILTER(?v=1)",
+        "BIND(1 AS ?v) FILTER(?v=1)",
+        "{?s <urn:p> 1} UNION {?s <urn:p> 2}",
+        "?s <urn:p> ?v OPTIONAL {?s <urn:q> ?q}",
+        '?s <urn:p> ?v OPTIONAL {?s <urn:q> ?q FILTER(?q="yes")}',
+        '?s <urn:p> ?v MINUS {?s <urn:q> "yes"}',
+    ],
+)
+def test_supplied_raw_exists_graph_matches_reference(body):
+    source = f"SELECT ?ok WHERE {{BIND(EXISTS {{{body}}} AS ?ok)}}"
+    actual_prepared, reference_prepared = prepareQuery(source), prepareQuery(source)
+    # The snapshot accepts the retained parser form; reference executes its
+    # normal translated form of the exact same source.
+    actual_prepared.algebra.p.p.expr.graph = actual_prepared.algebra.p.p.expr["graph"]
+    reference = ReferenceGraph().parse(data=DATA, format="turtle")
+    actual = Graph().parse(data=DATA, format="turtle")
+    assert actual.query(actual_prepared).bindings == reference.query(reference_prepared).bindings
+
+
+def test_optional_scope_literal_key_stays_distinct_from_variable_names():
+    source = "SELECT ?s WHERE {?s <urn:p> ?v OPTIONAL {?s <urn:q> ?q}}"
+    actual_prepared, reference_prepared = prepareQuery(source), prepareQuery(source)
+    for prepared in (actual_prepared, reference_prepared):
+        prepared.algebra.p.p.p1._vars = {Literal("s")}
+    reference = ReferenceGraph().parse(data=DATA, format="turtle")
+    actual = Graph().parse(data=DATA, format="turtle")
+    assert sorted(actual.query(actual_prepared).bindings, key=repr) == sorted(
+        reference.query(reference_prepared).bindings, key=repr
+    )
