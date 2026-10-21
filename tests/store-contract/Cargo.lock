@@ -331,6 +331,7 @@ dependencies = [
  "oxsdatatypes",
  "rand",
  "rustc-hash",
+ "sha2",
  "siphasher",
  "sparesults",
  "spareval",
@@ -417,6 +418,7 @@ dependencies = [
 name = "oxsdatatypes"
 version = "0.2.3"
 dependencies = [
+ "sha2",
  "thiserror",
 ]
 
@@ -747,6 +749,7 @@ dependencies = [
  "oxrdf",
  "peg",
  "rand",
+ "sha2",
  "thiserror",
 ]
 
@@ -756,6 +759,7 @@ version = "0.3.7"
 dependencies = [
  "oxrdf",
  "rand",
+ "sha2",
  "spargebra",
 ]
 
