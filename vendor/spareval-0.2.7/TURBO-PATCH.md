@@ -12,7 +12,7 @@ projecting only declared SELECT/DESCRIBE outputs. Its ordered sparopt lowering
 preserves lazy-join and OPTIONAL scope metadata; native streaming evaluation
 matches correlated-context merge precedence and global-binding reinstatement.
 Ordinary SPARQL preparation and strict substitution scope remain unchanged.
-See rdflib-turbo ADR 0042 and native/public initial-binding regressions.
+See rdflib-turbo ADR 0044 and native/public initial-binding regressions.
 
 The opt-in `cached-query-plans` feature reuses immutable optimized graph patterns
 in a process-local 128-entry LRU. Exact parsed patterns and sorted initial bound
