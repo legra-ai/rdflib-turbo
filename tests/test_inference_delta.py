@@ -3,6 +3,9 @@
 from importlib.resources import files
 
 import pytest
+from rdflib import Graph as ReferenceGraph
+from rdflib import Literal, Namespace
+from rdflib.namespace import XSD
 from rdflib_turbo import Dataset
 
 PREFIX = "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n"
@@ -10,6 +13,36 @@ SCHEMA = """
 <urn:Class> rdfs:subClassOf <urn:Parent> .
 <urn:item> a <urn:Class>; <urn:label> "original" .
 """
+
+
+@pytest.mark.parametrize("delta", [False, True])
+def test_rdfs_substitutes_equal_string_values_preserving_the_replacement_terms(delta):
+    vocabulary = Namespace("urn:literal-values:")
+    values = [
+        Literal("same"),
+        Literal("same", lang="en"),
+        Literal("same", lang="fr"),
+        *(
+            Literal("same", datatype=datatype)
+            for datatype in (XSD.string, XSD.normalizedString, XSD.token, XSD.language, XSD.anyURI)
+        ),
+    ]
+    original = ReferenceGraph()
+    for index, value in enumerate(values):
+        original.add((vocabulary[f"s{index}"], vocabulary.label, value))
+    original.add(
+        (vocabulary.unknown, vocabulary.label, Literal("same", datatype=vocabulary.opaque))
+    )
+    native = Dataset.from_rdflib(original)
+    additions = native.infer_delta(inference="rdfs") if delta else native.infer(inference="rdfs")
+    actual = native.to_rdflib().default_graph
+    for index in range(len(values)):
+        assert set(actual.objects(vocabulary[f"s{index}"], vocabulary.label)) == set(values)
+    assert set(actual.objects(vocabulary.unknown, vocabulary.label)) == {
+        Literal("same", datatype=vocabulary.opaque)
+    }
+    if delta:
+        assert not set(additions.to_rdflib().default_graph) & set(original)
 
 
 def statements(dataset):

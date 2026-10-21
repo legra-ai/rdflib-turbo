@@ -9,6 +9,7 @@ mod axioms;
 mod backend;
 mod delta;
 mod intersections;
+mod literal_values;
 mod options;
 mod same_as;
 mod traversal;
@@ -21,6 +22,8 @@ use options::PreparedOptions;
 mod failure_tests;
 #[cfg(test)]
 mod intersection_tests;
+#[cfg(test)]
+mod literal_value_tests;
 #[cfg(test)]
 mod same_as_tests;
 
@@ -310,6 +313,9 @@ fn expand_inner(data: &mut impl Graph, mode: &str) -> Result<()> {
         "none" | "" => return Ok(()),
         "rdfs" | "owlrl" | "both" => {}
         _ => return Err(Error::Unsupported(format!("inference: {mode}"))),
+    }
+    if mode == "rdfs" {
+        literal_values::strings(data)?;
     }
     // bounded: the fixed RDFS/OWL rule tables above.
     let mut rules = Vec::new();
