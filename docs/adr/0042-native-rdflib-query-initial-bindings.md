@@ -1,6 +1,6 @@
 # ADR 0042: Evaluate RDFLib initial query bindings in native algebra
 
-Status: Implemented; awaiting installed-wheel verification
+Status: Implemented; installed-wheel query and coverage verification passed
 
 RDFLib initial bindings are an initial query context, rather than textual
 substitutions or a VALUES clause. They can bind variables hidden by a nested

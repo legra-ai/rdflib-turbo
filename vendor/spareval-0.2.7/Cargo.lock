@@ -480,7 +480,7 @@ dependencies = [
 [[patch.unused]]
 name = "fancy-regex"
 version = "0.19.2"
-source = "git+https://github.com/legra-ai/pyshacl-turbo?rev=33ccfe6ba77c0842028302cebfab64168aacb8b0#33ccfe6ba77c0842028302cebfab64168aacb8b0"
+source = "git+https://github.com/legra-ai/pyshacl-turbo?rev=b27ec5ca407c7fd447f6314efae765a57de00894#b27ec5ca407c7fd447f6314efae765a57de00894"
 
 [[patch.unused]]
 name = "oxigraph"
