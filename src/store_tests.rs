@@ -1,5 +1,6 @@
 //! Regression gate before moving the shared runtime onto Oxigraph Store.
 
+#[path = "store_tests/initial_bindings.rs"]
 mod initial_bindings;
 
 use oxigraph::model::{GraphName, Literal, NamedNode, Quad, Term};
