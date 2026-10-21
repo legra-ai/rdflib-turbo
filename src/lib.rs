@@ -22,6 +22,8 @@ pub enum Error {
     Unsupported(String),
     #[error("{0}")]
     Runtime(String),
+    #[error(transparent)]
+    Shacl(#[from] pyshacl_turbo_engine::Error),
     #[error("SPARQL evaluation failed: {0}")]
     Query(#[from] oxigraph::sparql::QueryEvaluationError),
 }
@@ -29,6 +31,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 fn error(error: Error) -> PyErr {
     match error {
+        Error::Shacl(cause) => shacl::error(cause),
         Error::Invalid(_) => PyValueError::new_err(error.to_string()),
         Error::Unsupported(_) => PyNotImplementedError::new_err(error.to_string()),
         _ => PyRuntimeError::new_err(error.to_string()),

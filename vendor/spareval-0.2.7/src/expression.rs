@@ -63,6 +63,13 @@ pub trait ExpressionEvaluatorContext<'a> {
     fn now(&mut self) -> DateTime;
     fn base_iri(&mut self) -> Option<Arc<Iri<String>>>;
     fn custom_functions(&mut self) -> &CustomFunctionRegistry;
+    fn custom_function(&mut self, name: &NamedNode) -> Option<crate::dataset::ScopedCustomFunction<'a>> {
+        self.custom_functions().get(name).cloned().map(|function| {
+            let callback: crate::dataset::ScopedCustomFunction<'a> = Rc::new(move |args: &[Term]| function(args));
+            callback
+        })
+    }
+
 }
 
 pub type ExpressionEvaluator<'a, I, O> = Rc<dyn (Fn(&I) -> Option<O>) + 'a>;
@@ -1379,7 +1386,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                 Rc::new(move |tuple| Some(matches!(e(tuple)?, ExpressionTerm::Triple(_)).into()))
             }
             Function::Custom(function_name) => {
-                if context.custom_functions().contains_key(function_name) {
+                if context.custom_function(function_name).is_some() {
                     #[cfg(feature = "exact-custom-function-terms")]
                     {
                         let evaluator =
@@ -1391,9 +1398,7 @@ pub fn build_expression_evaluator<'a, C: ExpressionEvaluatorContext<'a>>(
                     #[cfg(not(feature = "exact-custom-function-terms"))]
                     {
                         let function = context
-                            .custom_functions()
-                            .get(function_name)
-                            .cloned()
+                            .custom_function(function_name)
                             .expect("registered custom function");
                         let args = parameters
                             .iter()
@@ -1720,13 +1725,11 @@ pub fn try_build_internal_expression_evaluator<'a, C: ExpressionEvaluatorContext
         }
         #[cfg(feature = "exact-custom-function-terms")]
         Expression::FunctionCall(Function::Custom(name), parameters)
-            if context.custom_functions().contains_key(name) =>
+            if context.custom_function(name).is_some() =>
         {
             let function = context
-                .custom_functions()
-                .get(name)
-                .expect("registered function")
-                .clone();
+                .custom_function(name)
+                .expect("registered function");
             let args = parameters
                 .iter()
                 .map(|arg| {
