@@ -31,6 +31,13 @@ impl NativeTransaction {
         .map_err(error)
     }
 
+    #[pyo3(signature = (graph=None))]
+    fn fork_graph(&self, py: Python<'_>, graph: Option<String>) -> PyResult<super::NativeStore> {
+        py.detach(|| self.session.execute(Operation::ForkGraph(graph)))
+            .map(super::NativeStore::from_copy_reply)
+            .map_err(error)
+    }
+
     fn count_pattern(&self, py: Python<'_>, source: String) -> PyResult<usize> {
         py.detach(|| match self.session.execute(Operation::Count(source))? {
             Reply::Count(count) => Ok(count),

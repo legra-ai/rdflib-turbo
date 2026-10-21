@@ -29,6 +29,7 @@ pub(super) enum Operation {
         allow_named_graphs: bool,
     },
     Graphs,
+    ForkGraph(Option<String>),
     ContainsGraph(TermTuple),
     GraphLen(Option<TermTuple>),
     Graph(String, bool),
@@ -53,6 +54,7 @@ pub(super) enum Operation {
 pub(super) enum Reply {
     Validation(Box<crate::shacl::Report>),
     Done,
+    Store(oxigraph::store::Store),
     Bool(bool),
     Count(usize),
     Text(String),
@@ -117,6 +119,7 @@ impl Operation {
                     .map(Reply::Text)
                     .map_err(runtime)
             }
+            Self::ForkGraph(graph) => super::fork::fork(transaction, graph).map(Reply::Store),
             Self::Graphs => {
                 let graphs = transaction
                     .named_graphs()

@@ -96,6 +96,13 @@ class Store(InferenceOperations):
         else:
             yield program.validate_store(self._native, settings, False)
 
+    @classmethod
+    def _from_native(cls, native):
+        instance = cls.__new__(cls)
+        instance._native = native
+        instance._last_inference = None
+        return instance
+
     def close(self):
         """Release the store; an active transaction must finish first."""
         self._native.close()
