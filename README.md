@@ -159,10 +159,33 @@ as well. Both flags default to false and apply only to that invocation. They add
 the selected reference RDFS/OWL-RL axiom tables before reasoning. Native results
 use ordinary RDF: literal subjects and global Python datatype-conversion hooks
 are not supported. See the [axiom options contract](docs/adr/0038-per-call-inference-axioms.md).
-The low-level Store has no namespace-binding or SHACL API. Graph and StoreDataset
+The low-level Store has no namespace-binding API. Graph and StoreDataset
 provide namespace management through their RDFLibStore adapter, without
 registering a named RDFLib storage plugin.
-The SHACL adapter remains next; stored data is never copied into Dataset for inference.
+Compiled pyshacl-turbo shapes validate Store and open Transaction directly;
+stored data is never copied into Dataset for inference or validation.
+
+```python
+from pyshacl_turbo import compile_shapes
+from rdflib_turbo import Store, ValidationError
+
+shapes = compile_shapes('''@prefix sh: <http://www.w3.org/ns/shacl#> .
+  <urn:S> sh:targetNode <urn:s>;
+    sh:property [sh:path <urn:name>; sh:minCount 1].''')
+with Store("./database") as store:
+    with store.transaction(shapes=shapes, iterate_rules=True) as tx:
+        tx.parse(data='<urn:s> <urn:name> "Alice".')
+        tx.infer(inference="rdfs")
+```
+
+The gate runs after the body and commits only after a conforming report has been
+constructed. Nonconformance raises ValidationError carrying report and text,
+and aborts all pending writes, inference and rule additions. Exceptions abort
+the same owner; caught native execution or report-processing errors leave the
+transaction closed. Direct shapes.validate(tx) returns a report and lets the
+caller choose acceptance. Companion wheels must contain identical engine sources.
+
+![Borrowed reads and transaction validation commit gate](https://raw.githubusercontent.com/legra-ai/pyshacl-turbo/main/crates/engine/src/architecture.svg)
 
 Oxigraph buffers the transaction delta in memory. The base dataset is not copied
 for rollback; transaction changes, parsed input documents and materialized query
@@ -180,9 +203,9 @@ expand(data, inference="rdfs", inplace=True)
 conforms, report, text = validate(data, shacl_graph="shapes.ttl")
 ```
 
-This shared companion path uses Dataset, not Graph or StoreDataset. Store-backed
+This shared companion path uses Dataset, Store or Transaction, not Graph or StoreDataset. Store-backed
 facades can invoke direct inference through their native store.backend, including
-inside a transaction, but do not yet have companion SHACL adapters. Converting
+inside a transaction; pass their native backend to compiled SHACL shapes. Converting
 them through Dataset.from_rdflib is explicitly rejected to prevent copying input.
 
 The shared validation path requires this runtime's 0.2.0a1 release, owlrl-turbo
