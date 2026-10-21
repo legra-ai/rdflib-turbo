@@ -101,5 +101,7 @@ DELETE/INSERT preparation uses the same explicit RDFLib algebra lowering as
 queries. Its private output projection retains initial globals absent from WHERE
 so mutation templates can read them, while BIND can replace their local values.
 Each prepared operation starts from the immutable original initial context.
+Template variable lookup consults that context for keys absent from a projected
+solution, without changing the projection's explicit row domain.
 Ordinary SPARQL update evaluation retains its original output domain.
 

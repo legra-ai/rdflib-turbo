@@ -36,13 +36,31 @@ fn update_initial_context_preserves_terms_overrides_and_statement_isolation() {
     assert!(result.contains("true"));
     session
         .execute(Operation::Update(
+            "INSERT {?s <urn:hidden> ?v} WHERE {{SELECT ?v WHERE {BIND('projected' AS ?v)}}}"
+                .into(),
+            Some(bindings.into()),
+        ))
+        .unwrap();
+    let Reply::Query(_, result) = session
+        .execute(Operation::Query(
+            "ASK { <urn:a> <urn:hidden> 'projected' }".into(),
+            false,
+            None,
+        ))
+        .unwrap()
+    else {
+        panic!("query reply")
+    };
+    assert!(result.contains("true"));
+    session
+        .execute(Operation::Update(
             "DELETE WHERE {?s <urn:p> ?v}".into(),
             Some(bindings.into()),
         ))
         .unwrap();
     assert!(matches!(
         session.execute(Operation::Len).unwrap(),
-        Reply::Count(2)
+        Reply::Count(3)
     ));
     session.finish(true).unwrap();
 }

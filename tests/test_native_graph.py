@@ -303,8 +303,7 @@ def test_query_and_update_options_fail_without_python_fallback(factory):
     with pytest.raises(TypeError, match="query options"):
         graph.query("ASK {}", unexpected=True)
     assert bool(graph.query("ASK {}", initBindings={"s": EX.s}))
-    with pytest.raises(NotImplementedError, match="update bindings"):
-        graph.update("INSERT DATA {}", initBindings={"s": EX.s})
+    assert graph.update("INSERT DATA {}", initBindings={"s": EX.s}) is None
     graph.update("INSERT DATA {}", initNs={}, initBindings={})
 
 

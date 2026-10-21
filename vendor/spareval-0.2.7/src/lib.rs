@@ -922,7 +922,9 @@ impl PreparedDeleteInsertUpdate<'_> {
             .evaluator
             .simple_evaluator(dataset, self.dataset, &self.base_iri)?
             .evaluate_select(&pattern, []);
-        Ok(DeleteInsertIter::new(solutions?, self.delete, self.insert))
+        Ok(DeleteInsertIter::new(
+            solutions?, self.delete, self.insert, self.evaluator.initial_bindings.clone(),
+        ))
     }
 }
 

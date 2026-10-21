@@ -56,7 +56,9 @@ Prepared Python query/update objects remain a separate unsupported contract.
 SPARQL UPDATE uses the same explicit typed initial context and ordered algebra
 lowering for each DELETE/INSERT WHERE operation. Its template result projection
 also includes supplied globals absent from WHERE; ordinary SELECT projections
-remain restricted. BIND overrides are local to one semicolon-separated operation,
+remain restricted. Template lookup reads the explicit row first, then its
+immutable initial context for variables hidden by nested projections. This does
+not restore hidden variables to SELECT row domains. BIND overrides are local to one semicolon-separated operation,
 and every operation starts with the original globals. INSERT DATA ignores them.
 Python validation errors (including processor/options, source and parameter
 encoding) abort an explicit transaction even when caught, before native dispatch.
