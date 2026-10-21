@@ -2,8 +2,8 @@
 
 use pyo3::prelude::*;
 
-use super::diagnostic_datatypes::LexicalContext;
 use super::InferenceOptions;
+use super::diagnostic_datatypes::LexicalContext;
 
 #[derive(Default)]
 pub(crate) struct InferenceRequest {
@@ -27,5 +27,10 @@ impl InferenceRequest {
 }
 
 impl From<InferenceOptions> for InferenceRequest {
-    fn from(options: InferenceOptions) -> Self { Self { options, ..Self::default() } }
+    fn from(options: InferenceOptions) -> Self {
+        Self {
+            options,
+            ..Self::default()
+        }
+    }
 }

@@ -201,7 +201,14 @@ impl NativeStore {
         datatype_axioms: bool,
         prior_error_messages: Option<Vec<String>>,
     ) -> PyResult<crate::inference::InferenceOutcome> {
-        let request = crate::inference::InferenceRequest::capture(py, prior_error_messages, crate::inference::InferenceOptions { axiomatic_triples, datatype_axioms })?;
+        let request = crate::inference::InferenceRequest::capture(
+            py,
+            prior_error_messages,
+            crate::inference::InferenceOptions {
+                axiomatic_triples,
+                datatype_axioms,
+            },
+        )?;
         py.detach(|| {
             match Session::execute_inline(
                 self.control.clone(),

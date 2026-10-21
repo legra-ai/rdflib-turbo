@@ -54,7 +54,11 @@ class Dataset(GraphOperations):
         """Expand this native dataset atomically; used by owlrl-turbo."""
         self._last_inference = None
         self._last_inference = self._native.infer(
-            inference, destination, axiomatic_triples=axiomatic_triples, datatype_axioms=datatype_axioms, prior_error_messages=prior_error_messages
+            inference,
+            destination,
+            axiomatic_triples=axiomatic_triples,
+            datatype_axioms=datatype_axioms,
+            prior_error_messages=prior_error_messages,
         )
         return self
 
@@ -75,7 +79,11 @@ class Dataset(GraphOperations):
         result = Dataset()
         self._last_inference = None
         result._native, outcome = self._native.infer_delta(
-            inference, destination, axiomatic_triples=axiomatic_triples, datatype_axioms=datatype_axioms, prior_error_messages=prior_error_messages
+            inference,
+            destination,
+            axiomatic_triples=axiomatic_triples,
+            datatype_axioms=datatype_axioms,
+            prior_error_messages=prior_error_messages,
         )
         self._last_inference = outcome
         result._last_inference = outcome

@@ -67,6 +67,7 @@ def test_native_lexical_fixtures_match_actual_pinned_reference():
     completed = subprocess.run(
         [sys.executable, "-c", ORACLE, str(FIXTURES)],
         env=environment,
+        cwd=FIXTURES,
         text=True,
         capture_output=True,
         check=False,

@@ -82,3 +82,30 @@ def test_builtin_diagnostics_match_reference(case, mode, api):
             (RDF.type, ERR.ErrorMessage),
             (ERR.error, next(actual.objects(subject, ERR.error))),
         }
+
+
+@pytest.mark.parametrize("mode", CLASSES)
+@pytest.mark.parametrize("api", ["dataset", "store", "transaction"])
+@pytest.mark.parametrize(
+    "axiomatic,datatype", [(False, False), (True, False), (False, True), (True, True)]
+)
+def test_diagnostics_preserve_per_call_axiom_flags(mode, api, axiomatic, datatype):
+    document = PREFIXES + CASES["nothing"]
+    expected = ReferenceGraph().parse(data=document, format="turtle")
+    DeductiveClosure(CLASSES[mode], axiomatic_triples=axiomatic, datatype_axioms=datatype).expand(
+        expected
+    )
+    options = dict(inference=mode, axiomatic_triples=axiomatic, datatype_axioms=datatype)
+    if api == "dataset":
+        graph = Dataset().parse(data=document).infer(**options)
+        actual = native_graph(graph)
+    else:
+        with Store() as store:
+            if api == "transaction":
+                with store.transaction() as transaction:
+                    transaction.parse(data=document).infer(**options)
+            else:
+                store.parse(data=document).infer(**options)
+            actual = native_graph(store)
+    assert messages(actual) == messages(expected)
+    assert isomorphic(actual, ordinary(expected))

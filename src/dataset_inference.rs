@@ -65,7 +65,10 @@ mod tests {
             .is_err()
         );
         Python::attach(|py| {
-            let failure = native.infer_delta(py, "rdfs", None, false, false, None).err().unwrap();
+            let failure = native
+                .infer_delta(py, "rdfs", None, false, false, None)
+                .err()
+                .unwrap();
             assert!(failure.is_instance_of::<PyRuntimeError>(py));
             assert!(failure.to_string().contains("Dataset lock poisoned"));
         });

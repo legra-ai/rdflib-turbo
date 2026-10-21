@@ -278,7 +278,14 @@ impl NativeDataset {
             .map(NamedNode::new)
             .transpose()
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        let request = inference::InferenceRequest::capture(py, prior_error_messages, crate::inference::InferenceOptions { axiomatic_triples, datatype_axioms })?;
+        let request = inference::InferenceRequest::capture(
+            py,
+            prior_error_messages,
+            crate::inference::InferenceOptions {
+                axiomatic_triples,
+                datatype_axioms,
+            },
+        )?;
         py.detach(|| {
             let mut current = self
                 .inner
@@ -305,7 +312,16 @@ impl NativeDataset {
         datatype_axioms: bool,
         prior_error_messages: Option<Vec<String>>,
     ) -> PyResult<(Self, inference::InferenceOutcome)> {
-        self.expand_delta(py, mode, destination, crate::inference::InferenceOptions { axiomatic_triples, datatype_axioms }, prior_error_messages)
+        self.expand_delta(
+            py,
+            mode,
+            destination,
+            crate::inference::InferenceOptions {
+                axiomatic_triples,
+                datatype_axioms,
+            },
+            prior_error_messages,
+        )
     }
 }
 

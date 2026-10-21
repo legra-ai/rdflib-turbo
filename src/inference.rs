@@ -22,14 +22,14 @@ mod traversal;
 pub(crate) use delta::expand_delta;
 pub(crate) use diagnostic_datatypes::LexicalFailure;
 pub(crate) use options::InferenceOptions;
-use options::PreparedOptions;
+use options::expand_configured;
 pub(crate) use outcome::InferenceOutcome;
 pub(crate) use request::InferenceRequest;
 
 #[cfg(test)]
-mod failure_tests;
-#[cfg(test)]
 mod diagnostic_tests;
+#[cfg(test)]
+mod failure_tests;
 #[cfg(test)]
 mod intersection_tests;
 #[cfg(test)]
@@ -251,9 +251,17 @@ pub(crate) fn expand_into(
         destination_transaction.insert(quad);
     }
     for quad in transaction.inserted() {
-        destination_transaction.insert(&Quad::new(quad.subject, quad.predicate, quad.object, destination.clone()));
+        destination_transaction.insert(&Quad::new(
+            quad.subject,
+            quad.predicate,
+            quad.object,
+            destination.clone(),
+        ));
     }
-    prepared.insert(|mut quad| { quad.graph_name = destination.clone(); destination_transaction.insert(&quad); })?;
+    prepared.insert(|mut quad| {
+        quad.graph_name = destination.clone();
+        destination_transaction.insert(&quad);
+    })?;
     destination_transaction.commit();
     transaction.commit();
     Ok(outcome)
@@ -300,18 +308,6 @@ fn apply_rules(
         }
     }
     Ok(())
-}
-
-fn expand_configured<'a>(data: &mut impl Graph, mode: &'a str, request: InferenceRequest) -> Result<(PreparedOptions<'a>, InferenceOutcome)> {
-    match mode {
-        "none" | "" => return Ok((PreparedOptions::new(data, mode, InferenceOptions::default())?, InferenceOutcome::default())),
-        "rdfs" | "owlrl" | "both" => {},
-        _ => return Err(Error::Unsupported(format!("inference: {mode}"))),
-    }
-    let prepared = PreparedOptions::new(data, mode, request.options)?;
-    prepared.insert(|quad| data.insert(quad))?;
-    let outcome = expand_inner(data, mode, request)?;
-    Ok((prepared, outcome))
 }
 
 fn expand_inner(

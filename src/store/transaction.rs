@@ -157,7 +157,14 @@ impl NativeTransaction {
         datatype_axioms: bool,
         prior_error_messages: Option<Vec<String>>,
     ) -> PyResult<crate::inference::InferenceOutcome> {
-        let request = match crate::inference::InferenceRequest::capture(py, prior_error_messages, crate::inference::InferenceOptions { axiomatic_triples, datatype_axioms }) {
+        let request = match crate::inference::InferenceRequest::capture(
+            py,
+            prior_error_messages,
+            crate::inference::InferenceOptions {
+                axiomatic_triples,
+                datatype_axioms,
+            },
+        ) {
             Ok(request) => request,
             Err(failure) => {
                 py.detach(|| self.session.finish(false)).map_err(error)?;

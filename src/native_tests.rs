@@ -119,7 +119,9 @@ fn poisoned_dataset_locks_fail_every_public_native_operation() {
             native.dump(py, "turtle").unwrap_err(),
             native.quads_json(py).unwrap_err(),
             native.query(py, "ASK {}", false).unwrap_err(),
-            native.infer(py, "owlrl", None, false, false, None).unwrap_err(),
+            native
+                .infer(py, "owlrl", None, false, false, None)
+                .unwrap_err(),
             native.namespaces().unwrap_err(),
             native.bind_namespaces(Vec::new()).unwrap_err(),
         ];
@@ -226,7 +228,9 @@ fn property_chain_validation_and_named_graph_inference_preserve_atomicity() {
             let native = NativeDataset::new();
             native.load(py, source, "turtle", None, true).unwrap();
             let before = native.dump(py, "nquads").unwrap();
-            let failure = native.infer(py, "owlrl", None, false, false, None).unwrap_err();
+            let failure = native
+                .infer(py, "owlrl", None, false, false, None)
+                .unwrap_err();
             assert!(failure.to_string().contains(message), "{failure}");
             assert_eq!(native.dump(py, "nquads").unwrap(), before);
         }
