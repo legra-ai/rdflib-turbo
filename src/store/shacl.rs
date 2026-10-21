@@ -1,9 +1,10 @@
 //! Keep validation and rule writes on the existing transaction owner.
 use super::operations::{Operation, Reply};
 use super::session::Session;
+use super::shacl_read::CommittedGraph;
 use super::{NativeStore, NativeTransaction};
+use crate::Result;
 use crate::shacl::Report;
-use crate::{Error, Result};
 use pyshacl_turbo_engine::{CompiledShapes, Options};
 use std::sync::Arc;
 
@@ -23,22 +24,20 @@ impl NativeStore {
         options: Options,
         inplace: bool,
     ) -> Result<Report> {
-        let operation = Operation::Validate {
-            shapes,
-            options,
-            inplace,
-        };
         if inplace {
-            return Session::execute_inline(self.control.clone(), operation)
-                .map(Reply::into_validation);
+            return Session::execute_inline(
+                self.control.clone(),
+                Operation::Validate {
+                    shapes,
+                    options,
+                    inplace,
+                },
+            )
+            .map(Reply::into_validation);
         }
         let store = self.snapshot()?;
-        let mut transaction = store
-            .start_transaction()
-            .map_err(|error| Error::Runtime(error.to_string()))?;
-        operation
-            .execute(&mut transaction)
-            .map(Reply::into_validation)
+        let source = CommittedGraph(store.read_snapshot());
+        Report::try_new(shapes.validate_staged(&source, options)?)
     }
 }
 

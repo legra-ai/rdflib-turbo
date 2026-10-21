@@ -7,6 +7,7 @@ mod read;
 mod read_input;
 mod session;
 mod shacl;
+mod shacl_read;
 mod term_output;
 mod transaction;
 mod typed;

@@ -1,10 +1,34 @@
 """SHACL uses the same native transaction as pending writes and inference."""
 
 import json
+import subprocess
+import sys
 
 import pytest
 from rdflib_turbo import Dataset, Store
 from rdflib_turbo._native import SharedShapes, SharedValidationFailure
+
+
+def test_committed_validation_does_not_wait_for_an_open_writer():
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """
+from rdflib_turbo import Store
+from rdflib_turbo._native import SharedShapes
+program = SharedShapes("", False, [])
+with Store() as store:
+    with store.transaction() as tx:
+        tx.parse(data="<urn:s> <urn:p> 1.")
+        with store._validate_shared_shapes(program, "{}", False) as result:
+            assert result[0]
+""",
+        ],
+        check=True,
+        timeout=5,
+    )
+
 
 SHAPES = """@prefix sh: <http://www.w3.org/ns/shacl#> .
 <urn:S> sh:targetNode <urn:s>;

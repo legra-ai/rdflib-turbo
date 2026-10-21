@@ -72,3 +72,9 @@ deduplication or physical reclamation semantics change. Implementation lives in
 `src/storage/memory_counts.rs` and the storage/store adapters; regressions are in
 `src/storage/memory_count_tests.rs` and the standalone cardinality contracts.
 See ADR 0023 for publication and ownership invariants.
+
+`Store::read_snapshot` exposes a pinned committed MVCC reader without acquiring
+the writer lock. Indexed quad and named-graph reads share that version for a
+complete SHACL validation. The view owns storage reader metadata, not a quad
+copy; pending writer changes remain invisible. This prevents reentrant writer
+deadlocks during non-inplace validation. See ADR 0037 and shacl_read tests.

@@ -31,10 +31,12 @@
 //! ```
 mod lexical;
 mod projection;
+mod read_snapshot;
 
 pub use crate::storage::term_text::TermText;
 pub use lexical::{LexicalQuadIter, LexicalTerm};
 pub use projection::ProjectedQuadIter;
+pub use read_snapshot::ReadSnapshot;
 
 use crate::io::{RdfParseError, RdfParser, RdfSerializer};
 use crate::model::*;
