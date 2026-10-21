@@ -4,9 +4,10 @@ import decimal
 
 import pytest
 from owlrl import OWLRL_Semantics
-from rdflib import Graph, Literal, URIRef
+from rdflib import BNode, Graph, Literal, URIRef
 from rdflib.namespace import XSD
-from rdflib_turbo import Dataset, Store
+from rdflib_turbo import Dataset, Store, StoreDataset
+from rdflib_turbo import Graph as NativeGraph
 
 CASES = [
     ("rounded", "double", "1.234567", {"prec": 3}, {}),
@@ -57,6 +58,18 @@ def execute(datatype, lexical, settings, traps, owner, late_failure):
         target = OWLRL_Semantics(source, False, False)
     elif owner in {"dataset", "delta"}:
         target = Dataset.from_rdflib(source)
+    elif owner.startswith("graph") or owner == "store-dataset":
+        if owner == "store-dataset":
+            target = StoreDataset()
+            graph = target.graph(URIRef("urn:flags:source"))
+        else:
+            identifier = BNode("flags") if owner == "graph-blank" else URIRef("urn:flags:source")
+            target = (
+                NativeGraph() if owner == "graph-default" else NativeGraph(identifier=identifier)
+            )
+            graph = target
+        for triple in source:
+            graph.add(triple)
     else:
         target = Store().parse(data=source.serialize(format="nt"), format="nt")
     with decimal.localcontext() as context:
@@ -74,6 +87,9 @@ def execute(datatype, lexical, settings, traps, owner, late_failure):
                 target.closure()
             elif owner == "delta":
                 target.infer_delta()
+            elif owner == "graph-transaction":
+                with target.store.backend.transaction() as transaction:
+                    NativeGraph(store=transaction, identifier=target.identifier).infer()
             elif owner == "transaction":
                 with target.transaction() as transaction:
                     transaction.infer()
@@ -86,7 +102,20 @@ def execute(datatype, lexical, settings, traps, owner, late_failure):
         return {signal.__name__: bool(value) for signal, value in context.flags.items()}, error
 
 
-@pytest.mark.parametrize("owner", ["dataset", "delta", "store", "transaction"])
+@pytest.mark.parametrize(
+    "owner",
+    [
+        "dataset",
+        "delta",
+        "store",
+        "transaction",
+        "graph-default",
+        "graph-named",
+        "graph-blank",
+        "graph-transaction",
+        "store-dataset",
+    ],
+)
 @pytest.mark.parametrize("name,datatype,lexical,settings,traps", CASES)
 def test_caller_decimal_flags_match_original_after_closure(
     name, datatype, lexical, settings, traps, owner

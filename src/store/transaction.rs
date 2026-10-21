@@ -191,7 +191,7 @@ impl NativeTransaction {
         source_graph: Option<String>,
         destination_graph: String,
     ) -> PyResult<crate::inference::InferenceOutcome> {
-        let request = match crate::inference::InferenceRequest::capture(
+        let (request, publisher) = match crate::inference::InferenceRequest::capture(
             py,
             None,
             crate::inference::InferenceOptions::default(),
@@ -202,7 +202,7 @@ impl NativeTransaction {
                 return Err(failure);
             }
         };
-        py.detach(|| {
+        let result = py.detach(|| {
             match self.session.execute(Operation::InferGraph {
                 mode,
                 source: source_graph,
@@ -212,8 +212,8 @@ impl NativeTransaction {
                 Reply::Inference(outcome) => Ok(outcome),
                 _ => unreachable!("native scoped inference reply type"),
             }
-        })
-        .map_err(error)
+        });
+        publisher.complete(py, result)
     }
 
     fn update(&self, py: Python<'_>, source: String) -> PyResult<()> {
