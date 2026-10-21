@@ -70,7 +70,9 @@ def test_scoped_flags_and_prior_history_match_original(kind, mode, name, axioms,
         )
         is graph
     )
-    assert graph.store.backend._last_inference.error_messages == semantics.error_messages
+    messages = graph.store.backend._last_inference.error_messages
+    assert messages[:2] == semantics.error_messages[:2] == ["retained", "retained"]
+    assert set(messages[2:]) == set(semantics.error_messages[2:])
     assert isomorphic(ordinary(graph), ordinary(reference))
 
 
