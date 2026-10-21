@@ -130,6 +130,15 @@ def test_validated_transaction_commits_original_and_rule_writes_together():
         assert len(store) == 2
 
 
+def test_direct_inplace_store_validation_commits_after_report_consumption():
+    with Store() as store:
+        store.parse(data=SOURCE)
+        conforms, report, text = Program().validate(store, inplace=True)
+        assert conforms and report and "Conforms: True" in text
+        assert store.query("ASK {<urn:s> <urn:derived> true}")
+        assert len(store) == 2
+
+
 def test_nonconforming_commit_gate_aborts_every_pending_write_and_retains_report():
     from rdflib_turbo import ValidationError
 
