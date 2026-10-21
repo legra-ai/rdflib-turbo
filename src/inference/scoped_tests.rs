@@ -66,18 +66,34 @@ fn legacy_dataset_destination_and_delta_include_literal_identity_publication() {
             quad("urn:s", TYPE, "urn:C", &source),
         ]);
         if delta {
-            let additions =
-                super::super::expand_delta(&mut data, "rdfs", Some(destination.clone())).unwrap();
+            let additions = super::super::expand_delta(
+                &mut data,
+                "rdfs",
+                Some(destination.clone()),
+                super::super::InferenceOptions::default(),
+            )
+            .unwrap();
             assert!(additions.contains(&publication));
             assert!(!additions.contains(&original));
             assert!(
-                super::super::expand_delta(&mut data, "rdfs", Some(destination.clone()))
-                    .unwrap()
-                    .iter()
-                    .all(|quad| quad != publication.as_ref())
+                super::super::expand_delta(
+                    &mut data,
+                    "rdfs",
+                    Some(destination.clone()),
+                    super::super::InferenceOptions::default()
+                )
+                .unwrap()
+                .iter()
+                .all(|quad| quad != publication.as_ref())
             );
         } else {
-            super::super::expand_into(&mut data, "rdfs", destination.clone()).unwrap();
+            super::super::expand_into(
+                &mut data,
+                "rdfs",
+                destination.clone(),
+                super::super::InferenceOptions::default(),
+            )
+            .unwrap();
         }
         assert!(data.contains(&original));
         assert!(data.contains(&publication));

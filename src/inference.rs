@@ -234,7 +234,9 @@ pub(crate) fn expand_into(
     let prepared = expand_configured(&mut transaction, mode, options)?;
     let publications = delta::literal_publications(data, mode, &destination);
     let mut destination_transaction = data.insert_transaction();
-    for quad in publications.iter() { destination_transaction.insert(quad); }
+    for quad in publications.iter() {
+        destination_transaction.insert(quad);
+    }
     for quad in transaction.inserted() {
         destination_transaction.insert(&Quad::new(
             quad.subject,

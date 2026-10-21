@@ -84,7 +84,12 @@ pub(crate) fn expand(
     destination: GraphName,
 ) -> Result<()> {
     let Some(source) = source else {
-        return super::expand_transaction(transaction, mode, destination);
+        return super::expand_transaction(
+            transaction,
+            mode,
+            destination,
+            super::InferenceOptions::default(),
+        );
     };
     super::expand_inner(
         &mut ScopedGraph {
