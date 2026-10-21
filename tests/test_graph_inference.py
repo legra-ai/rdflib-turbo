@@ -180,7 +180,9 @@ def test_scoped_diagnostics_capture_context_and_retain_the_invocation(union, tra
             input_graph.add((EX.conflict, RDF.type, OWL.Nothing))
             with decimal.localcontext() as context:
                 context.traps[decimal.InvalidOperation] = False
+                context.clear_flags()
                 assert source.infer(destination=EX.destination) is source
+                assert context.flags[decimal.InvalidOperation]
             assert backend._last_inference.error_messages == [
                 f"{EX.conflict} is defined of type 'Nothing'"
             ]

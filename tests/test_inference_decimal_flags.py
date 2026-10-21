@@ -88,8 +88,8 @@ def execute(datatype, lexical, settings, traps, owner, late_failure):
             elif owner == "delta":
                 target.infer_delta()
             elif owner == "graph-transaction":
-                with target.store.backend.transaction() as transaction:
-                    NativeGraph(store=transaction, identifier=target.identifier).infer()
+                with target.transaction() as graph:
+                    graph.infer()
             elif owner == "transaction":
                 with target.transaction() as transaction:
                     transaction.infer()
