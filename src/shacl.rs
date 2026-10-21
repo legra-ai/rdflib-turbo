@@ -1,16 +1,24 @@
-//! SHACL executes where the dataset is owned. No Rust pointer crosses a DSO.
+//! SHACL executes where its dataset or transaction is owned. No Rust pointer crosses a DSO.
+use std::fmt;
+use std::sync::Arc;
+
 use oxigraph::io::RdfFormat;
 use oxigraph::model::{NamedNode, Term};
 use pyo3::exceptions::{PyNotImplementedError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyshacl_turbo_engine::{CompiledShapes, Error, Options, ValidationReport, parse_graph};
-use serde::Deserialize;
+use serde::de::{MapAccess, Visitor, value::MapAccessDeserializer};
+use serde::{Deserialize, Deserializer};
 
-use crate::{NativeDataset, serialize};
+use crate::NativeDataset;
+use crate::store::{NativeStore, NativeTransaction};
+
+mod report;
+pub(crate) use report::Report;
 
 pyo3::create_exception!(_native, SharedValidationFailure, PyValueError);
 
-fn error(error: Error) -> PyErr {
+pub(crate) fn error(error: Error) -> PyErr {
     match error {
         Error::ValidationFailure(_) => SharedValidationFailure::new_err(error.to_string()),
         Error::Unsupported(_) => PyNotImplementedError::new_err(error.to_string()),
@@ -77,17 +85,38 @@ impl Settings {
 type Output = (bool, String, String, Vec<String>);
 
 fn output(report: ValidationReport) -> PyResult<Output> {
-    Ok((
-        report.conforms,
-        serialize(&report.graph, RdfFormat::NTriples)?,
-        report.text,
-        report.recursion_warnings,
-    ))
+    Report::try_new(report)
+        .map(Report::into_output)
+        .map_err(crate::error)
+}
+
+struct SettingsMap;
+impl<'de> Visitor<'de> for SettingsMap {
+    type Value = Settings;
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("a validation settings object")
+    }
+    fn visit_map<A: MapAccess<'de>>(self, map: A) -> std::result::Result<Settings, A::Error> {
+        Settings::deserialize(MapAccessDeserializer::new(map))
+    }
+}
+
+impl Settings {
+    fn parse(source: &str) -> PyResult<Options> {
+        let mut parser = serde_json::Deserializer::from_str(source);
+        let settings = parser
+            .deserialize_map(SettingsMap)
+            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        parser
+            .end()
+            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        settings.options()
+    }
 }
 
 #[pyclass(frozen)]
 pub(crate) struct SharedShapes {
-    inner: CompiledShapes,
+    inner: Arc<CompiledShapes>,
 }
 
 #[pymethods]
@@ -104,12 +133,12 @@ impl SharedShapes {
         py.detach(|| {
             let graph = parse_graph(source, RdfFormat::Turtle, None)?;
             Ok(Self {
-                inner: CompiledShapes::compile_with_namespaces(
+                inner: Arc::new(CompiledShapes::compile_with_namespaces(
                     graph,
                     advanced,
                     numeric_booleans,
                     &namespaces,
-                )?,
+                )?),
             })
         })
         .map_err(error)
@@ -122,44 +151,66 @@ impl SharedShapes {
         settings: &str,
         inplace: bool,
     ) -> PyResult<Output> {
-        let object = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(settings)
-            .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        let mut options = serde_json::from_value::<Settings>(serde_json::Value::Object(object))
-            .map_err(|e| PyValueError::new_err(e.to_string()))?
-            .options()?;
+        let mut options = Settings::parse(settings)?;
         py.detach(|| {
-            if !self.inner.has_active_rules(&options) {
-                let data = dataset
-                    .inner
-                    .read()
-                    .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
-                options.namespaces = data.namespaces.clone();
-                return output(
-                    self.inner
-                        .validate_readonly(&data, options)
-                        .map_err(error)?,
-                );
-            }
             if inplace {
                 let mut data = dataset
                     .inner
                     .write()
                     .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
-                let mut working = data.clone();
-                options.namespaces = working.namespaces.clone();
-                let result = output(self.inner.validate(&mut working, options).map_err(error)?)?;
-                *data = working;
+                options.namespaces = data.namespaces.clone();
+                let outcome = self
+                    .inner
+                    .validate_delta(&data.data, options)
+                    .map_err(error)?;
+                let result = output(outcome.report)?;
+                data.extend(outcome.additions.iter());
                 Ok(result)
             } else {
-                let mut working = dataset
+                let data = dataset
                     .inner
                     .read()
-                    .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?
-                    .clone();
-                options.namespaces = working.namespaces.clone();
-                output(self.inner.validate(&mut working, options).map_err(error)?)
+                    .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
+                options.namespaces = data.namespaces.clone();
+                output(
+                    self.inner
+                        .validate_staged(&data.data, options)
+                        .map_err(error)?,
+                )
             }
         })
+    }
+    fn validate_store(
+        &self,
+        py: Python<'_>,
+        store: &NativeStore,
+        settings: &str,
+        inplace: bool,
+    ) -> PyResult<Output> {
+        let options = Settings::parse(settings)?;
+        py.detach(|| store.validate_shapes(self.inner.clone(), options, inplace))
+            .map(Report::into_output)
+            .map_err(crate::error)
+    }
+
+    fn validate_transaction(
+        &self,
+        py: Python<'_>,
+        transaction: &NativeTransaction,
+        settings: &str,
+        inplace: bool,
+    ) -> PyResult<Output> {
+        let options = match Settings::parse(settings) {
+            Ok(options) => options,
+            Err(error) => {
+                py.detach(|| transaction.abort_validation())
+                    .map_err(crate::error)?;
+                return Err(error);
+            }
+        };
+        py.detach(|| transaction.validate_shapes(self.inner.clone(), options, inplace))
+            .map(Report::into_output)
+            .map_err(crate::error)
     }
 }
 
@@ -172,7 +223,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     )?;
     module.add(
         "SHACL_ENGINE_REVISION",
-        "c0c3e595b157a04ff8100fff6b30b9a8b3972761",
+        "33ccfe6ba77c0842028302cebfab64168aacb8b0",
     )?;
     module.add(
         "SharedValidationFailure",

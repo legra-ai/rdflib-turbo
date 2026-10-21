@@ -1,6 +1,8 @@
 use oxigraph::io::{RdfFormat, RdfParser};
 use oxigraph::sparql::SparqlEvaluator;
 use oxigraph::store::Transaction;
+use pyshacl_turbo_engine::{CompiledShapes, Options};
+use std::sync::Arc;
 
 use crate::{Error, Result};
 
@@ -9,6 +11,11 @@ use super::pattern::{self, Pattern};
 use super::typed::{self, QuadInput, TermTuple};
 
 pub(super) enum Operation {
+    Validate {
+        shapes: Arc<CompiledShapes>,
+        options: Options,
+        inplace: bool,
+    },
     InsertTerms(Box<QuadInput>),
     Remove(String),
     Match(String),
@@ -38,6 +45,7 @@ pub(super) enum Operation {
 }
 
 pub(super) enum Reply {
+    Validation(Box<crate::shacl::Report>),
     Done,
     Bool(bool),
     Count(usize),
@@ -48,6 +56,19 @@ pub(super) enum Reply {
 impl Operation {
     pub fn execute(self, transaction: &mut Transaction<'_>) -> Result<Reply> {
         match self {
+            Self::Validate {
+                shapes,
+                options,
+                inplace,
+            } => {
+                let result = if inplace {
+                    shapes.validate_transaction(transaction, options)?
+                } else {
+                    shapes.validate_staged(&*transaction, options)?
+                };
+                crate::shacl::Report::try_new(result)
+                    .map(|report| Reply::Validation(Box::new(report)))
+            }
             Self::Count(source) => {
                 let pattern = Pattern::parse(&source)?;
                 pattern

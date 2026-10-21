@@ -71,3 +71,11 @@ The Dataset adapter delegates validated statement filters to the lifetime-safe
 Dataset pattern iterator, eliminating copied graph bindings and unrelated graph
 decoding. Preserve the SPARQL named-only wildcard graph rule separately. Exact
 scope/kind/lifetime tests and the large-binding allocation budget cover ADR 0029.
+# Borrowed scoped custom functions
+
+`QueryableDataset::scoped_custom_function` supplies a lifetime-bound Rc callback
+for functions that query the same borrowed source. Explicit evaluator-registered
+functions take precedence. The expression evaluator resolves both ordinary and
+exact-term calls through this capability. No callback or source is retained
+beyond the query lifetime, and the source need not be cloned into an Arc Dataset.
+

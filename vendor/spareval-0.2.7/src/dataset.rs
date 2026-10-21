@@ -15,8 +15,17 @@ use std::hash::{Hash, Hasher};
 use std::iter::empty;
 use std::mem::discriminant;
 
+/// An evaluation-local function that may borrow its query dataset.
+pub type ScopedCustomFunction<'a> = std::rc::Rc<dyn Fn(&[Term]) -> Option<Term> + 'a>;
+
 /// A [RDF dataset](https://www.w3.org/TR/sparql11-query/#rdfDataset) that can be queried using SPARQL
 pub trait QueryableDataset<'a>: Sized + 'a {
+    /// Resolve a query-local callback. Its captured borrows must outlive evaluation.
+    /// Explicit evaluator registrations take precedence over dataset callbacks.
+    fn scoped_custom_function(&self, _name: &NamedNode) -> Option<ScopedCustomFunction<'a>> {
+        None
+    }
+
     /// Internal representation of an RDF term
     ///
     /// Can be just an integer that indexes into a dictionary...

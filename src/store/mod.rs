@@ -6,6 +6,8 @@ mod pattern;
 mod read;
 mod read_input;
 mod session;
+mod shacl;
+mod shacl_read;
 mod term_output;
 mod transaction;
 mod typed;
@@ -20,7 +22,7 @@ use pyo3::prelude::*;
 use crate::{error, format};
 use operations::{Operation, runtime};
 use session::{Control, Session, lock};
-use transaction::NativeTransaction;
+pub(crate) use transaction::NativeTransaction;
 use typed::{QuadInput, TermTuple};
 use typed_view::{Position, PreparedTerm};
 

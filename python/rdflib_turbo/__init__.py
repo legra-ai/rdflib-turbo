@@ -2,6 +2,7 @@
 
 import json
 from collections.abc import Iterator
+from contextlib import contextmanager
 from importlib.metadata import version
 from typing import Self
 
@@ -11,10 +12,10 @@ from rdflib import Graph as RDFLibGraph
 from ._native import NativeDataset
 from ._operations import GraphOperations, _term
 from .graph import Graph, StoreDataset
-from .store import Store
+from .store import Store, Transaction, ValidationError
 
 __version__ = version("rdflib-turbo")
-__all__ = ["Dataset", "Graph", "Store", "StoreDataset"]
+__all__ = ["Dataset", "Graph", "Store", "StoreDataset", "Transaction", "ValidationError"]
 
 
 class Dataset(GraphOperations):
@@ -31,6 +32,10 @@ class Dataset(GraphOperations):
         result = Dataset()
         result._native = self._native.copy()
         return result
+
+    @contextmanager
+    def _validate_shared_shapes(self, program, settings, inplace):
+        yield program.validate(self._native, settings, inplace)
 
     def namespaces(self) -> Iterator[tuple[str, str]]:
         """Return namespace bindings retained atomically from parsed documents."""

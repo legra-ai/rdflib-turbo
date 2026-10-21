@@ -3,10 +3,21 @@
 import importlib
 import json
 import subprocess
+import tomllib
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
+
+@pytest.mark.parametrize("crate", ["oxrdf-0.3.4", "oxigraph-0.5.11", "spareval-0.2.7"])
+def test_vendor_lockfiles_keep_the_root_git_patch_revision(crate):
+    root = Path(__file__).resolve().parents[1]
+    patch = tomllib.loads((root / "Cargo.toml").read_text())["patch"]["crates-io"]["fancy-regex"]
+    lock = tomllib.loads((root / "vendor" / crate / "Cargo.lock").read_text())
+    packages = lock["package"] + lock.get("patch", {}).get("unused", [])
+    sources = [item["source"] for item in packages if item["name"] == "fancy-regex"]
+    assert sources == [f"git+{patch['git']}?rev={patch['rev']}#{patch['rev']}"]
 
 
 @pytest.fixture

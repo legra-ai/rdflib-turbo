@@ -2257,6 +2257,13 @@ impl<'a, D: QueryableDataset<'a>> ExpressionEvaluatorContext<'a>
     fn custom_functions(&mut self) -> &CustomFunctionRegistry {
         &self.evaluator.custom_functions
     }
+
+    fn custom_function(&mut self, name: &NamedNode) -> Option<crate::dataset::ScopedCustomFunction<'a>> {
+        if let Some(function) = self.evaluator.custom_functions.get(name).cloned() {
+            return Some(Rc::new(move |args: &[Term]| function(args)));
+        }
+        self.evaluator.dataset.dataset.scoped_custom_function(name)
+    }
 }
 
 #[cfg(feature = "sparql-12")]

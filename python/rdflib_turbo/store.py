@@ -7,6 +7,15 @@ from ._native import NativeStore
 from ._operations import GraphOperations
 
 
+class ValidationError(ValueError):
+    """A transaction failed its SHACL commit gate; all pending changes were aborted."""
+
+    def __init__(self, report, text):
+        super().__init__(text)
+        self.report = report
+        self.text = text
+
+
 class InferenceOperations(GraphOperations):
     """Shared inference entry point for a store and its active transaction."""
 
@@ -38,6 +47,14 @@ class Transaction(InferenceOperations):
     def __init__(self, native):
         self._native = native
 
+    @contextmanager
+    def _validate_shared_shapes(self, program, settings, inplace):
+        try:
+            yield program.validate_transaction(self._native, settings, inplace)
+        except BaseException:
+            self._native.rollback()
+            raise
+
     def update(self, source):
         """Execute SPARQL Update inside the current transaction."""
         self._native.update(source)
@@ -48,11 +65,21 @@ class Store(InferenceOperations):
     """An in-memory Oxigraph store, or a persistent RocksDB store at path.
 
     This storage API supports queries, atomic mutations and direct inference.
-    SHACL remains separate until its direct store adapter lands.
+    pyshacl-turbo validates this store or its open transaction without copying
+    the base dataset. Optional transaction shapes gate the atomic commit.
     """
 
     def __init__(self, path=None):
         self._native = NativeStore(None if path is None else fspath(path))
+
+    @contextmanager
+    def _validate_shared_shapes(self, program, settings, inplace):
+        if inplace:
+            with self.transaction() as transaction:
+                with transaction._validate_shared_shapes(program, settings, True) as result:
+                    yield result
+        else:
+            yield program.validate_store(self._native, settings, False)
 
     def close(self):
         """Release the store; an active transaction must finish first."""
@@ -71,16 +98,32 @@ class Store(InferenceOperations):
         return self
 
     @contextmanager
-    def transaction(self):
+    def transaction(self, *, shapes=None, **validation_options):
         """Commit on normal scope exit; abort on any exception or native failure.
 
         Queries on the transaction see its own writes. Queries on the store see
         committed state. A second writer on this handle fails immediately.
         Oxigraph buffers the transaction delta in memory, not the base dataset.
+        With compiled shapes, validate after the body and before commit. Rule
+        additions join the transaction; nonconformance raises ValidationError
+        carrying the report. Validation options are passed to shapes.validate.
         """
+        if shapes is None and validation_options:
+            raise TypeError("validation options require compiled shapes")
+        if "inplace" in validation_options:
+            raise TypeError("the transaction gate controls inplace=True")
+        if shapes is not None and not callable(getattr(shapes, "validate", None)):
+            raise TypeError("shapes must provide compiled validation")
         native = self._native.transaction()
+        transaction = Transaction(native)
         try:
-            yield Transaction(native)
+            yield transaction
+            if shapes is not None:
+                conforms, report, text = shapes.validate(
+                    transaction, inplace=True, **validation_options
+                )
+                if not conforms:
+                    raise ValidationError(report, text)
         except BaseException:
             native.rollback()
             raise
