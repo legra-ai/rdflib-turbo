@@ -90,7 +90,22 @@ def test_installed_wheel(wheel, version):
     verify_licenses(wheel)
     with tempfile.TemporaryDirectory() as directory:
         project = Path(directory) / "project"
+        dependencies = Path(directory) / "requirements.lock"
         commands = [
+            [
+                "uv",
+                "export",
+                "--project",
+                str(ROOT),
+                "--locked",
+                "--group",
+                "coverage",
+                "--no-dev",
+                "--no-emit-project",
+                "--no-hashes",
+                "--output-file",
+                str(dependencies),
+            ],
             [
                 "uv",
                 "init",
@@ -103,8 +118,25 @@ def test_installed_wheel(wheel, version):
                 str(project),
             ],
             ["uv", "python", "pin", "--project", str(project), version],
+            [
+                "uv",
+                "add",
+                "--project",
+                str(project),
+                "--no-sync",
+                "--requirements",
+                str(dependencies),
+            ],
             ["uv", "add", "--project", str(project), "--extra", "test", "--no-sync", str(wheel)],
-            ["uv", "sync", "--project", str(project), "--locked"],
+            [
+                "uv",
+                "sync",
+                "--project",
+                str(project),
+                "--locked",
+                "--config-settings-package",
+                "pyshacl-turbo:maturin.build-args=--locked --profile dev",
+            ],
             [
                 "uv",
                 "run",

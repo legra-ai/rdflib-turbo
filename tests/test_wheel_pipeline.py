@@ -155,6 +155,42 @@ def test_wrong_interpreter_is_rejected(tmp_path, monkeypatch):
         driver(monkeypatch).verify_loaded_package(wheel, "3.99", environment)
 
 
+def test_wheel_environment_imports_locked_companion_before_artifact(tmp_path, monkeypatch):
+    module = driver(monkeypatch)
+    commands = []
+    monkeypatch.setattr(module, "verify_licenses", lambda wheel: None)
+    monkeypatch.setattr(
+        module.subprocess, "run", lambda command, **kwargs: commands.append(command)
+    )
+    wheel = tmp_path / "candidate.whl"
+    module.test_installed_wheel(wheel, "3.13")
+    export = next(command for command in commands if command[:2] == ["uv", "export"])
+    assert "--locked" in export and "--no-emit-project" in export
+    assert export[export.index("--group") + 1] == "coverage"
+    dependencies = next(command for command in commands if "--requirements" in command)
+    artifact = next(command for command in commands if str(wheel) in command)
+    assert commands.index(export) < commands.index(dependencies) < commands.index(artifact)
+    assert "--extra" not in dependencies
+    sync = next(command for command in commands if command[:2] == ["uv", "sync"])
+    assert "--locked" in sync
+
+
+def test_dependency_export_failure_stops_wheel_installation(tmp_path, monkeypatch):
+    module = driver(monkeypatch)
+    commands = []
+    monkeypatch.setattr(module, "verify_licenses", lambda wheel: None)
+
+    def fail(command, **kwargs):
+        commands.append(command)
+        if command[:2] == ["uv", "export"]:
+            raise subprocess.CalledProcessError(9, command)
+
+    monkeypatch.setattr(module.subprocess, "run", fail)
+    with pytest.raises(subprocess.CalledProcessError):
+        module.test_installed_wheel(tmp_path / "candidate.whl", "3.13")
+    assert len(commands) == 1
+
+
 @pytest.mark.parametrize("version, upper", [("3.11", "3.12"), ("3.13", "3.14"), ("3.15", "3.16")])
 def test_isolated_project_is_bounded_to_its_native_wheel_abi(tmp_path, monkeypatch, version, upper):
     module = driver(monkeypatch)
