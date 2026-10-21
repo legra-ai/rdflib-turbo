@@ -153,3 +153,16 @@ def test_wrong_interpreter_is_rejected(tmp_path, monkeypatch):
     wheel, environment, _ = installed_fixture(tmp_path, monkeypatch)
     with pytest.raises(RuntimeError, match="interpreter"):
         driver(monkeypatch).verify_loaded_package(wheel, "3.99", environment)
+
+
+@pytest.mark.parametrize("version, upper", [("3.11", "3.12"), ("3.13", "3.14"), ("3.15", "3.16")])
+def test_isolated_project_is_bounded_to_its_native_wheel_abi(tmp_path, monkeypatch, version, upper):
+    module = driver(monkeypatch)
+    commands = []
+    monkeypatch.setattr(module, "verify_licenses", lambda wheel: None)
+    monkeypatch.setattr(
+        module.subprocess, "run", lambda command, **kwargs: commands.append(command)
+    )
+    module.test_installed_wheel(tmp_path / "candidate.whl", version)
+    initialize = next(command for command in commands if command[:2] == ["uv", "init"])
+    assert initialize[initialize.index("--python") + 1] == f">={version},<{upper}"
