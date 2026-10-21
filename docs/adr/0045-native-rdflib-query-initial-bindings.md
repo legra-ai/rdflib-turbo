@@ -1,4 +1,4 @@
-# ADR 0044: Evaluate RDFLib initial query bindings in native algebra
+# ADR 0045: Evaluate RDFLib initial query bindings in native algebra
 
 Status: Implemented; installed-wheel query and coverage verification passed
 
