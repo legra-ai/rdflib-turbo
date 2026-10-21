@@ -1,7 +1,7 @@
 //! RDFS one-time substitution uses Python value equality, not RDF term equality.
 
 use oxigraph::model::{GraphName, Quad};
-use oxigraph::sparql::{QueryResults, SparqlEvaluator};
+use oxigraph::sparql::{PreparedSparqlQuery, QueryResults, SparqlEvaluator};
 
 use super::backend::Graph;
 use super::{PREFIXES, Pending};
@@ -16,10 +16,10 @@ isLiteral(?value) && (
 )
 "#;
 
-pub(super) fn strings(data: &mut impl Graph) -> Result<()> {
+pub(super) fn string_query() -> Result<PreparedSparqlQuery> {
     // Both subqueries bind the same value key before joining. The evaluator can
     // hash-join equal values instead of comparing every pair of input literals.
-    let query = SparqlEvaluator::new()
+    SparqlEvaluator::new()
         .parse_query(&format!(
             r#"{PREFIXES}
 CONSTRUCT {{ ?subject ?predicate ?replacement }} WHERE {{
@@ -27,17 +27,22 @@ CONSTRUCT {{ ?subject ?predicate ?replacement }} WHERE {{
         ?subject ?predicate ?value .
         FILTER ({STRING_VALUE})
         BIND (STR(?value) AS ?key)
+        FILTER (BOUND(?key))
     }} }}
     {{ SELECT DISTINCT ?replacement ?key WHERE {{
         ?otherSubject ?otherPredicate ?value .
         FILTER ({STRING_VALUE})
         BIND (?value AS ?replacement)
         BIND (STR(?value) AS ?key)
+        FILTER (BOUND(?key))
     }} }}
 }}"#
         ))
-        .map_err(|error| Error::Runtime(format!("Invalid literal substitution rule: {error}")))?;
-    let QueryResults::Graph(triples) = data.query(query)? else {
+        .map_err(|error| Error::Runtime(format!("Invalid literal substitution rule: {error}")))
+}
+
+pub(super) fn strings(data: &mut impl Graph) -> Result<()> {
+    let QueryResults::Graph(triples) = data.query(string_query()?)? else {
         unreachable!("Literal substitution is a CONSTRUCT query")
     };
     let mut additions = Pending::default();

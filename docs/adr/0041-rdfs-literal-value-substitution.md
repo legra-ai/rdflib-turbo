@@ -20,6 +20,12 @@ contains only new output facts. Native query intermediates and the inference
 delta retain ADR 0008's existing memory limits; this is not a bounded-memory
 query guarantee.
 
+Require bound keys explicitly and teach the optimizer that a positive BOUND
+filter removes undefined bindings. Preserve the existing term-kind restrictions
+and do not infer this fact through OR or NOT. A prepared-plan regression requires
+the real keyed join; execution regressions retain SPARQL's unbound wildcard
+behavior whenever the filters allow it.
+
 The initial string profile follows values reconstructed from the native store's
 exact lexical terms. Programmatically constructed RDFLib literals can retain
 cached Python values from before lexical normalization; preserving that state

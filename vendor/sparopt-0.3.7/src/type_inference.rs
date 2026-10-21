@@ -84,7 +84,11 @@ pub fn infer_graph_pattern_types(
             );
             types
         }
-        GraphPattern::Filter { inner, .. } => infer_graph_pattern_types(inner, types),
+        GraphPattern::Filter { inner, expression } => {
+            let mut types = infer_graph_pattern_types(inner, types);
+            refine_positive_filter_bindings(expression, &mut types);
+            types
+        }
         GraphPattern::Project { inner, variables } => VariableTypes {
             inner: infer_graph_pattern_types(inner, types)
                 .inner
@@ -145,6 +149,22 @@ pub fn infer_graph_pattern_types(
             }
             types
         }
+    }
+}
+
+fn refine_positive_filter_bindings(expression: &Expression, types: &mut VariableTypes) {
+    match expression {
+        Expression::Bound(variable) => {
+            // BOUND removes UNDEF; unlike a join, it cannot add another RDF kind.
+            types.inner.entry(variable.clone()).or_default().undef = false;
+        }
+        Expression::And(expressions) => {
+            for expression in expressions {
+                refine_positive_filter_bindings(expression, types);
+            }
+        }
+        // OR/NOT do not guarantee a nested BOUND is true in the result rows.
+        _ => {}
     }
 }
 
@@ -471,6 +491,38 @@ impl BitAnd for VariableType {
             triple: self.triple && rhs.triple
                 || (self.undef && rhs.triple)
                 || (self.triple && rhs.undef),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oxrdf::Literal;
+
+    #[test]
+    fn positive_bound_filters_remove_only_the_undefined_alternative() {
+        let variable = Variable::new("key").unwrap();
+        let bound = Expression::Bound(variable.clone());
+        let truth = Expression::Literal(Literal::from(true));
+        for (expression, undefined) in [
+            (bound.clone(), false),
+            (Expression::And(vec![truth.clone(), bound.clone()]), false),
+            (Expression::Or(vec![truth, bound.clone()]), true),
+            (Expression::Not(Box::new(bound)), true),
+        ] {
+            let pattern = GraphPattern::Filter {
+                expression,
+                inner: Box::new(GraphPattern::Values {
+                    variables: vec![variable.clone()],
+                    bindings: vec![vec![Some(Literal::from("bound").into())], vec![None]],
+                }),
+            };
+            let types = infer_graph_pattern_types(&pattern, VariableTypes::default());
+            assert_eq!(types.get(&variable).undef, undefined, "{pattern:?}");
+            assert!(types.get(&variable).literal);
+            assert!(!types.get(&variable).blank_node);
+            assert!(!types.get(&variable).named_node);
         }
     }
 }
