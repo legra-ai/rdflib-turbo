@@ -9,8 +9,8 @@ mod axioms;
 mod backend;
 mod delta;
 mod intersections;
-mod options;
 mod literal_values;
+mod options;
 mod same_as;
 mod traversal;
 
