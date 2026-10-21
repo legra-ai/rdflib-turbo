@@ -572,6 +572,7 @@ dependencies = [
 
 [package.optional-dependencies]
 test = [
+    { name = "owlrl" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
@@ -593,6 +594,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "owlrl", marker = "extra == 'test'", specifier = "==7.6.2" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8,<10" },
     { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=7.1,<8" },
     { name = "rdflib", specifier = ">=7.3,<8" },

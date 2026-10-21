@@ -88,7 +88,7 @@ fn profile_pipeline_allocations() {
         phase("setup", 0);
         data.load(py, &source, "turtle", None, true).unwrap();
         phase("parse", data.__len__().unwrap());
-        data.infer(py, &mode, None).unwrap();
+        data.infer(py, &mode, None, false, false).unwrap();
         phase("inference", data.__len__().unwrap());
         let program = shacl::SharedShapes::new(py, &shapes, false, Vec::new(), false).unwrap();
         phase("compile_shapes", data.__len__().unwrap());
@@ -117,7 +117,7 @@ fn inference_heap_budget() {
         let data = NativeDataset::new();
         data.load(py, &source, "turtle", None, true).unwrap();
         PEAK.store(LIVE.load(Relaxed), Relaxed);
-        data.infer(py, "owlrl", None).unwrap();
+        data.infer(py, "owlrl", None, false, false).unwrap();
         let peak = PEAK.load(Relaxed);
         let retained = LIVE.load(Relaxed);
         println!("INFERENCE_HEAP peak_bytes={peak} retained_bytes={retained}");
@@ -126,7 +126,7 @@ fn inference_heap_budget() {
             "Inference heap budget exceeded: peak={peak}, retained={retained}"
         );
         let first = data.dump(py, "nquads").unwrap();
-        data.infer(py, "owlrl", None).unwrap();
+        data.infer(py, "owlrl", None, false, false).unwrap();
         assert_eq!(data.dump(py, "nquads").unwrap(), first);
     });
 }

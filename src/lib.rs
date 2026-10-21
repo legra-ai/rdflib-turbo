@@ -278,8 +278,15 @@ impl NativeDataset {
         })
     }
 
-    #[pyo3(signature = (mode, destination=None))]
-    fn infer(&self, py: Python<'_>, mode: &str, destination: Option<&str>) -> PyResult<()> {
+    #[pyo3(signature = (mode, destination=None, *, axiomatic_triples=false, datatype_axioms=false))]
+    fn infer(
+        &self,
+        py: Python<'_>,
+        mode: &str,
+        destination: Option<&str>,
+        axiomatic_triples: bool,
+        datatype_axioms: bool,
+    ) -> PyResult<()> {
         if !matches!(mode, "rdfs" | "owlrl" | "both") {
             return Err(PyValueError::new_err(format!(
                 "Unknown inference mode: {mode}"
@@ -295,17 +302,49 @@ impl NativeDataset {
                 .write()
                 .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
             if let Some(destination) = destination {
-                inference::expand_into(&mut current, mode, destination.into()).map_err(error)?;
+                inference::expand_into(
+                    &mut current,
+                    mode,
+                    destination.into(),
+                    inference::InferenceOptions {
+                        axiomatic_triples,
+                        datatype_axioms,
+                    },
+                )
+                .map_err(error)?;
             } else {
-                inference::expand(&mut current, mode).map_err(error)?;
+                inference::expand(
+                    &mut current,
+                    mode,
+                    inference::InferenceOptions {
+                        axiomatic_triples,
+                        datatype_axioms,
+                    },
+                )
+                .map_err(error)?;
             }
             Ok(())
         })
     }
 
-    #[pyo3(signature = (mode, destination=None))]
-    fn infer_delta(&self, py: Python<'_>, mode: &str, destination: Option<&str>) -> PyResult<Self> {
-        self.expand_delta(py, mode, destination)
+    #[pyo3(signature = (mode, destination=None, *, axiomatic_triples=false, datatype_axioms=false))]
+    fn infer_delta(
+        &self,
+        py: Python<'_>,
+        mode: &str,
+        destination: Option<&str>,
+        axiomatic_triples: bool,
+        datatype_axioms: bool,
+    ) -> PyResult<Self> {
+        self.expand_delta(
+            py,
+            mode,
+            destination,
+            inference::InferenceOptions {
+                axiomatic_triples,
+                datatype_axioms,
+            },
+        )
     }
 }
 

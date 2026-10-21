@@ -32,7 +32,7 @@ pub(super) enum Operation {
         base: Option<String>,
     },
     Update(String),
-    Infer(String, Option<String>),
+    Infer(String, Option<String>, crate::inference::InferenceOptions),
     Query(String, bool),
     Dump(RdfFormat),
 }
@@ -172,7 +172,7 @@ impl Operation {
                 }
                 Ok(Reply::Done)
             }
-            Self::Infer(mode, destination) => {
+            Self::Infer(mode, destination, options) => {
                 if !matches!(mode.as_str(), "rdfs" | "owlrl" | "both") {
                     return Err(Error::Invalid(format!("Unknown inference mode: {mode}")));
                 }
@@ -181,7 +181,7 @@ impl Operation {
                     .transpose()
                     .map_err(invalid)?
                     .map_or(oxigraph::model::GraphName::DefaultGraph, Into::into);
-                crate::inference::expand_transaction(transaction, &mode, destination)?;
+                crate::inference::expand_transaction(transaction, &mode, destination, options)?;
                 Ok(Reply::Done)
             }
             Self::Update(source) => {

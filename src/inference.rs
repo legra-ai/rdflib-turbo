@@ -9,10 +9,13 @@ mod axioms;
 mod backend;
 mod delta;
 mod intersections;
+mod options;
 mod same_as;
 mod traversal;
 
 pub(crate) use delta::expand_delta;
+pub(crate) use options::InferenceOptions;
+use options::PreparedOptions;
 
 #[cfg(test)]
 mod failure_tests;
@@ -204,27 +207,41 @@ const OWL_RULES: &[(&str, &str)] = &[
     ),
 ];
 
-pub fn expand(data: &mut Dataset, mode: &str) -> Result<()> {
+pub(crate) fn expand(data: &mut Dataset, mode: &str, options: InferenceOptions) -> Result<()> {
     if data.iter().any(|q| !q.graph_name.is_default_graph()) {
-        return expand_into(data, mode, GraphName::DefaultGraph);
+        return expand_into(data, mode, GraphName::DefaultGraph, options);
     }
     let mut transaction = data.insert_transaction();
-    expand_inner(&mut transaction, mode)?;
+    expand_configured(&mut transaction, mode, options)?;
     transaction.commit();
     Ok(())
 }
 
 /// Infer over the dataset union and put only new statements in the destination.
 /// Original graph contexts remain available to callers and report descriptions.
-pub fn expand_into(data: &mut Dataset, mode: &str, destination: GraphName) -> Result<()> {
+pub(crate) fn expand_into(
+    data: &mut Dataset,
+    mode: &str,
+    destination: GraphName,
+    options: InferenceOptions,
+) -> Result<()> {
     let mut union = crate::graph::with_union(data);
     let mut transaction = union.insert_transaction();
-    expand_inner(&mut transaction, mode)?;
-    data.extend(
-        transaction
-            .inserted()
-            .map(|q| Quad::new(q.subject, q.predicate, q.object, destination.clone())),
-    );
+    let prepared = expand_configured(&mut transaction, mode, options)?;
+    let mut destination_transaction = data.insert_transaction();
+    for quad in transaction.inserted() {
+        destination_transaction.insert(&Quad::new(
+            quad.subject,
+            quad.predicate,
+            quad.object,
+            destination.clone(),
+        ));
+    }
+    prepared.insert(|mut quad| {
+        quad.graph_name = destination.clone();
+        destination_transaction.insert(&quad);
+    })?;
+    destination_transaction.commit();
     transaction.commit();
     Ok(())
 }
@@ -270,6 +287,22 @@ fn apply_rules(
         }
     }
     Ok(())
+}
+
+fn expand_configured<'a>(
+    data: &mut impl Graph,
+    mode: &'a str,
+    options: InferenceOptions,
+) -> Result<PreparedOptions<'a>> {
+    match mode {
+        "none" | "" => return PreparedOptions::new(data, mode, InferenceOptions::default()),
+        "rdfs" | "owlrl" | "both" => {}
+        _ => return Err(Error::Unsupported(format!("inference: {mode}"))),
+    }
+    let prepared = PreparedOptions::new(data, mode, options)?;
+    prepared.insert(|quad| data.insert(quad))?;
+    expand_inner(data, mode)?;
+    Ok(prepared)
 }
 
 fn expand_inner(data: &mut impl Graph, mode: &str) -> Result<()> {
@@ -327,12 +360,15 @@ pub(crate) fn expand_transaction(
     transaction: &mut oxigraph::store::Transaction<'_>,
     mode: &str,
     destination: GraphName,
+    options: InferenceOptions,
 ) -> Result<()> {
-    expand_inner(
+    expand_configured(
         &mut backend::TransactionGraph {
             transaction,
             destination,
         },
         mode,
+        options,
     )
+    .map(|_| ())
 }

@@ -326,7 +326,7 @@ fn full_closure_matches_frozen_ordinary_rule_engine() {
         }
         let mut reference = data.clone();
         frozen_closure(&mut reference);
-        super::expand(&mut data, "owlrl").unwrap();
+        super::expand(&mut data, "owlrl", Default::default()).unwrap();
         assert_eq!(data, reference, "closure case {case}");
     }
 }

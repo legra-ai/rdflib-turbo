@@ -36,19 +36,43 @@ class Dataset(GraphOperations):
         """Return namespace bindings retained atomically from parsed documents."""
         return iter(self._native.namespaces())
 
-    def infer(self, *, inference: str = "owlrl", destination: str | None = None) -> Self:
+    def infer(
+        self,
+        *,
+        inference: str = "owlrl",
+        destination: str | None = None,
+        axiomatic_triples: bool = False,
+        datatype_axioms: bool = False,
+    ) -> Self:
         """Expand this native dataset atomically; used by owlrl-turbo."""
-        self._native.infer(inference, destination)
+        self._native.infer(
+            inference,
+            destination,
+            axiomatic_triples=axiomatic_triples,
+            datatype_axioms=datatype_axioms,
+        )
         return self
 
-    def infer_delta(self, *, inference: str = "owlrl", destination: str | None = None) -> "Dataset":
+    def infer_delta(
+        self,
+        *,
+        inference: str = "owlrl",
+        destination: str | None = None,
+        axiomatic_triples: bool = False,
+        datatype_axioms: bool = False,
+    ) -> "Dataset":
         """Expand atomically and return a native dataset of newly added quads.
 
         The result retains namespace bindings and exact output graph contexts.
         It excludes original quads; failures leave this dataset unchanged.
         """
         result = Dataset()
-        result._native = self._native.infer_delta(inference, destination)
+        result._native = self._native.infer_delta(
+            inference,
+            destination,
+            axiomatic_triples=axiomatic_triples,
+            datatype_axioms=datatype_axioms,
+        )
         return result
 
     @classmethod

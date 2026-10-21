@@ -153,6 +153,12 @@ Inference reads the union of graph contexts and writes only new facts to the
 requested destination (the default graph when omitted). It sees pending updates;
 errors abort the entire transaction. Standalone store.infer(...) is atomic.
 See the [direct inference contract](docs/adr/0008-direct-transaction-inference.md).
+Dataset, Store and Transaction also accept `axiomatic_triples=True` and
+`datatype_axioms=True` on `infer`; Dataset supports these flags on `infer_delta`
+as well. Both flags default to false and apply only to that invocation. They add
+the selected reference RDFS/OWL-RL axiom tables before reasoning. Native results
+use ordinary RDF: literal subjects and global Python datatype-conversion hooks
+are not supported. See the [axiom options contract](docs/adr/0038-per-call-inference-axioms.md).
 The low-level Store has no namespace-binding or SHACL API. Graph and StoreDataset
 provide namespace management through their RDFLibStore adapter, without
 registering a named RDFLib storage plugin.
