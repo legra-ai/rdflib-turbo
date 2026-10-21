@@ -20,7 +20,7 @@ pub(super) enum Operation {
     Remove(String),
     Match(String),
     Count(String),
-    QueryGraph(String, String),
+    QueryGraph(String, String, Option<String>),
     LoadGraph {
         source: String,
         format: RdfFormat,
@@ -45,7 +45,7 @@ pub(super) enum Operation {
         source: Option<String>,
         destination: String,
     },
-    Query(String, bool),
+    Query(String, bool, Option<String>),
     Dump(RdfFormat),
 }
 
@@ -172,13 +172,14 @@ impl Operation {
                 ))
                 .map(Reply::Text)
             }
-            Self::QueryGraph(source, graph) => {
+            Self::QueryGraph(source, graph, bindings) => {
                 let (mut query, kind) = prepare_query(&source, false)?;
                 if query.dataset().is_default_dataset() {
                     query
                         .dataset_mut()
                         .set_default_graph(vec![pattern::graph(&graph)?]);
                 }
+                let query = super::bindings::apply(query, bindings.as_deref())?;
                 let results = query.on_transaction(transaction).execute()?;
                 let (kind, output) = query_output(results, kind)?;
                 Ok(Reply::Query(kind, output))
@@ -235,8 +236,9 @@ impl Operation {
                     .map_err(runtime)?;
                 Ok(Reply::Done)
             }
-            Self::Query(source, union) => {
+            Self::Query(source, union, bindings) => {
                 let (query, kind) = prepare_query(&source, union)?;
+                let query = super::bindings::apply(query, bindings.as_deref())?;
                 let results = query.on_transaction(transaction).execute()?;
                 let (kind, output) = query_output(results, kind)?;
                 Ok(Reply::Query(kind, output))

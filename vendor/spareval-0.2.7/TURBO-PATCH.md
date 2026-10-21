@@ -6,6 +6,14 @@ MIT and Apache-2.0 license texts and original archive provenance are retained.
 The prebinding patch supplies initially bound variables to the optimizer;
 see `../sparql-prebinding.patch` and ADR 0004.
 
+The explicit `with_initial_bindings` API evaluates RDFLib query contexts, separate
+from strict SEP-0007 substitutions. It retains hidden initial variables while
+projecting only declared SELECT/DESCRIBE outputs. Its ordered sparopt lowering
+preserves lazy-join and OPTIONAL scope metadata; native streaming evaluation
+matches correlated-context merge precedence and global-binding reinstatement.
+Ordinary SPARQL preparation and strict substitution scope remain unchanged.
+See rdflib-turbo ADR 0042 and native/public initial-binding regressions.
+
 The opt-in `cached-query-plans` feature reuses immutable optimized graph patterns
 in a process-local 128-entry LRU. Exact parsed patterns and sorted initial bound
 variable names form the key; execution values, current data and registered

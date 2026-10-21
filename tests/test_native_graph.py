@@ -160,8 +160,7 @@ def test_unsupported_processors_never_execute_reference_fallback():
     graph = rdflib_turbo.Graph()
     with pytest.raises(ValueError, match="native"):
         graph.query("ASK {}", use_store_provided=False)
-    with pytest.raises(NotImplementedError, match="bindings"):
-        graph.query("ASK {}", initBindings={"s": EX.s})
+    assert bool(graph.query("ASK {}", initBindings={"s": EX.s}))
 
 
 def test_length_does_not_materialize_python_triple_results(monkeypatch):
@@ -303,8 +302,9 @@ def test_query_and_update_options_fail_without_python_fallback(factory):
         graph.query(object())
     with pytest.raises(TypeError, match="query options"):
         graph.query("ASK {}", unexpected=True)
-    with pytest.raises(NotImplementedError, match="bindings"):
-        graph.query("ASK {}", initBindings={"s": EX.s})
+    assert bool(graph.query("ASK {}", initBindings={"s": EX.s}))
+    with pytest.raises(NotImplementedError, match="update bindings"):
+        graph.update("INSERT DATA {}", initBindings={"s": EX.s})
     graph.update("INSERT DATA {}", initNs={}, initBindings={})
 
 

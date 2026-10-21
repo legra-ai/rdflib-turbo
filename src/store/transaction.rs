@@ -196,17 +196,18 @@ impl NativeTransaction {
             .map_err(error)
     }
 
-    #[pyo3(signature = (source, default_union=false))]
+    #[pyo3(signature = (source, default_union=false, bindings=None))]
     fn query(
         &self,
         py: Python<'_>,
         source: String,
         default_union: bool,
+        bindings: Option<String>,
     ) -> PyResult<(String, String)> {
         py.detach(|| {
             match self
                 .session
-                .execute(Operation::Query(source, default_union))?
+                .execute(Operation::Query(source, default_union, bindings))?
             {
                 Reply::Query(kind, text) => Ok((kind, text)),
                 _ => unreachable!("native transaction reply type"),
@@ -243,18 +244,23 @@ impl NativeTransaction {
         .map_err(error)
     }
 
+    #[pyo3(signature = (source, graph, bindings=None))]
     fn query_graph(
         &self,
         py: Python<'_>,
         source: String,
         graph: String,
+        bindings: Option<String>,
     ) -> PyResult<(String, String)> {
-        py.detach(
-            || match self.session.execute(Operation::QueryGraph(source, graph))? {
+        py.detach(|| {
+            match self
+                .session
+                .execute(Operation::QueryGraph(source, graph, bindings))?
+            {
                 Reply::Query(kind, text) => Ok((kind, text)),
                 _ => unreachable!("native graph query reply type"),
-            },
-        )
+            }
+        })
         .map_err(error)
     }
 }

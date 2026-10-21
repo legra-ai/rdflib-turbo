@@ -75,6 +75,7 @@ pub struct QueryEvaluator {
     without_optimizations: bool,
     run_stats: bool,
     cancellation_token: Option<CancellationToken>,
+    initial_bindings: Option<Arc<HashMap<Variable, Term>>>,
 }
 
 impl QueryEvaluator {
@@ -84,23 +85,51 @@ impl QueryEvaluator {
         Self::default()
     }
 
+    /// Set RDFLib-compatible initial bindings, including hidden query variables.
+    /// Unused parameters are ignored; projected bindings may be replaced by BIND.
+    /// This does not change the existing strict substitution API.
+    #[must_use]
+    pub fn with_initial_bindings(
+        mut self,
+        bindings: impl IntoIterator<Item = (Variable, Term)>,
+    ) -> Self {
+        let bindings: HashMap<_, _> = bindings.into_iter().collect();
+        self.initial_bindings = (!bindings.is_empty()).then(|| Arc::new(bindings));
+        self
+    }
+
     fn prepare_pattern(
         &self,
         pattern: &spargebra::algebra::GraphPattern,
         substitutions: &HashMap<Variable, Term>,
     ) -> Arc<GraphPattern> {
+        // RDFLib initial bindings make nested projections correlated and BIND
+        // replacement order-sensitive. SPARQL join reordering assumes the
+        // uncorrelated, conflict-rejecting algebra and is not valid in this mode.
+        if self.initial_bindings.is_some() {
+            return Arc::new(GraphPattern::from_rdflib_algebra(pattern));
+        }
         if self.without_optimizations {
             return Arc::new(GraphPattern::from(pattern));
         }
+        let bound_variables = substitutions
+            .keys()
+            .chain(
+                self.initial_bindings
+                    .iter()
+                    .flat_map(|values| values.keys()),
+            )
+            .cloned()
+            .collect::<Vec<_>>();
         #[cfg(feature = "cached-query-plans")]
         {
-            plan_cache::prepare(pattern, substitutions.keys().cloned().collect())
+            plan_cache::prepare(pattern, bound_variables)
         }
         #[cfg(not(feature = "cached-query-plans"))]
         {
             Arc::new(Optimizer::optimize_graph_pattern_with_bound_variables(
                 GraphPattern::from(pattern),
-                substitutions.keys().cloned(),
+                bound_variables,
             ))
         }
     }
@@ -599,7 +628,7 @@ impl QueryEvaluator {
         dataset_spec: QueryDatasetSpecification,
         base_iri: &Option<Iri<String>>,
     ) -> Result<SimpleEvaluator<'a, D>, QueryEvaluationError> {
-        SimpleEvaluator::new(
+        Ok(SimpleEvaluator::new(
             dataset,
             base_iri.clone().map(Arc::new),
             Rc::new(self.service_handler.clone()),
@@ -608,7 +637,8 @@ impl QueryEvaluator {
             self.cancellation_token.clone().unwrap_or_default(),
             dataset_spec,
             self.run_stats,
-        )
+        )?
+        .with_initial_bindings(self.initial_bindings.clone()))
     }
 }
 

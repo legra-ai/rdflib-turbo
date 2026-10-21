@@ -104,6 +104,7 @@ fn inference_uses_pending_writes_and_the_same_commit_boundary() {
             .execute(Operation::Query(
                 "ASK { GRAPH <urn:inferred> { <urn:a> a <urn:D> } }".into(),
                 false,
+                None,
             ))
             .unwrap()
         else {

@@ -534,6 +534,17 @@ pub struct PreparedSparqlQuery {
 }
 
 impl PreparedSparqlQuery {
+    /// Bind RDFLib query parameters, including variables hidden by projection.
+    /// Unused parameters are ignored without changing strict substitutions.
+    #[must_use]
+    pub fn with_initial_bindings(
+        mut self,
+        bindings: impl IntoIterator<Item = (Variable, Term)>,
+    ) -> Self {
+        self.evaluator = self.evaluator.with_initial_bindings(bindings);
+        self
+    }
+
     /// Substitute a variable with a given RDF term in the SPARQL query.
     ///
     /// The variable must be part of the `SELECT` clause to be substituted.

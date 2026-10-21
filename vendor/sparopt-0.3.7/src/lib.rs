@@ -8,4 +8,8 @@ pub use crate::optimizer::Optimizer;
 
 pub mod algebra;
 mod optimizer;
+mod rdflib;
 mod type_inference;
+
+#[cfg(test)]
+mod rdflib_lowering_tests;

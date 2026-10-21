@@ -132,11 +132,9 @@ class RDFLibStore(ReferenceStore):
     def namespaces(self):
         yield from self._namespaces.items()
 
-    def _query_source(self, source, initNs, initBindings, kwargs):
+    def _query_source(self, source, initNs, kwargs):
         if not isinstance(source, str):
             raise TypeError("Native SPARQL currently requires a query string")
-        if initBindings:
-            raise NotImplementedError("Native initial query bindings are not implemented")
         if kwargs:
             raise TypeError(f"Unsupported native query options: {sorted(kwargs)}")
         return (
@@ -144,12 +142,24 @@ class RDFLibStore(ReferenceStore):
         )
 
     def query(self, query, initNs, initBindings, queryGraph, **kwargs):
-        source = self._query_source(query, initNs, initBindings, kwargs)
+        try:
+            source = self._query_source(query, initNs, kwargs)
+            bindings = (
+                json.dumps(
+                    {str(Variable(name)): _encode(term) for name, term in initBindings.items()}
+                )
+                if initBindings
+                else None
+            )
+        except BaseException:
+            if isinstance(self.backend, Transaction):
+                self.backend._native.rollback()
+            raise
         if queryGraph == "__UNION__":
-            kind, payload = self.backend._native.query(source, True)
+            kind, payload = self.backend._native.query(source, True, bindings)
         else:
             graph = "" if queryGraph is None else self._graph(queryGraph)
-            kind, payload = self.backend._native.query_graph(source, graph)
+            kind, payload = self.backend._native.query_graph(source, graph, bindings)
         result = Result(kind)
         if kind == "ASK":
             result.askAnswer = json.loads(payload)
@@ -165,7 +175,9 @@ class RDFLibStore(ReferenceStore):
         return result
 
     def update(self, update, initNs, initBindings, queryGraph, **kwargs):
-        source = self._query_source(update, initNs, initBindings, kwargs)
+        if initBindings:
+            raise NotImplementedError("Native initial update bindings are not implemented")
+        source = self._query_source(update, initNs, kwargs)
         if queryGraph not in (None, "__UNION__", self.default_identifier):
             raise NotImplementedError("Scoped named-graph SPARQL Update is not implemented")
         self.backend.update(source)

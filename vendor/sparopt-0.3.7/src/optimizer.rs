@@ -939,6 +939,12 @@ fn estimate_graph_pattern_size(pattern: &GraphPattern, input_types: &VariableTyp
             algorithm,
             ..
         } => match algorithm {
+            LeftJoinAlgorithm::RdfLib { .. } => estimate_lateral_cost(
+                left,
+                &infer_graph_pattern_types(left, input_types.clone()),
+                right,
+                input_types,
+            ),
             LeftJoinAlgorithm::HashBuildRightProbeLeft { keys } => {
                 let left_size = estimate_graph_pattern_size(left, input_types);
                 max(
@@ -994,6 +1000,10 @@ fn estimate_join_cost(
     input_types: &VariableTypes,
 ) -> usize {
     match algorithm {
+        JoinAlgorithm::RdfLibLazy => {
+            let left_types = infer_graph_pattern_types(left, input_types.clone());
+            estimate_lateral_cost(left, &left_types, right, input_types)
+        }
         JoinAlgorithm::HashBuildLeftProbeRight { keys } => {
             estimate_graph_pattern_size(left, input_types)
                 .saturating_mul(estimate_graph_pattern_size(right, input_types))

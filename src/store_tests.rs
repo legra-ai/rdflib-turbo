@@ -1,6 +1,6 @@
 //! Regression gate before moving the shared runtime onto Oxigraph Store.
 
-use oxigraph::model::{GraphName, Literal, NamedNode, Quad, Term};
+use oxigraph::model::{GraphName, Literal, NamedNode, Quad, Term, Variable};
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
 
@@ -17,6 +17,159 @@ fn literal(value: &str, datatype: &str) -> Literal {
 
 fn quad(value: Literal) -> Quad {
     Quad::new(node("s"), node("p"), value, GraphName::DefaultGraph)
+}
+
+#[test]
+fn rdflib_initial_bindings_cross_projections_and_allow_bind_replacement() {
+    let store = Store::new().unwrap();
+    store
+        .insert(
+            Quad::new(
+                node("a"),
+                node("p"),
+                Literal::from("A"),
+                GraphName::DefaultGraph,
+            )
+            .as_ref(),
+        )
+        .unwrap();
+    store
+        .insert(
+            Quad::new(
+                node("b"),
+                node("p"),
+                Literal::from("B"),
+                GraphName::DefaultGraph,
+            )
+            .as_ref(),
+        )
+        .unwrap();
+    // bounded: reference-derived projection and correlated merge contracts.
+    for (query, expected) in [
+        (
+            "SELECT ?o WHERE { ?s <urn:p> ?o }",
+            Some(Literal::from("A").into()),
+        ),
+        (
+            "SELECT ?o WHERE { { SELECT ?o WHERE { ?s <urn:p> ?o } } }",
+            Some(Literal::from("A").into()),
+        ),
+        ("SELECT (?s AS ?alias) WHERE {}", Some(node("a").into())),
+        ("SELECT ?s WHERE { VALUES ?s { <urn:b> } }", None),
+        (
+            "SELECT ?s WHERE { BIND(<urn:b> AS ?s) }",
+            Some(node("b").into()),
+        ),
+        (
+            "SELECT ?s WHERE { { SELECT ?s WHERE { BIND(<urn:b> AS ?s) } } }",
+            Some(node("b").into()),
+        ),
+        (
+            "SELECT ?s WHERE { VALUES ?s { <urn:a> } { SELECT ?s WHERE { BIND(<urn:b> AS ?s) } } }",
+            Some(node("a").into()),
+        ),
+        (
+            "SELECT ?s WHERE { BIND(<urn:a> AS ?s) { SELECT ?s WHERE { BIND(<urn:b> AS ?s) } } }",
+            Some(node("a").into()),
+        ),
+        (
+            "SELECT ?s WHERE { VALUES ?s { <urn:a> } { SELECT ?s WHERE { VALUES ?s { <urn:b> } } } }",
+            None,
+        ),
+    ] {
+        let QueryResults::Solutions(solutions) = SparqlEvaluator::new()
+            .parse_query(query)
+            .unwrap()
+            .with_initial_bindings([(Variable::new("s").unwrap(), node("a").into())])
+            .on_store(&store)
+            .execute()
+            .unwrap()
+        else {
+            panic!("Expected SELECT")
+        };
+        assert_eq!(solutions.variables().len(), 1, "{query}");
+        let values = solutions
+            .map(|row| row.unwrap().get(0).unwrap().clone())
+            .collect::<Vec<Term>>();
+        assert_eq!(values, expected.into_iter().collect::<Vec<_>>(), "{query}");
+    }
+}
+
+#[test]
+fn rdflib_initial_bindings_do_not_expand_strict_substitution_scope() {
+    let store = Store::new().unwrap();
+    let result = SparqlEvaluator::new()
+        .parse_query("SELECT ?o WHERE { ?s <urn:p> ?o }")
+        .unwrap()
+        .with_initial_bindings([(Variable::new("unused").unwrap(), node("a").into())])
+        .substitute_variable(Variable::new("s").unwrap(), node("a"))
+        .on_store(&store)
+        .execute();
+    assert!(
+        result.is_err(),
+        "strict substitutions cannot bind hidden variables"
+    );
+}
+
+#[test]
+fn rdflib_context_keeps_join_barriers_optional_scope_and_minus_domains() {
+    let store = Store::new().unwrap();
+    store
+        .insert(
+            Quad::new(
+                node("a"),
+                node("p"),
+                Literal::from("A"),
+                GraphName::DefaultGraph,
+            )
+            .as_ref(),
+        )
+        .unwrap();
+    store
+        .insert(
+            Quad::new(
+                node("b"),
+                node("p"),
+                Literal::from("B"),
+                GraphName::DefaultGraph,
+            )
+            .as_ref(),
+        )
+        .unwrap();
+    // bounded: four reference-derived algebra cases, each with at most two rows.
+    for (query, expected) in [
+        (
+            "SELECT ?s WHERE { VALUES ?s { <urn:a> } { SELECT DISTINCT ?s WHERE { BIND(<urn:b> AS ?s) } } }",
+            None,
+        ),
+        (
+            "SELECT ?s WHERE { VALUES ?s { <urn:a> } { SELECT ?s WHERE { BIND(<urn:b> AS ?s) } LIMIT 1 } }",
+            None,
+        ),
+        (
+            "SELECT ?o WHERE { VALUES ?s { <urn:a> } OPTIONAL { { SELECT ?o WHERE { ?s <urn:p> ?o } } } }",
+            Some(Literal::from("A").into()),
+        ),
+        (
+            "SELECT ?x WHERE { VALUES ?x {1} MINUS { VALUES ?y {2} } }",
+            None,
+        ),
+    ] {
+        let QueryResults::Solutions(solutions) = SparqlEvaluator::new()
+            .parse_query(query)
+            .unwrap()
+            .with_initial_bindings([(Variable::new("unused").unwrap(), node("a").into())])
+            .on_store(&store)
+            .execute()
+            .unwrap()
+        else {
+            panic!("Expected SELECT")
+        };
+        let values = solutions
+            .map(|row| row.unwrap().get(0).unwrap().clone())
+            .collect::<Vec<Term>>();
+        assert_eq!(values, expected.into_iter().collect::<Vec<_>>(), "{query}");
+    }
 }
 
 #[test]
