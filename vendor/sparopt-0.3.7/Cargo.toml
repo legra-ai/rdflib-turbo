@@ -15,7 +15,7 @@ rust-version = "1.87"
 name = "sparopt"
 version = "0.3.7"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
-build = false
+build = "build.rs"
 autolib = false
 autobins = false
 autoexamples = false
@@ -278,3 +278,6 @@ unused_import_braces = "warn"
 unused_lifetimes = "warn"
 unused_macro_rules = "warn"
 unused_qualifications = "warn"
+
+[build-dependencies.sha2]
+version = "0.11"

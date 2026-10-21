@@ -195,6 +195,7 @@ def test_dependency_export_failure_stops_wheel_installation(tmp_path, monkeypatc
 def test_isolated_project_is_bounded_to_its_native_wheel_abi(tmp_path, monkeypatch, version, upper):
     module = driver(monkeypatch)
     commands = []
+    monkeypatch.setattr(module, "verify_metadata", lambda wheel: None)
     monkeypatch.setattr(module, "verify_licenses", lambda wheel: None)
     monkeypatch.setattr(
         module.subprocess, "run", lambda command, **kwargs: commands.append(command)

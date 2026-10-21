@@ -2203,4 +2203,4 @@ checksum = "b8848ee67ecc8aedbaf3e4122217aff892639231befc6a1b58d29fff4c2cabaa"
 [[patch.unused]]
 name = "fancy-regex"
 version = "0.19.2"
-source = "git+https://github.com/legra-ai/pyshacl-turbo?rev=ce41f79d23561690fb760fda252af0e197187731#ce41f79d23561690fb760fda252af0e197187731"
+source = "git+https://github.com/legra-ai/pyshacl-turbo?rev=0061e897527afec320552ee50d42919a504d2ea7#0061e897527afec320552ee50d42919a504d2ea7"

@@ -15,7 +15,7 @@ rust-version = "1.87"
 name = "oxsdatatypes"
 version = "0.2.3"
 authors = ["Tpt <thomas@pellissier-tanon.fr>"]
-build = false
+build = "build.rs"
 autolib = false
 autobins = false
 autoexamples = false
@@ -274,3 +274,6 @@ unused_import_braces = "warn"
 unused_lifetimes = "warn"
 unused_macro_rules = "warn"
 unused_qualifications = "warn"
+
+[build-dependencies.sha2]
+version = "0.11"

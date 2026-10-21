@@ -84,6 +84,15 @@ impl SparqlEvaluator {
         Self::default()
     }
 
+    /// Preserve RDFLib query-context algebra, including EXISTS group joins.
+    /// Call before parsing; strict SPARQL parsing/evaluation remains the default.
+    #[must_use]
+    pub fn with_rdflib_query_context(mut self) -> Self {
+        self.parser = self.parser.with_rdflib_query_context();
+        self.inner = self.inner.with_initial_bindings([]);
+        self
+    }
+
     /// Provides an IRI that could be used to resolve the operation relative IRIs.
     ///
     /// ```
@@ -534,6 +543,28 @@ pub struct PreparedSparqlQuery {
 }
 
 impl PreparedSparqlQuery {
+    /// Use supplied native RDFLib algebra metadata instead of source analysis.
+    #[must_use]
+    pub fn with_rdflib_prepared_algebra(
+        mut self,
+        algebra: spareval::RdfLibPreparedAlgebra,
+    ) -> Self {
+        self.evaluator = self.evaluator.with_rdflib_prepared_algebra(algebra);
+        self
+    }
+
+    /// Bind RDFLib query parameters, including variables hidden by projection.
+    /// Does not extend public projections or change strict substitutions.
+    /// Parse with `SparqlEvaluator::with_rdflib_query_context` to retain EXISTS scopes.
+    #[must_use]
+    pub fn with_initial_bindings(
+        mut self,
+        bindings: impl IntoIterator<Item = (Variable, Term)>,
+    ) -> Self {
+        self.evaluator = self.evaluator.with_initial_bindings(bindings);
+        self
+    }
+
     /// Substitute a variable with a given RDF term in the SPARQL query.
     ///
     /// The variable must be part of the `SELECT` clause to be substituted.

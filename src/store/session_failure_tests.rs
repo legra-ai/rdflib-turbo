@@ -7,7 +7,7 @@ use super::{Command, Connection, Control, Session, lock, reserve_writer};
 use crate::store::operations::Operation;
 
 fn insert() -> Operation {
-    Operation::Update("INSERT DATA { <urn:s> <urn:p> <urn:o> }".into())
+    Operation::Update("INSERT DATA { <urn:s> <urn:p> <urn:o> }".into(), None)
 }
 
 fn owner_failure_aborts_and_releases_writer(panic_after_write: bool) {

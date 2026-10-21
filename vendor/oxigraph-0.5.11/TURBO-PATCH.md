@@ -5,6 +5,12 @@ Original published archive SHA-256:
 Original source revision: `df37a5c98e2497135cdd4cfce01a049b78ca6740`.
 MIT and Apache-2.0 license texts are retained from upstream v0.5.11.
 
+The RocksDB feature activates its optional dependency with Cargo's explicit
+`dep:` syntax. This keeps the implementation dependency private rather than
+creating another implicit semantic feature. The separately attested backend
+capabilities remain rocksdb, rocksdb-debug and rocksdb-pkg-config; activating
+pkg-config still activates the same dependency's pkg-config feature.
+
 The opt-in `exact-term-storage` feature stores explicitly typed literals with the
 existing generic typed-literal encoding. Lexical spelling, declared datatype and
 plain versus explicit xsd:string identity survive insert, query, update and
@@ -78,3 +84,7 @@ the writer lock. Indexed quad and named-graph reads share that version for a
 complete SHACL validation. The view owns storage reader metadata, not a quad
 copy; pending writer changes remain invisible. This prevents reentrant writer
 deadlocks during non-inplace validation. See ADR 0037 and shacl_read tests.
+
+Expose the evaluator's explicit owned RDFLib prepared algebra on
+PreparedSparqlQuery. Query form, dataset, base and template remain typed query
+fields; there is no query-text reconstruction path.

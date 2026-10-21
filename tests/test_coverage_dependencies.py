@@ -4,6 +4,7 @@ import importlib.util
 import os
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -196,3 +197,16 @@ def test_source_distribution_uses_uv_lock_without_legacy_dependency_snapshots():
         assert not (root / name).exists()
         assert name not in includes
     assert "scripts/**/*" in includes
+
+
+def test_coverage_companion_uses_the_runtime_engine_revision():
+    root = Path(__file__).resolve().parents[1]
+    cargo = tomllib.loads((root / "Cargo.toml").read_text())
+    project = tomllib.loads((root / "pyproject.toml").read_text())
+    lock = tomllib.loads((root / "uv.lock").read_text())
+    engine = cargo["dependencies"]["pyshacl-turbo-engine"]
+    companion = project["tool"]["uv"]["sources"]["pyshacl-turbo"]
+    assert companion == engine, "Coverage must exercise the same shared engine as the runtime"
+    assert cargo["patch"]["crates-io"]["fancy-regex"] == engine
+    package = next(item for item in lock["package"] if item["name"] == "pyshacl-turbo")
+    assert package["source"]["git"] == f"{engine['git']}?rev={engine['rev']}#{engine['rev']}"

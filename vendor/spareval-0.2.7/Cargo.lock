@@ -139,12 +139,15 @@ dependencies = [
  "oxiri",
  "oxsdatatypes",
  "rand",
+ "sha2",
  "thiserror",
 ]
 
 [[package]]
 name = "oxsdatatypes"
 version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c17c2ae62ac34fda465f6331105906c0e17b4e088dac3249e1f229b962062503"
 dependencies = [
  "thiserror",
 ]
@@ -376,6 +379,7 @@ dependencies = [
  "oxrdf",
  "peg",
  "rand",
+ "sha2",
  "thiserror",
 ]
 
@@ -385,6 +389,7 @@ version = "0.3.7"
 dependencies = [
  "oxrdf",
  "rand",
+ "sha2",
  "spargebra",
 ]
 
@@ -476,16 +481,3 @@ dependencies = [
  "quote",
  "syn 2.0.119",
 ]
-
-[[patch.unused]]
-name = "fancy-regex"
-version = "0.19.2"
-source = "git+https://github.com/legra-ai/pyshacl-turbo?rev=ce41f79d23561690fb760fda252af0e197187731#ce41f79d23561690fb760fda252af0e197187731"
-
-[[patch.unused]]
-name = "oxigraph"
-version = "0.5.11"
-
-[[patch.unused]]
-name = "oxrocksdb-sys"
-version = "0.5.11"

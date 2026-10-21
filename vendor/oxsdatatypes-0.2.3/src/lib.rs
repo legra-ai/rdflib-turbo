@@ -25,3 +25,6 @@ pub use self::duration::{
 };
 pub use self::float::Float;
 pub use self::integer::{Integer, TooLargeForIntegerError};
+
+mod source_identity;
+pub use source_identity::implementation_fingerprint;

@@ -10,3 +10,7 @@ pub mod model;
 pub mod sparql;
 mod storage;
 pub mod store;
+
+mod source_identity;
+pub use source_identity::implementation_fingerprint;
+pub use source_identity::backend_capability_fingerprint;

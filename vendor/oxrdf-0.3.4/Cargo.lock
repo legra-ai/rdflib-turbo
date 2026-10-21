@@ -130,6 +130,8 @@ dependencies = [
 [[package]]
 name = "oxsdatatypes"
 version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c17c2ae62ac34fda465f6331105906c0e17b4e088dac3249e1f229b962062503"
 dependencies = [
  "thiserror 1.0.69",
 ]
@@ -353,28 +355,3 @@ name = "zmij"
 version = "1.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8848ee67ecc8aedbaf3e4122217aff892639231befc6a1b58d29fff4c2cabaa"
-
-[[patch.unused]]
-name = "fancy-regex"
-version = "0.19.2"
-source = "git+https://github.com/legra-ai/pyshacl-turbo?rev=ce41f79d23561690fb760fda252af0e197187731#ce41f79d23561690fb760fda252af0e197187731"
-
-[[patch.unused]]
-name = "oxigraph"
-version = "0.5.11"
-
-[[patch.unused]]
-name = "oxrocksdb-sys"
-version = "0.5.11"
-
-[[patch.unused]]
-name = "spareval"
-version = "0.2.7"
-
-[[patch.unused]]
-name = "spargebra"
-version = "0.4.7"
-
-[[patch.unused]]
-name = "sparopt"
-version = "0.3.7"
