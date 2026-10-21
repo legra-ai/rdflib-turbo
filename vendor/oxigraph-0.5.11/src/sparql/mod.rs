@@ -84,6 +84,15 @@ impl SparqlEvaluator {
         Self::default()
     }
 
+    /// Preserve RDFLib query-context algebra, including EXISTS group joins.
+    /// Call before parsing; strict SPARQL parsing/evaluation remains the default.
+    #[must_use]
+    pub fn with_rdflib_query_context(mut self) -> Self {
+        self.parser = self.parser.with_rdflib_query_context();
+        self.inner = self.inner.with_initial_bindings([]);
+        self
+    }
+
     /// Provides an IRI that could be used to resolve the operation relative IRIs.
     ///
     /// ```
@@ -535,7 +544,8 @@ pub struct PreparedSparqlQuery {
 
 impl PreparedSparqlQuery {
     /// Bind RDFLib query parameters, including variables hidden by projection.
-    /// Unused parameters are ignored without changing strict substitutions.
+    /// Does not extend public projections or change strict substitutions.
+    /// Parse with `SparqlEvaluator::with_rdflib_query_context` to retain EXISTS scopes.
     #[must_use]
     pub fn with_initial_bindings(
         mut self,

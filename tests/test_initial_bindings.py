@@ -24,6 +24,13 @@ QUERIES = [
     "ASK { ?s <urn:bindings:label> ?label }",
     "CONSTRUCT { ?s <urn:bindings:copy> ?label } WHERE { ?s <urn:bindings:label> ?label }",
     "DESCRIBE ?s WHERE { ?s <urn:bindings:label> ?label }",
+    "SELECT ?s WHERE { VALUES ?s { <urn:bindings:a> } FILTER EXISTS { BIND(<urn:bindings:b> AS ?s) } }",
+    "SELECT ?s WHERE { VALUES ?s { <urn:bindings:a> } FILTER EXISTS { { BIND(<urn:bindings:b> AS ?s) } } }",
+    "SELECT ?s WHERE { VALUES ?s { <urn:bindings:a> } FILTER EXISTS { { SELECT ?s WHERE { BIND(<urn:bindings:b> AS ?s) } } } }",
+    "SELECT ?s WHERE { VALUES ?s { <urn:bindings:a> } FILTER EXISTS { { SELECT DISTINCT ?s WHERE { BIND(<urn:bindings:b> AS ?s) } } } }",
+    'SELECT ?s WHERE { BIND(<urn:bindings:b> AS ?s) FILTER EXISTS { ?s <urn:bindings:label> "A" } }',
+    "SELECT ?s WHERE { VALUES ?s { <urn:bindings:a> } MINUS { { SELECT ?x WHERE { BIND(1 AS ?x) } } } }",
+    "SELECT ?s ?ok WHERE { VALUES ?s { <urn:bindings:a> } { BIND(<urn:bindings:b> AS ?s) BIND(EXISTS { { BIND(<urn:bindings:b> AS ?s) } } AS ?ok) } }",
 ]
 
 
@@ -42,10 +49,11 @@ def result_value(result):
 
 
 @pytest.mark.parametrize("query", QUERIES)
-@pytest.mark.parametrize("key", ["s", "?s", Variable("s")])
+@pytest.mark.parametrize("key", ["s", "?s", Variable("s"), None])
 def test_initial_bindings_match_reference_without_exposing_hidden_variables(query, key):
-    expected = fixture(ReferenceGraph()).query(query, initBindings={key: EX.a})
-    actual = fixture(Graph()).query(query, initBindings={key: EX.a})
+    bindings = {} if key is None else {key: EX.a}
+    expected = fixture(ReferenceGraph()).query(query, initBindings=bindings)
+    actual = fixture(Graph()).query(query, initBindings=bindings)
     assert result_value(actual) == result_value(expected)
 
 

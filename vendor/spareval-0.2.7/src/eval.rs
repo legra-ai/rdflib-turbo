@@ -1855,7 +1855,11 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
                     Box::new(child(input_tuple).filter_map(move |tuple| {
                         match tuple {
                             Ok(tuple) => {
-                                let mut output_tuple = from.clone();
+                                let mut output_tuple = if rdflib {
+                                    InternalTuple::with_capacity(mapping.len())
+                                } else {
+                                    from.clone()
+                                };
                                 for (input_key, output_key) in &*mapping {
                                     if let Some(value) = tuple.get(*input_key) {
                                         if let Some(existing_value) = output_tuple.get(*output_key)
@@ -2372,7 +2376,12 @@ impl<'a, D: QueryableDataset<'a>> ExpressionEvaluatorContext<'a>
             .graph_pattern_evaluator(plan, self.encoded_variables);
         self.stat_children.push(stats);
         let eval = eval?;
-        Ok(move |tuple: &InternalTuple<D::InternalTerm>| eval(tuple.clone()).next().is_some())
+        let globals = self.evaluator.encode_bindings(self.encoded_variables, [])?;
+        Ok(move |tuple: &InternalTuple<D::InternalTerm>| {
+            let mut context = tuple.clone();
+            context.overwrite_from(&globals);
+            eval(context).next().is_some()
+        })
     }
 
     fn internalize_named_node(
@@ -2424,7 +2433,10 @@ impl<'a, D: QueryableDataset<'a>> ExpressionEvaluatorContext<'a>
         &self.evaluator.custom_functions
     }
 
-    fn custom_function(&mut self, name: &NamedNode) -> Option<crate::dataset::ScopedCustomFunction<'a>> {
+    fn custom_function(
+        &mut self,
+        name: &NamedNode,
+    ) -> Option<crate::dataset::ScopedCustomFunction<'a>> {
         if let Some(function) = self.evaluator.custom_functions.get(name).cloned() {
             return Some(Rc::new(move |args: &[Term]| function(args)));
         }

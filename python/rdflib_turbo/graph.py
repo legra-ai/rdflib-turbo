@@ -144,12 +144,8 @@ class RDFLibStore(ReferenceStore):
     def query(self, query, initNs, initBindings, queryGraph, **kwargs):
         try:
             source = self._query_source(query, initNs, kwargs)
-            bindings = (
-                json.dumps(
-                    {str(Variable(name)): _encode(term) for name, term in initBindings.items()}
-                )
-                if initBindings
-                else None
+            bindings = json.dumps(
+                {str(Variable(name)): _encode(term) for name, term in initBindings.items()}
             )
         except BaseException:
             if isinstance(self.backend, Transaction):

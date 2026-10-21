@@ -1,6 +1,37 @@
 //! Original-node eligibility mirrors RDFLib's post-order algebra analysis.
 use spargebra::algebra::{AggregateExpression, Expression, GraphPattern, OrderExpression};
 
+/// Independent switches avoid applying query-level lazy analysis to EXISTS.
+#[derive(Clone, Copy)]
+pub(crate) struct Lowering {
+    pub rdflib: bool,
+    pub analyse_joins: bool,
+    pub optimize_bgp: bool,
+}
+
+impl Lowering {
+    pub const SPARQL: Self = Self {
+        rdflib: false,
+        analyse_joins: false,
+        optimize_bgp: false,
+    };
+
+    pub const fn rdf_lib(optimize_bgp: bool) -> Self {
+        Self {
+            rdflib: true,
+            analyse_joins: true,
+            optimize_bgp,
+        }
+    }
+
+    pub const fn exists(self) -> Self {
+        Self {
+            analyse_joins: false,
+            ..self
+        }
+    }
+}
+
 /// A Join always blocks its parent, even when that Join is itself lazy.
 /// BGP leaves do not block: their later artificial joins must remain distinct.
 pub(crate) fn lazy_eligible(pattern: &GraphPattern) -> bool {
@@ -53,7 +84,10 @@ pub(crate) fn lazy_eligible(pattern: &GraphPattern) -> bool {
 
 fn expression_eligible(expression: &Expression) -> bool {
     match expression {
-        Expression::Exists(inner) => lazy_eligible(inner),
+        // RDFLib analyse traverses the raw EXISTS syntax stored in Expr's
+        // mapping, not its translated `.graph` attribute. Raw graph syntax has
+        // no Join/Distinct/Slice algebra nodes and cannot block the parent.
+        Expression::Exists(_) => true,
         Expression::NamedNode(_)
         | Expression::Literal(_)
         | Expression::Variable(_)

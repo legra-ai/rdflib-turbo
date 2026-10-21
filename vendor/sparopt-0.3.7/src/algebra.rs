@@ -1,5 +1,6 @@
 //! [SPARQL 1.1 Query Algebra](https://www.w3.org/TR/sparql11-query/#sparqlQuery) representation.
 
+use crate::rdflib::Lowering;
 use oxrdf::vocab::xsd;
 use rand::random;
 use spargebra::algebra::{
@@ -253,7 +254,7 @@ impl Expression {
     }
 
     fn from_sparql_algebra(
-        rdflib: bool,
+        mode: Lowering,
         expression: &AlExpression,
         graph_name: Option<&NamedNodePattern>,
     ) -> Self {
@@ -262,44 +263,44 @@ impl Expression {
             AlExpression::Literal(literal) => Self::Literal(literal.clone()),
             AlExpression::Variable(variable) => Self::Variable(variable.clone()),
             AlExpression::Or(left, right) => Self::Or(vec![
-                Self::from_sparql_algebra(rdflib, left, graph_name),
-                Self::from_sparql_algebra(rdflib, right, graph_name),
+                Self::from_sparql_algebra(mode, left, graph_name),
+                Self::from_sparql_algebra(mode, right, graph_name),
             ]),
             AlExpression::And(left, right) => Self::And(vec![
-                Self::from_sparql_algebra(rdflib, left, graph_name),
-                Self::from_sparql_algebra(rdflib, right, graph_name),
+                Self::from_sparql_algebra(mode, left, graph_name),
+                Self::from_sparql_algebra(mode, right, graph_name),
             ]),
             AlExpression::Equal(left, right) => Self::Equal(
-                Box::new(Self::from_sparql_algebra(rdflib, left, graph_name)),
-                Box::new(Self::from_sparql_algebra(rdflib, right, graph_name)),
+                Box::new(Self::from_sparql_algebra(mode, left, graph_name)),
+                Box::new(Self::from_sparql_algebra(mode, right, graph_name)),
             ),
             AlExpression::SameTerm(left, right) => Self::SameTerm(
-                Box::new(Self::from_sparql_algebra(rdflib, left, graph_name)),
-                Box::new(Self::from_sparql_algebra(rdflib, right, graph_name)),
+                Box::new(Self::from_sparql_algebra(mode, left, graph_name)),
+                Box::new(Self::from_sparql_algebra(mode, right, graph_name)),
             ),
             AlExpression::Greater(left, right) => Self::Greater(
-                Box::new(Self::from_sparql_algebra(rdflib, left, graph_name)),
-                Box::new(Self::from_sparql_algebra(rdflib, right, graph_name)),
+                Box::new(Self::from_sparql_algebra(mode, left, graph_name)),
+                Box::new(Self::from_sparql_algebra(mode, right, graph_name)),
             ),
             AlExpression::GreaterOrEqual(left, right) => Self::GreaterOrEqual(
-                Box::new(Self::from_sparql_algebra(rdflib, left, graph_name)),
-                Box::new(Self::from_sparql_algebra(rdflib, right, graph_name)),
+                Box::new(Self::from_sparql_algebra(mode, left, graph_name)),
+                Box::new(Self::from_sparql_algebra(mode, right, graph_name)),
             ),
             AlExpression::Less(left, right) => Self::Less(
-                Box::new(Self::from_sparql_algebra(rdflib, left, graph_name)),
-                Box::new(Self::from_sparql_algebra(rdflib, right, graph_name)),
+                Box::new(Self::from_sparql_algebra(mode, left, graph_name)),
+                Box::new(Self::from_sparql_algebra(mode, right, graph_name)),
             ),
             AlExpression::LessOrEqual(left, right) => Self::LessOrEqual(
-                Box::new(Self::from_sparql_algebra(rdflib, left, graph_name)),
-                Box::new(Self::from_sparql_algebra(rdflib, right, graph_name)),
+                Box::new(Self::from_sparql_algebra(mode, left, graph_name)),
+                Box::new(Self::from_sparql_algebra(mode, right, graph_name)),
             ),
             AlExpression::In(left, right) => {
-                let left = Self::from_sparql_algebra(rdflib, left, graph_name);
+                let left = Self::from_sparql_algebra(mode, left, graph_name);
                 match right.len() {
                     0 => Self::if_cond(left, false.into(), false.into()),
                     1 => Self::Equal(
                         Box::new(left),
-                        Box::new(Self::from_sparql_algebra(rdflib, &right[0], graph_name)),
+                        Box::new(Self::from_sparql_algebra(mode, &right[0], graph_name)),
                     ),
                     _ => Self::Or(
                         right
@@ -307,7 +308,7 @@ impl Expression {
                             .map(|e| {
                                 Self::Equal(
                                     Box::new(left.clone()),
-                                    Box::new(Self::from_sparql_algebra(rdflib, e, graph_name)),
+                                    Box::new(Self::from_sparql_algebra(mode, e, graph_name)),
                                 )
                             })
                             .collect(),
@@ -315,49 +316,54 @@ impl Expression {
                 }
             }
             AlExpression::Add(left, right) => Self::Add(
-                Box::new(Self::from_sparql_algebra(rdflib, left, graph_name)),
-                Box::new(Self::from_sparql_algebra(rdflib, right, graph_name)),
+                Box::new(Self::from_sparql_algebra(mode, left, graph_name)),
+                Box::new(Self::from_sparql_algebra(mode, right, graph_name)),
             ),
             AlExpression::Subtract(left, right) => Self::Subtract(
-                Box::new(Self::from_sparql_algebra(rdflib, left, graph_name)),
-                Box::new(Self::from_sparql_algebra(rdflib, right, graph_name)),
+                Box::new(Self::from_sparql_algebra(mode, left, graph_name)),
+                Box::new(Self::from_sparql_algebra(mode, right, graph_name)),
             ),
             AlExpression::Multiply(left, right) => Self::Multiply(
-                Box::new(Self::from_sparql_algebra(rdflib, left, graph_name)),
-                Box::new(Self::from_sparql_algebra(rdflib, right, graph_name)),
+                Box::new(Self::from_sparql_algebra(mode, left, graph_name)),
+                Box::new(Self::from_sparql_algebra(mode, right, graph_name)),
             ),
             AlExpression::Divide(left, right) => Self::Divide(
-                Box::new(Self::from_sparql_algebra(rdflib, left, graph_name)),
-                Box::new(Self::from_sparql_algebra(rdflib, right, graph_name)),
+                Box::new(Self::from_sparql_algebra(mode, left, graph_name)),
+                Box::new(Self::from_sparql_algebra(mode, right, graph_name)),
             ),
-            AlExpression::UnaryPlus(inner) => Self::UnaryPlus(Box::new(Self::from_sparql_algebra(
-                rdflib, inner, graph_name,
-            ))),
-            AlExpression::UnaryMinus(inner) => Self::UnaryMinus(Box::new(
-                Self::from_sparql_algebra(rdflib, inner, graph_name),
-            )),
-            AlExpression::Not(inner) => Self::Not(Box::new(Self::from_sparql_algebra(
-                rdflib, inner, graph_name,
-            ))),
-            AlExpression::Exists(inner) => Self::Exists(Box::new(
-                GraphPattern::from_sparql_algebra(rdflib, inner, graph_name, &mut HashMap::new()),
-            )),
+            AlExpression::UnaryPlus(inner) => {
+                Self::UnaryPlus(Box::new(Self::from_sparql_algebra(mode, inner, graph_name)))
+            }
+            AlExpression::UnaryMinus(inner) => {
+                Self::UnaryMinus(Box::new(Self::from_sparql_algebra(mode, inner, graph_name)))
+            }
+            AlExpression::Not(inner) => {
+                Self::Not(Box::new(Self::from_sparql_algebra(mode, inner, graph_name)))
+            }
+            AlExpression::Exists(inner) => {
+                Self::Exists(Box::new(GraphPattern::from_sparql_algebra(
+                    mode.exists(),
+                    inner,
+                    graph_name,
+                    &mut HashMap::new(),
+                )))
+            }
             AlExpression::Bound(variable) => Self::Bound(variable.clone()),
             AlExpression::If(cond, yes, no) => Self::If(
-                Box::new(Self::from_sparql_algebra(rdflib, cond, graph_name)),
-                Box::new(Self::from_sparql_algebra(rdflib, yes, graph_name)),
-                Box::new(Self::from_sparql_algebra(rdflib, no, graph_name)),
+                Box::new(Self::from_sparql_algebra(mode, cond, graph_name)),
+                Box::new(Self::from_sparql_algebra(mode, yes, graph_name)),
+                Box::new(Self::from_sparql_algebra(mode, no, graph_name)),
             ),
             AlExpression::Coalesce(inner) => Self::Coalesce(
                 inner
                     .iter()
-                    .map(|e| Self::from_sparql_algebra(rdflib, e, graph_name))
+                    .map(|e| Self::from_sparql_algebra(mode, e, graph_name))
                     .collect(),
             ),
             AlExpression::FunctionCall(name, args) => Self::FunctionCall(
                 name.clone(),
                 args.iter()
-                    .map(|e| Self::from_sparql_algebra(rdflib, e, graph_name))
+                    .map(|e| Self::from_sparql_algebra(mode, e, graph_name))
                     .collect(),
             ),
         }
@@ -722,9 +728,15 @@ pub enum GraphPattern {
 impl GraphPattern {
     /// Lower original algebra in RDFLib evaluation order, preserving lazy-join
     /// eligibility before BGP lowering introduces additional Join nodes.
+    /// Only BGP leaves are optimized; ordered group boundaries remain intact.
     /// The caller must not apply SPARQL join-reordering optimization afterward.
     pub fn from_rdflib_algebra(pattern: &AlGraphPattern) -> Self {
-        Self::from_sparql_algebra(true, pattern, None, &mut HashMap::new())
+        Self::from_sparql_algebra(Lowering::rdf_lib(true), pattern, None, &mut HashMap::new())
+    }
+
+    /// Lower in RDFLib order without optimizing even individual BGP leaves.
+    pub fn from_rdflib_algebra_unoptimized(pattern: &AlGraphPattern) -> Self {
+        Self::from_sparql_algebra(Lowering::rdf_lib(false), pattern, None, &mut HashMap::new())
     }
 
     pub fn empty() -> Self {
@@ -1117,38 +1129,45 @@ impl GraphPattern {
     }
 
     fn from_sparql_algebra(
-        rdflib: bool,
+        mode: Lowering,
         pattern: &AlGraphPattern,
         graph_name: Option<&NamedNodePattern>,
         blank_nodes: &mut HashMap<BlankNode, Variable>,
     ) -> Self {
         match pattern {
-            AlGraphPattern::Bgp { patterns } => patterns
-                .iter()
-                .map(|p| {
-                    let (subject, predicate, object) =
-                        Self::triple_pattern_from_algebra(p, blank_nodes);
-                    Self::QuadPattern {
-                        subject,
-                        predicate,
-                        object,
-                        graph_name: graph_name.cloned(),
-                    }
-                })
-                .reduce(|a, b| Self::Join {
-                    left: Box::new(a),
-                    right: Box::new(b),
-                    algorithm: JoinAlgorithm::default(),
-                })
-                .unwrap_or_else(|| {
-                    if let Some(graph_name) = graph_name {
-                        Self::Graph {
-                            graph_name: graph_name.clone(),
+            AlGraphPattern::Bgp { patterns } => {
+                let pattern = patterns
+                    .iter()
+                    .map(|p| {
+                        let (subject, predicate, object) =
+                            Self::triple_pattern_from_algebra(p, blank_nodes);
+                        Self::QuadPattern {
+                            subject,
+                            predicate,
+                            object,
+                            graph_name: graph_name.cloned(),
                         }
-                    } else {
-                        Self::empty_singleton()
-                    }
-                }),
+                    })
+                    .reduce(|a, b| Self::Join {
+                        left: Box::new(a),
+                        right: Box::new(b),
+                        algorithm: JoinAlgorithm::default(),
+                    })
+                    .unwrap_or_else(|| {
+                        if let Some(graph_name) = graph_name {
+                            Self::Graph {
+                                graph_name: graph_name.clone(),
+                            }
+                        } else {
+                            Self::empty_singleton()
+                        }
+                    });
+                if mode.optimize_bgp {
+                    crate::Optimizer::optimize_graph_pattern(pattern)
+                } else {
+                    pattern
+                }
+            }
             AlGraphPattern::Path {
                 subject,
                 path,
@@ -1161,18 +1180,18 @@ impl GraphPattern {
             },
             AlGraphPattern::Join { left, right } => Self::Join {
                 left: Box::new(Self::from_sparql_algebra(
-                    rdflib,
+                    mode,
                     left,
                     graph_name,
                     blank_nodes,
                 )),
                 right: Box::new(Self::from_sparql_algebra(
-                    rdflib,
+                    mode,
                     right,
                     graph_name,
                     blank_nodes,
                 )),
-                algorithm: if rdflib
+                algorithm: if mode.analyse_joins
                     && crate::rdflib::lazy_eligible(left)
                     && crate::rdflib::lazy_eligible(right)
                 {
@@ -1187,22 +1206,22 @@ impl GraphPattern {
                 expression,
             } => Self::LeftJoin {
                 left: Box::new(Self::from_sparql_algebra(
-                    rdflib,
+                    mode,
                     left,
                     graph_name,
                     blank_nodes,
                 )),
                 right: Box::new(Self::from_sparql_algebra(
-                    rdflib,
+                    mode,
                     right,
                     graph_name,
                     blank_nodes,
                 )),
                 expression: expression.as_ref().map_or_else(
                     || true.into(),
-                    |e| Expression::from_sparql_algebra(rdflib, e, graph_name),
+                    |e| Expression::from_sparql_algebra(mode, e, graph_name),
                 ),
-                algorithm: if rdflib {
+                algorithm: if mode.rdflib {
                     LeftJoinAlgorithm::RdfLib {
                         variables: crate::rdflib::variables(left),
                     }
@@ -1213,13 +1232,13 @@ impl GraphPattern {
             #[cfg(feature = "sep-0006")]
             AlGraphPattern::Lateral { left, right } => Self::Lateral {
                 left: Box::new(Self::from_sparql_algebra(
-                    rdflib,
+                    mode,
                     left,
                     graph_name,
                     blank_nodes,
                 )),
                 right: Box::new(Self::from_sparql_algebra(
-                    rdflib,
+                    mode,
                     right,
                     graph_name,
                     blank_nodes,
@@ -1227,21 +1246,21 @@ impl GraphPattern {
             },
             AlGraphPattern::Filter { inner, expr } => Self::Filter {
                 inner: Box::new(Self::from_sparql_algebra(
-                    rdflib,
+                    mode,
                     inner,
                     graph_name,
                     blank_nodes,
                 )),
-                expression: Expression::from_sparql_algebra(rdflib, expr, graph_name),
+                expression: Expression::from_sparql_algebra(mode, expr, graph_name),
             },
             AlGraphPattern::Union { left, right } => Self::Union {
                 inner: vec![
-                    Self::from_sparql_algebra(rdflib, left, graph_name, blank_nodes),
-                    Self::from_sparql_algebra(rdflib, right, graph_name, blank_nodes),
+                    Self::from_sparql_algebra(mode, left, graph_name, blank_nodes),
+                    Self::from_sparql_algebra(mode, right, graph_name, blank_nodes),
                 ],
             },
             AlGraphPattern::Graph { inner, name } => {
-                Self::from_sparql_algebra(rdflib, inner, Some(name), blank_nodes)
+                Self::from_sparql_algebra(mode, inner, Some(name), blank_nodes)
             }
             AlGraphPattern::Extend {
                 inner,
@@ -1249,23 +1268,23 @@ impl GraphPattern {
                 variable,
             } => Self::Extend {
                 inner: Box::new(Self::from_sparql_algebra(
-                    rdflib,
+                    mode,
                     inner,
                     graph_name,
                     blank_nodes,
                 )),
-                expression: Expression::from_sparql_algebra(rdflib, expression, graph_name),
+                expression: Expression::from_sparql_algebra(mode, expression, graph_name),
                 variable: variable.clone(),
             },
             AlGraphPattern::Minus { left, right } => Self::Minus {
                 left: Box::new(Self::from_sparql_algebra(
-                    rdflib,
+                    mode,
                     left,
                     graph_name,
                     blank_nodes,
                 )),
                 right: Box::new(Self::from_sparql_algebra(
-                    rdflib,
+                    mode,
                     right,
                     graph_name,
                     blank_nodes,
@@ -1280,21 +1299,21 @@ impl GraphPattern {
                 bindings: bindings.clone(),
             },
             AlGraphPattern::OrderBy { inner, expression } => {
-                let mut inner = Self::from_sparql_algebra(rdflib, inner, graph_name, blank_nodes);
+                let mut inner = Self::from_sparql_algebra(mode, inner, graph_name, blank_nodes);
                 let mut expressions = Vec::with_capacity(expression.len());
                 for e in expression {
                     expressions.push(match e {
                         AlOrderExpression::Asc(e) => {
                             let v;
                             (v, inner) = Self::algebra_expression_to_constant_or_variable(
-                                rdflib, e, inner, graph_name,
+                                mode, e, inner, graph_name,
                             );
                             OrderExpression::Asc(Expression::Variable(v))
                         }
                         AlOrderExpression::Desc(e) => {
                             let v;
                             (v, inner) = Self::algebra_expression_to_constant_or_variable(
-                                rdflib, e, inner, graph_name,
+                                mode, e, inner, graph_name,
                             );
                             OrderExpression::Desc(Expression::Variable(v))
                         }
@@ -1319,7 +1338,7 @@ impl GraphPattern {
                 };
                 Self::Project {
                     inner: Box::new(Self::from_sparql_algebra(
-                        rdflib,
+                        mode,
                         inner,
                         graph_name.as_ref(),
                         &mut HashMap::new(),
@@ -1329,7 +1348,7 @@ impl GraphPattern {
             }
             AlGraphPattern::Distinct { inner } => Self::Distinct {
                 inner: Box::new(Self::from_sparql_algebra(
-                    rdflib,
+                    mode,
                     inner,
                     graph_name,
                     blank_nodes,
@@ -1337,7 +1356,7 @@ impl GraphPattern {
             },
             AlGraphPattern::Reduced { inner } => Self::Distinct {
                 inner: Box::new(Self::from_sparql_algebra(
-                    rdflib,
+                    mode,
                     inner,
                     graph_name,
                     blank_nodes,
@@ -1349,7 +1368,7 @@ impl GraphPattern {
                 length,
             } => Self::Slice {
                 inner: Box::new(Self::from_sparql_algebra(
-                    rdflib,
+                    mode,
                     inner,
                     graph_name,
                     blank_nodes,
@@ -1363,7 +1382,7 @@ impl GraphPattern {
                 aggregates,
             } => Self::Group {
                 inner: Box::new(Self::from_sparql_algebra(
-                    rdflib,
+                    mode,
                     inner,
                     graph_name,
                     blank_nodes,
@@ -1374,7 +1393,7 @@ impl GraphPattern {
                     .map(|(var, expr)| {
                         (
                             var.clone(),
-                            AggregateExpression::from_sparql_algebra(rdflib, expr, graph_name),
+                            AggregateExpression::from_sparql_algebra(mode, expr, graph_name),
                         )
                     })
                     .collect(),
@@ -1385,7 +1404,7 @@ impl GraphPattern {
                 silent,
             } => Self::Service {
                 inner: Box::new(Self::from_sparql_algebra(
-                    rdflib,
+                    mode,
                     inner,
                     graph_name,
                     blank_nodes,
@@ -1436,7 +1455,7 @@ impl GraphPattern {
 
     /// Makes sure the expression is a variable, use Extend in the other cases
     fn algebra_expression_to_constant_or_variable(
-        rdflib: bool,
+        mode: Lowering,
         expression: &AlExpression,
         graph_pattern: GraphPattern,
         graph_name: Option<&NamedNodePattern>,
@@ -1450,7 +1469,7 @@ impl GraphPattern {
                 GraphPattern::Extend {
                     inner: Box::new(graph_pattern),
                     variable,
-                    expression: Expression::from_sparql_algebra(rdflib, expression, graph_name),
+                    expression: Expression::from_sparql_algebra(mode, expression, graph_name),
                 },
             )
         }
@@ -1459,7 +1478,7 @@ impl GraphPattern {
 
 impl From<&AlGraphPattern> for GraphPattern {
     fn from(pattern: &AlGraphPattern) -> Self {
-        Self::from_sparql_algebra(false, pattern, None, &mut HashMap::new())
+        Self::from_sparql_algebra(Lowering::SPARQL, pattern, None, &mut HashMap::new())
     }
 }
 
@@ -1711,7 +1730,7 @@ pub enum AggregateExpression {
 
 impl AggregateExpression {
     fn from_sparql_algebra(
-        rdflib: bool,
+        mode: Lowering,
         expression: &AlAggregateExpression,
         graph_name: Option<&NamedNodePattern>,
     ) -> Self {
@@ -1725,7 +1744,7 @@ impl AggregateExpression {
                 distinct,
             } => Self::FunctionCall {
                 name: name.clone(),
-                expr: Expression::from_sparql_algebra(rdflib, expr, graph_name),
+                expr: Expression::from_sparql_algebra(mode, expr, graph_name),
                 distinct: *distinct,
             },
         }

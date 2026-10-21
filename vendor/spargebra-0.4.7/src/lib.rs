@@ -13,3 +13,6 @@ mod update;
 pub use parser::{SparqlParser, SparqlSyntaxError};
 pub use query::*;
 pub use update::*;
+
+#[cfg(test)]
+mod rdflib_context_tests;

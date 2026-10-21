@@ -112,6 +112,55 @@ fn rdflib_initial_bindings_do_not_expand_strict_substitution_scope() {
 }
 
 #[test]
+fn empty_rdflib_initial_context_still_uses_correlated_join_semantics() {
+    let store = Store::new().unwrap();
+    let QueryResults::Solutions(mut solutions) = SparqlEvaluator::new()
+        .parse_query(
+            "SELECT ?s WHERE { VALUES ?s { <urn:a> } { SELECT ?s WHERE { BIND(<urn:b> AS ?s) } } }",
+        )
+        .unwrap()
+        .with_initial_bindings([])
+        .on_store(&store)
+        .execute()
+        .unwrap()
+    else {
+        panic!("Expected SELECT")
+    };
+    assert_eq!(
+        solutions.next().unwrap().unwrap().get(0),
+        Some(&node("a").into())
+    );
+    assert!(solutions.next().is_none());
+}
+
+#[test]
+fn rdflib_exists_preserves_independent_group_wrappers() {
+    let store = Store::new().unwrap();
+    // bounded: three original-RDFLib EXISTS shapes and two parameter contexts.
+    for binding in ["unused", "s"] {
+        for (body, expected) in [
+            ("BIND(<urn:b> AS ?s)", true),
+            ("{ BIND(<urn:b> AS ?s) }", false),
+            ("{ SELECT ?s WHERE { BIND(<urn:b> AS ?s) } }", false),
+        ] {
+            let query = format!("ASK {{ VALUES ?s {{ <urn:a> }} FILTER EXISTS {{ {body} }} }}");
+            let QueryResults::Boolean(actual) = SparqlEvaluator::new()
+                .with_rdflib_query_context()
+                .parse_query(&query)
+                .unwrap()
+                .with_initial_bindings([(Variable::new(binding).unwrap(), node("a").into())])
+                .on_store(&store)
+                .execute()
+                .unwrap()
+            else {
+                panic!("Expected ASK")
+            };
+            assert_eq!(actual, expected, "{binding}: {body}");
+        }
+    }
+}
+
+#[test]
 fn rdflib_context_keeps_join_barriers_optional_scope_and_minus_domains() {
     let store = Store::new().unwrap();
     store
@@ -136,7 +185,7 @@ fn rdflib_context_keeps_join_barriers_optional_scope_and_minus_domains() {
             .as_ref(),
         )
         .unwrap();
-    // bounded: four reference-derived algebra cases, each with at most two rows.
+    // bounded: reference-derived algebra cases, each with at most two rows.
     for (query, expected) in [
         (
             "SELECT ?s WHERE { VALUES ?s { <urn:a> } { SELECT DISTINCT ?s WHERE { BIND(<urn:b> AS ?s) } } }",
@@ -153,6 +202,10 @@ fn rdflib_context_keeps_join_barriers_optional_scope_and_minus_domains() {
         (
             "SELECT ?x WHERE { VALUES ?x {1} MINUS { VALUES ?y {2} } }",
             None,
+        ),
+        (
+            "SELECT ?s WHERE { VALUES ?s { <urn:a> } MINUS { { SELECT ?x WHERE { BIND(1 AS ?x) } } } }",
+            Some(node("a").into()),
         ),
     ] {
         let QueryResults::Solutions(solutions) = SparqlEvaluator::new()

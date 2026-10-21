@@ -36,6 +36,7 @@ pub struct SparqlParser {
     prefixes: HashMap<String, String>,
     custom_aggregate_functions: HashSet<NamedNode>,
     external_variables: HashSet<Variable>,
+    rdflib_query_context: bool,
 }
 
 impl SparqlParser {
@@ -112,6 +113,13 @@ impl SparqlParser {
         self
     }
 
+    /// Preserve RDFLib's unsimplified group joins inside EXISTS/NOT EXISTS.
+    /// Ordinary query groups and the default parser retain standard SPARQL algebra.
+    pub fn with_rdflib_query_context(mut self) -> Self {
+        self.rdflib_query_context = true;
+        self
+    }
+
     /// Parse the given query string using the already set options.
     ///
     /// ```
@@ -133,6 +141,7 @@ impl SparqlParser {
             self.custom_aggregate_functions,
         );
         state.external_variables = self.external_variables;
+        state.rdflib_query_context = self.rdflib_query_context;
         #[cfg(feature = "standard-unicode-escaping")]
         let query = unescape_unicode_codepoints(query);
         Ok(parser::QueryUnit(&query, &mut state).map_err(SparqlSyntaxErrorKind::Syntax)?)
@@ -943,6 +952,8 @@ enum Either<L, R> {
 }
 
 pub struct ParserState {
+    rdflib_query_context: bool,
+    exists_depth: usize,
     base_iri: Option<Iri<String>>,
     prefixes: HashMap<String, String>,
     custom_aggregate_functions: HashSet<NamedNode>,
@@ -959,6 +970,8 @@ impl ParserState {
         custom_aggregate_functions: HashSet<NamedNode>,
     ) -> Self {
         Self {
+            rdflib_query_context: false,
+            exists_depth: 0,
             base_iri,
             prefixes,
             custom_aggregate_functions,
@@ -1521,7 +1534,13 @@ parser! {
                     } else {
                         expr
                     }),
-                    PartialGraphPattern::Other(e) => g = new_join(g, e),
+                    PartialGraphPattern::Other(e) => {
+                        g = if state.rdflib_query_context && state.exists_depth > 0 {
+                            GraphPattern::Join { left: Box::new(g), right: Box::new(e) }
+                        } else {
+                            new_join(g, e)
+                        };
+                    }
                 }
             }
 
@@ -2342,9 +2361,14 @@ parser! {
             i("REPLACE") _ "(" _ a:Expression() _ "," _ b:Expression() _ "," _ c:Expression() _ "," _ d:Expression() _ ")" { Expression::FunctionCall(Function::Replace, vec![a, b, c, d]) } /
             i("REPLACE") _ "(" _ a:Expression() _ "," _ b:Expression() _ "," _ c:Expression() _ ")" { Expression::FunctionCall(Function::Replace, vec![a, b, c]) }
 
-        rule ExistsFunc() -> Expression = i("EXISTS") _ p:GroupGraphPattern() { Expression::Exists(Box::new(p)) }
+        // Enter only after the opening-group lookahead. A prefixed function
+        // such as EXISTS:custom() must not change scope on PEG backtracking.
+        rule Exists_enter() = &"{" { state.exists_depth += 1; }
+        rule Exists_leave() = { state.exists_depth -= 1; }
 
-        rule NotExistsFunc() -> Expression = i("NOT") _ i("EXISTS") _ p:GroupGraphPattern() { Expression::Not(Box::new(Expression::Exists(Box::new(p)))) }
+        rule ExistsFunc() -> Expression = i("EXISTS") _ Exists_enter() p:GroupGraphPattern() Exists_leave() { Expression::Exists(Box::new(p)) }
+
+        rule NotExistsFunc() -> Expression = i("NOT") _ i("EXISTS") _ Exists_enter() p:GroupGraphPattern() Exists_leave() { Expression::Not(Box::new(Expression::Exists(Box::new(p)))) }
 
         rule Aggregate() -> AggregateExpression =
             i("COUNT") _ "(" _ i("DISTINCT") _ "*" _ ")" { AggregateExpression::CountSolutions { distinct: true } } /

@@ -173,7 +173,7 @@ impl Operation {
                 .map(Reply::Text)
             }
             Self::QueryGraph(source, graph, bindings) => {
-                let (mut query, kind) = prepare_query(&source, false)?;
+                let (mut query, kind) = prepare_query(&source, false, bindings.is_some())?;
                 if query.dataset().is_default_dataset() {
                     query
                         .dataset_mut()
@@ -237,7 +237,7 @@ impl Operation {
                 Ok(Reply::Done)
             }
             Self::Query(source, union, bindings) => {
-                let (query, kind) = prepare_query(&source, union)?;
+                let (query, kind) = prepare_query(&source, union, bindings.is_some())?;
                 let query = super::bindings::apply(query, bindings.as_deref())?;
                 let results = query.on_transaction(transaction).execute()?;
                 let (kind, output) = query_output(results, kind)?;

@@ -86,7 +86,8 @@ impl QueryEvaluator {
     }
 
     /// Set RDFLib-compatible initial bindings, including hidden query variables.
-    /// Unused parameters are ignored; projected bindings may be replaced by BIND.
+    /// Enables context semantics even for an empty mapping. Unused parameters
+    /// do not extend projections; projected bindings may be replaced by BIND.
     /// This does not change the existing strict substitution API.
     #[must_use]
     pub fn with_initial_bindings(
@@ -94,7 +95,7 @@ impl QueryEvaluator {
         bindings: impl IntoIterator<Item = (Variable, Term)>,
     ) -> Self {
         let bindings: HashMap<_, _> = bindings.into_iter().collect();
-        self.initial_bindings = (!bindings.is_empty()).then(|| Arc::new(bindings));
+        self.initial_bindings = Some(Arc::new(bindings));
         self
     }
 
@@ -107,20 +108,16 @@ impl QueryEvaluator {
         // replacement order-sensitive. SPARQL join reordering assumes the
         // uncorrelated, conflict-rejecting algebra and is not valid in this mode.
         if self.initial_bindings.is_some() {
-            return Arc::new(GraphPattern::from_rdflib_algebra(pattern));
+            return Arc::new(if self.without_optimizations {
+                GraphPattern::from_rdflib_algebra_unoptimized(pattern)
+            } else {
+                GraphPattern::from_rdflib_algebra(pattern)
+            });
         }
         if self.without_optimizations {
             return Arc::new(GraphPattern::from(pattern));
         }
-        let bound_variables = substitutions
-            .keys()
-            .chain(
-                self.initial_bindings
-                    .iter()
-                    .flat_map(|values| values.keys()),
-            )
-            .cloned()
-            .collect::<Vec<_>>();
+        let bound_variables = substitutions.keys().cloned().collect::<Vec<_>>();
         #[cfg(feature = "cached-query-plans")]
         {
             plan_cache::prepare(pattern, bound_variables)

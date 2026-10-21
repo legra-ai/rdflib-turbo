@@ -247,7 +247,7 @@ impl NativeStore {
     ) -> PyResult<(String, String)> {
         py.detach(|| {
             let store = self.snapshot()?;
-            let (query, kind) = output::prepare_query(source, default_union)?;
+            let (query, kind) = output::prepare_query(source, default_union, bindings.is_some())?;
             let query = bindings::apply(query, bindings)?;
             output::query_output(query.on_store(&store).execute()?, kind)
         })
@@ -357,7 +357,7 @@ impl NativeStore {
     ) -> PyResult<(String, String)> {
         py.detach(|| {
             let store = self.snapshot()?;
-            let (mut query, kind) = output::prepare_query(source, false)?;
+            let (mut query, kind) = output::prepare_query(source, false, bindings.is_some())?;
             if query.dataset().is_default_dataset() {
                 query
                     .dataset_mut()
