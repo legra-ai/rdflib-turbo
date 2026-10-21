@@ -1,7 +1,7 @@
 """Consumer acceptance owns the boundary between private rule output and writes."""
 
 import pytest
-from rdflib_turbo import Store
+from rdflib_turbo import Graph, Store
 from rdflib_turbo._native import SharedShapes
 
 SHAPES = """@prefix sh:<http://www.w3.org/ns/shacl#>.
@@ -33,6 +33,20 @@ def test_report_callback_mutation_dooms_transaction_even_when_noop(update):
             with pytest.raises(RuntimeError, match=r"changed.*validation"):
                 with tx._validate_shared_shapes(program, "{}", True):
                     tx.update(update)
+        assert len(store) == 0
+
+
+def test_scoped_empty_inference_attempt_invalidates_report_acceptance():
+    program = SharedShapes(SHAPES, True, [])
+    with Store() as store:
+        with pytest.raises(RuntimeError, match="closed"), store.transaction() as tx:
+            tx.parse(data=SOURCE)
+            with pytest.raises(RuntimeError, match=r"changed.*validation"):
+                with tx._validate_shared_shapes(program, "{}", True):
+                    Graph(store=tx, identifier="urn:empty", bind_namespaces="none").infer(
+                        inference="rdfs"
+                    )
+                    assert len(tx) == 1
         assert len(store) == 0
 
 
