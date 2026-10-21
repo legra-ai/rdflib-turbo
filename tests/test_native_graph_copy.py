@@ -90,3 +90,27 @@ def test_copy_of_closed_source_fails():
     graph.store.backend.close()
     with pytest.raises(RuntimeError, match="closed"):
         graph.copy()
+
+
+def test_persistent_pending_copy_survives_source_rollback_and_database_reopen(tmp_path):
+    path = tmp_path / "source"
+    pending = BNode("pending")
+    statement = (BNode("subject"), EX.p, Literal("01", datatype=XSD.integer, normalize=False))
+    with Store(path) as store:
+        Graph(store, EX.committed).add((EX.before, EX.p, EX.o))
+        with pytest.raises(ValueError, match="rollback"):
+            with store.transaction() as transaction:
+                source = StoreDataset(transaction)
+                source.graph(pending).add(statement)
+                source.graph(EX.empty_pending)
+                copied = source.copy()
+                assert statement in copied.graph(pending)
+                raise ValueError("rollback")
+    with Store(path) as reopened:
+        assert len(Graph(reopened, EX.committed)) == 1
+        assert len(Graph(reopened, pending)) == 0
+        assert not reopened._native.contains_named_graph(("uri", str(EX.empty_pending), None, None))
+    assert statement in copied.graph(pending)
+    assert EX.empty_pending in {context.identifier for context in copied.graphs()}
+    copied.graph(pending).add((EX.after, EX.p, EX.o))
+    assert len(copied.graph(pending)) == 2
