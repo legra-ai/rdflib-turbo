@@ -502,7 +502,7 @@ wheels = [
 [[package]]
 name = "pyshacl-turbo"
 version = "0.5.0"
-source = { git = "https://github.com/legra-ai/pyshacl-turbo?rev=03aaa3645b0c4891d504c59226381f48d93e570c#03aaa3645b0c4891d504c59226381f48d93e570c" }
+source = { git = "https://github.com/legra-ai/pyshacl-turbo?rev=ce41f79d23561690fb760fda252af0e197187731#ce41f79d23561690fb760fda252af0e197187731" }
 dependencies = [
     { name = "rdflib" },
 ]
@@ -586,7 +586,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "pyshacl-turbo", marker = "extra == 'test'", git = "https://github.com/legra-ai/pyshacl-turbo?rev=03aaa3645b0c4891d504c59226381f48d93e570c" },
+    { name = "pyshacl-turbo", marker = "extra == 'test'", git = "https://github.com/legra-ai/pyshacl-turbo?rev=ce41f79d23561690fb760fda252af0e197187731" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8,<10" },
     { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=7.1,<8" },
     { name = "rdflib", specifier = ">=7.3,<8" },
@@ -598,7 +598,7 @@ provides-extras = ["test"]
 coverage = [
     { name = "owlrl", specifier = "==7.6.2" },
     { name = "pyshacl", specifier = "==0.40.1" },
-    { name = "pyshacl-turbo", git = "https://github.com/legra-ai/pyshacl-turbo?rev=03aaa3645b0c4891d504c59226381f48d93e570c" },
+    { name = "pyshacl-turbo", git = "https://github.com/legra-ai/pyshacl-turbo?rev=ce41f79d23561690fb760fda252af0e197187731" },
     { name = "pytest", specifier = "==9.1.1" },
     { name = "pytest-cov", specifier = "==7.1.0" },
     { name = "rdflib", specifier = "==7.6.0" },
