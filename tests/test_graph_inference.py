@@ -11,7 +11,7 @@ EX = Namespace("urn:scoped-inference:")
 
 @pytest.mark.parametrize("identifier", [None, EX.source, BNode("source")])
 def test_graph_inference_borrows_only_its_own_scope(identifier, monkeypatch):
-    graph = Graph(identifier=identifier)
+    graph = Graph() if identifier is None else Graph(store=Store(), identifier=identifier)
     graph.add((EX.C, RDFS.subClassOf, EX.D))
     graph.add((EX.x, RDF.type, EX.C))
     outside = Graph(store=graph.store, identifier=EX.outside)
