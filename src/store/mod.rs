@@ -1,4 +1,5 @@
 //! Native storage and transaction handles, owned by this extension only.
+mod fork;
 mod input_terms;
 mod operations;
 pub(crate) mod output;
@@ -130,28 +131,14 @@ impl NativeStore {
     #[new]
     #[pyo3(signature = (path=None))]
     fn new(py: Python<'_>, path: Option<String>) -> PyResult<Self> {
-        py.detach(|| {
-            let store = match path {
-                None => Store::new().map_err(runtime)?,
-                Some(path) => {
-                    #[cfg(feature = "persistence")]
-                    {
-                        Store::open(path).map_err(runtime)?
-                    }
-                    #[cfg(not(feature = "persistence"))]
-                    {
-                        let _ = path;
-                        return Err(crate::Error::Unsupported(
-                            "This build has no RocksDB persistence support".into(),
-                        ));
-                    }
-                }
-            };
-            Ok(Self {
-                control: Arc::new(Mutex::new(Control::new(store))),
-            })
-        })
-        .map_err(error)
+        py.detach(|| Self::open(path)).map_err(error)
+    }
+
+    #[pyo3(signature = (graph=None))]
+    fn fork_graph(&self, py: Python<'_>, graph: Option<String>) -> PyResult<Self> {
+        py.detach(|| Session::execute_inline(self.control.clone(), Operation::ForkGraph(graph)))
+            .map(Self::from_copy_reply)
+            .map_err(error)
     }
 
     fn ensure_open(&self) -> PyResult<()> {
