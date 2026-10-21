@@ -117,7 +117,7 @@ def test_real_locked_export_ignores_stale_snapshot_and_fails_stale_uv_lock(tmp_p
     module = harness()
     root = tmp_path / "source"
     root.mkdir()
-    manifest = '[project]\nname="rdflib-turbo"\nversion="0.0.0"\nrequires-python=">=3.13"\n[dependency-groups]\ncoverage=["packaging==26.3"]\n'
+    manifest = '[project]\nname="rdflib-turbo"\nversion="0.0.0"\nrequires-python=">=3.11"\n[dependency-groups]\ncoverage=["packaging==26.3"]\n'
     (root / "pyproject.toml").write_text(manifest)
     environment = dict(os.environ)
     for name in ("VIRTUAL_ENV", "UV_PYTHON", "UV_PROJECT", "UV_PROJECT_ENVIRONMENT"):
