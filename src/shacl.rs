@@ -90,7 +90,7 @@ impl Settings {
 type Record = (u8, String, Option<String>, Option<String>);
 type QuadRecord = (usize, usize, usize, Option<usize>);
 type Batch = (Vec<Record>, Vec<QuadRecord>);
-type Output = (bool, Batch, String, Vec<String>);
+pub(crate) type Output = (bool, Batch, String, Vec<String>);
 
 #[derive(Default)]
 struct ReportTerms<'a> {
@@ -272,6 +272,25 @@ impl SharedShapes {
             .map_err(crate::error)
     }
 
+    fn prepare_transaction(
+        &self,
+        py: Python<'_>,
+        transaction: &NativeTransaction,
+        settings: &str,
+        inplace: bool,
+    ) -> PyResult<crate::store::PreparedValidation> {
+        let options = match Settings::parse(settings) {
+            Ok(options) => options,
+            Err(error) => {
+                py.detach(|| transaction.abort_validation())
+                    .map_err(crate::error)?;
+                return Err(error);
+            }
+        };
+        py.detach(|| transaction.prepare_validation(self.inner.clone(), options, inplace))
+            .map_err(crate::error)
+    }
+
     fn validate_transaction(
         &self,
         py: Python<'_>,
@@ -295,6 +314,7 @@ impl SharedShapes {
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<SharedShapes>()?;
+    module.add_class::<crate::store::PreparedValidation>()?;
     module.add("SHARED_SHACL_PROTOCOL", 1)?;
     module.add(
         "SHACL_ENGINE_FINGERPRINT",

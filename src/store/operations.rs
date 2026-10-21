@@ -1,4 +1,5 @@
 use oxigraph::io::{RdfFormat, RdfParser};
+use oxigraph::model::Dataset;
 use oxigraph::sparql::SparqlEvaluator;
 use oxigraph::store::Transaction;
 use pyshacl_turbo_engine::{CompiledShapes, Options};
@@ -51,6 +52,8 @@ pub(super) enum Operation {
 
 pub(super) enum Reply {
     Validation(Box<crate::shacl::Report>),
+    StagedValidation(Box<(crate::shacl::Report, Dataset)>),
+    PreparedValidation(Box<(crate::shacl::Report, u64)>),
     Done,
     Bool(bool),
     Count(usize),
@@ -59,6 +62,29 @@ pub(super) enum Reply {
 }
 
 impl Operation {
+    // Exhaustive classification: adding an operation requires an explicit mutation policy.
+    pub fn mutates(&self) -> bool {
+        match self {
+            Self::InsertTerms(_)
+            | Self::Remove(_)
+            | Self::LoadGraph { .. }
+            | Self::Graph(_, _)
+            | Self::Load { .. }
+            | Self::Update(_)
+            | Self::Infer(..) => true,
+            Self::Validate { .. }
+            | Self::Match(_)
+            | Self::Count(_)
+            | Self::QueryGraph(..)
+            | Self::Graphs
+            | Self::ContainsGraph(_)
+            | Self::GraphLen(_)
+            | Self::Len
+            | Self::Query(..)
+            | Self::Dump(_) => false,
+        }
+    }
+
     pub fn execute(self, transaction: &mut Transaction<'_>) -> Result<Reply> {
         match self {
             Self::Validate {
@@ -66,13 +92,14 @@ impl Operation {
                 options,
                 inplace,
             } => {
-                let result = if inplace {
-                    shapes.validate_transaction(transaction, options)?
+                let outcome = shapes.validate_delta(&*transaction, options)?;
+                let report = crate::shacl::Report::try_new(outcome.report)?;
+                let additions = if inplace {
+                    outcome.additions
                 } else {
-                    shapes.validate_staged(&*transaction, options)?
+                    Dataset::new()
                 };
-                crate::shacl::Report::try_new(result)
-                    .map(|report| Reply::Validation(Box::new(report)))
+                Ok(Reply::StagedValidation(Box::new((report, additions))))
             }
             Self::Count(source) => {
                 let pattern = Pattern::parse(&source)?;

@@ -219,3 +219,89 @@ fn memory_only_native_build_rejects_persistent_paths() {
         );
     });
 }
+
+#[test]
+fn validation_additions_are_private_until_report_acceptance() {
+    let session = Session::start(control()).unwrap();
+    session.execute(insert()).unwrap();
+    let shapes = pyshacl_turbo_engine::CompiledShapes::compile(
+        pyshacl_turbo_engine::parse_graph(
+            "@prefix sh:<http://www.w3.org/ns/shacl#>. <urn:S> sh:targetNode <urn:s>; sh:rule [a sh:TripleRule; sh:subject sh:this; sh:predicate <urn:derived>; sh:object true].",
+            oxigraph::io::RdfFormat::Turtle,
+            None,
+        ).unwrap(),
+        true,
+    ).unwrap();
+    session
+        .execute(Operation::Validate {
+            shapes: Arc::new(shapes),
+            options: pyshacl_turbo_engine::Options::default(),
+            inplace: true,
+        })
+        .unwrap();
+    assert!(matches!(
+        session.execute(Operation::Len).unwrap(),
+        Reply::Count(1)
+    ));
+    session.finish(false).unwrap();
+}
+
+#[test]
+fn every_mutation_attempt_invalidates_prepared_validation() {
+    let options = crate::inference::InferenceOptions::default();
+    let mutations = [
+        Operation::Update("INSERT DATA {}".into()),
+        Operation::Load {
+            source: String::new(),
+            format: oxigraph::io::RdfFormat::Turtle,
+            base: None,
+        },
+        Operation::LoadGraph {
+            source: String::new(),
+            format: oxigraph::io::RdfFormat::Turtle,
+            base: None,
+            graph: String::new(),
+            allow_named_graphs: false,
+        },
+        Operation::Remove("[null,null,null,null]".into()),
+        Operation::Graph("{\"type\":\"uri\",\"value\":\"urn:empty\"}".into(), false),
+        Operation::Graph("{\"type\":\"uri\",\"value\":\"urn:empty\"}".into(), true),
+        Operation::InsertTerms(Box::new(super::typed::QuadInput::new(
+            ("uri".into(), "urn:s".into(), None, None),
+            ("uri".into(), "urn:p".into(), None, None),
+            ("uri".into(), "urn:o".into(), None, None),
+            None,
+        ))),
+        Operation::Infer("rdfs".into(), None, options),
+    ];
+    for mutation in mutations {
+        let control = control();
+        let store = control.lock().unwrap().read().unwrap();
+        let session = Session::start(control).unwrap();
+        session.execute(insert()).unwrap();
+        let shapes =
+            pyshacl_turbo_engine::CompiledShapes::compile(oxigraph::model::Dataset::new(), false)
+                .unwrap();
+        let Reply::PreparedValidation(report) = session
+            .execute(Operation::Validate {
+                shapes: Arc::new(shapes),
+                options: Default::default(),
+                inplace: true,
+            })
+            .unwrap()
+        else {
+            panic!("Expected prepared report")
+        };
+        let (_, revision) = *report;
+        session.execute(mutation).unwrap();
+        assert!(
+            session
+                .accept_validation(revision)
+                .unwrap_err()
+                .to_string()
+                .contains("changed")
+        );
+        assert!(session.finish(true).is_err());
+        assert_eq!(store.len().unwrap(), 0);
+    }
+}
