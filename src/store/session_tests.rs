@@ -94,7 +94,11 @@ fn inference_uses_pending_writes_and_the_same_commit_boundary() {
         let session = Session::start(control.clone()).unwrap();
         session.execute(Operation::Update("INSERT DATA { GRAPH <urn:g> { <urn:a> a <urn:C> . <urn:C> <http://www.w3.org/2000/01/rdf-schema#subClassOf> <urn:D> } }".into())).unwrap();
         session
-            .execute(Operation::Infer("rdfs".into(), Some("urn:inferred".into())))
+            .execute(Operation::Infer(
+                "rdfs".into(),
+                Some("urn:inferred".into()),
+                Default::default(),
+            ))
             .unwrap();
         let Reply::Query(_, result) = session
             .execute(Operation::Query(
@@ -121,7 +125,11 @@ fn invalid_inference_aborts_all_prior_changes_and_releases_the_writer() {
         session.execute(insert()).unwrap();
         assert!(
             session
-                .execute(Operation::Infer(mode.into(), destination.map(String::from)))
+                .execute(Operation::Infer(
+                    mode.into(),
+                    destination.map(String::from),
+                    Default::default()
+                ))
                 .is_err()
         );
         assert!(store.is_empty().unwrap());

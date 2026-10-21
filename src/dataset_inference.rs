@@ -14,6 +14,7 @@ impl NativeDataset {
         py: Python<'_>,
         mode: &str,
         destination: Option<&str>,
+        options: inference::InferenceOptions,
     ) -> PyResult<Self> {
         if !matches!(mode, "rdfs" | "owlrl" | "both") {
             return Err(PyValueError::new_err(format!(
@@ -31,8 +32,9 @@ impl NativeDataset {
                 .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
             // Namespace bindings are metadata, not a snapshot of RDF quads.
             let namespaces = current.namespaces.clone();
-            let data = inference::expand_delta(&mut current, mode, destination.map(Into::into))
-                .map_err(error)?;
+            let data =
+                inference::expand_delta(&mut current, mode, destination.map(Into::into), options)
+                    .map_err(error)?;
             Ok(Self {
                 inner: RwLock::new(DatasetState { data, namespaces }),
             })
@@ -56,7 +58,10 @@ mod tests {
             .is_err()
         );
         Python::attach(|py| {
-            let failure = native.infer_delta(py, "rdfs", None).err().unwrap();
+            let failure = native
+                .infer_delta(py, "rdfs", None, false, false)
+                .err()
+                .unwrap();
             assert!(failure.is_instance_of::<PyRuntimeError>(py));
             assert!(failure.to_string().contains("Dataset lock poisoned"));
         });

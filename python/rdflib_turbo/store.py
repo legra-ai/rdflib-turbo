@@ -10,13 +10,20 @@ from ._operations import GraphOperations
 class InferenceOperations(GraphOperations):
     """Shared inference entry point for a store and its active transaction."""
 
-    def infer(self, *, inference="owlrl", destination=None):
+    def infer(
+        self, *, inference="owlrl", destination=None, axiomatic_triples=False, datatype_axioms=False
+    ):
         """Expand the graph union; write new facts to destination (default graph if omitted).
 
         Execution errors abort the entire transaction, including preceding writes.
         Existing statements retain their original contexts.
         """
-        self._native.infer(inference, destination)
+        self._native.infer(
+            inference,
+            destination,
+            axiomatic_triples=axiomatic_triples,
+            datatype_axioms=datatype_axioms,
+        )
         return self
 
 

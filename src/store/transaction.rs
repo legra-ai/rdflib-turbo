@@ -147,11 +147,25 @@ impl NativeTransaction {
         .map_err(error)
     }
 
-    #[pyo3(signature = (mode, destination=None))]
-    fn infer(&self, py: Python<'_>, mode: String, destination: Option<String>) -> PyResult<()> {
+    #[pyo3(signature = (mode, destination=None, *, axiomatic_triples=false, datatype_axioms=false))]
+    fn infer(
+        &self,
+        py: Python<'_>,
+        mode: String,
+        destination: Option<String>,
+        axiomatic_triples: bool,
+        datatype_axioms: bool,
+    ) -> PyResult<()> {
         py.detach(|| {
             self.session
-                .execute(Operation::Infer(mode, destination))
+                .execute(Operation::Infer(
+                    mode,
+                    destination,
+                    crate::inference::InferenceOptions {
+                        axiomatic_triples,
+                        datatype_axioms,
+                    },
+                ))
                 .map(|_| ())
         })
         .map_err(error)

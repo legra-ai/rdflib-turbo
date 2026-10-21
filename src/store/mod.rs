@@ -189,10 +189,26 @@ impl NativeStore {
         .map_err(error)
     }
 
-    #[pyo3(signature = (mode, destination=None))]
-    fn infer(&self, py: Python<'_>, mode: String, destination: Option<String>) -> PyResult<()> {
-        py.detach(|| self.mutate(Operation::Infer(mode, destination)))
-            .map_err(error)
+    #[pyo3(signature = (mode, destination=None, *, axiomatic_triples=false, datatype_axioms=false))]
+    fn infer(
+        &self,
+        py: Python<'_>,
+        mode: String,
+        destination: Option<String>,
+        axiomatic_triples: bool,
+        datatype_axioms: bool,
+    ) -> PyResult<()> {
+        py.detach(|| {
+            self.mutate(Operation::Infer(
+                mode,
+                destination,
+                crate::inference::InferenceOptions {
+                    axiomatic_triples,
+                    datatype_axioms,
+                },
+            ))
+        })
+        .map_err(error)
     }
 
     fn update(&self, py: Python<'_>, source: String) -> PyResult<()> {
