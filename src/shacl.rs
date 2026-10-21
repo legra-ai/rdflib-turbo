@@ -140,7 +140,6 @@ impl<'a> ReportTerms<'a> {
     }
 }
 
-
 fn output(report: ValidationReport) -> PyResult<Output> {
     Report::try_new(report)
         .map(Report::into_output)
@@ -220,14 +219,23 @@ impl SharedShapes {
     ) -> PyResult<Output> {
         let mut options = Settings::parse(settings)?;
         let prepared = py.detach(|| -> PyResult<Prepared<Output>> {
-            let mut data = dataset.inner.write()
+            let mut data = dataset
+                .inner
+                .write()
                 .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
             options.namespaces = data.namespaces.clone();
             if !inplace {
-                return Ok(Prepared::report(output(self.inner.validate_staged(&data.data, options).map_err(error)?)?));
+                return Ok(Prepared::report(output(
+                    self.inner
+                        .validate_staged(&data.data, options)
+                        .map_err(error)?,
+                )?));
             }
             let revision = data.next_revision()?;
-            let outcome = self.inner.validate_delta(&data.data, options).map_err(error)?;
+            let outcome = self
+                .inner
+                .validate_delta(&data.data, options)
+                .map_err(error)?;
             let mut result = output(outcome.report)?;
             if result.3.is_empty() {
                 data.extend(outcome.additions.iter());
@@ -235,7 +243,12 @@ impl SharedShapes {
                 Ok(Prepared::report(result))
             } else {
                 let warnings = std::mem::take(&mut result.3);
-                Ok(Prepared::staged(result, outcome.additions, data.revision, warnings))
+                Ok(Prepared::staged(
+                    result,
+                    outcome.additions,
+                    data.revision,
+                    warnings,
+                ))
             }
         })?;
         prepared.finish(py, dataset)
@@ -283,7 +296,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     )?;
     module.add(
         "SHACL_ENGINE_REVISION",
-        "33ccfe6ba77c0842028302cebfab64168aacb8b0",
+        "d03f7b3de45ba319d94ebecd621676e6d57f3668",
     )?;
     module.add(
         "SharedValidationFailure",

@@ -22,8 +22,11 @@ fn every_mutator_rejects_exhausted_revision_before_changes() {
             native
                 .bind_namespaces(vec![("fresh".into(), "urn:fresh:".into())])
                 .unwrap_err(),
-            native.infer(py, "rdfs", None).unwrap_err(),
-            native.infer_delta(py, "rdfs", None).err().unwrap(),
+            native.infer(py, "rdfs", None, false, false).unwrap_err(),
+            native
+                .infer_delta(py, "rdfs", None, false, false)
+                .err()
+                .unwrap(),
             shapes.validate(py, &native, "{}", true).unwrap_err(),
             shapes.expand(py, &native, "{}", true).err().unwrap(),
         ];
@@ -48,9 +51,9 @@ fn successful_noop_writes_advance_once_and_copies_are_independent() {
         assert_eq!(native.inner.read().unwrap().revision, 1);
         native.bind_namespaces(vec![]).unwrap();
         assert_eq!(native.inner.read().unwrap().revision, 2);
-        native.infer(py, "rdfs", None).unwrap();
+        native.infer(py, "rdfs", None, false, false).unwrap();
         assert_eq!(native.inner.read().unwrap().revision, 3);
-        native.infer_delta(py, "rdfs", None).unwrap();
+        native.infer_delta(py, "rdfs", None, false, false).unwrap();
         assert_eq!(native.inner.read().unwrap().revision, 4);
         let copied = native.copy(py).unwrap();
         assert_eq!(copied.inner.read().unwrap().revision, 0);
