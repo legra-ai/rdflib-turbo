@@ -10,7 +10,15 @@ _ERROR_NAMESPACE = "http://www.daml.org/2002/03/agents/agent-ont#"
 
 
 class GraphInference:
-    def infer(self, *, inference="owlrl", destination=None):
+    def infer(
+        self,
+        *,
+        inference="owlrl",
+        destination=None,
+        axiomatic_triples=False,
+        datatype_axioms=False,
+        prior_error_messages=None,
+    ):
         """Infer in place, staging diagnostic namespaces with the RDF writes.
 
         A Graph reads its scope; a Dataset reads its union. A separate destination
@@ -20,13 +28,18 @@ class GraphInference:
         backend._last_inference = None
         try:
             scope = self._inference_scope(destination)
+            options = {
+                "axiomatic_triples": axiomatic_triples,
+                "datatype_axioms": datatype_axioms,
+                "prior_error_messages": prior_error_messages,
+            }
             if isinstance(backend, Transaction):
-                outcome = self._infer_bound_scope(inference, *scope)
+                outcome = self._infer_bound_scope(inference, *scope, **options)
             else:
                 # Namespace metadata alone is copied by the existing transaction.
                 # Native inference continues to borrow the same RDF store.
                 with self.transaction() as transaction:
-                    outcome = transaction._infer_bound_scope(inference, *scope)
+                    outcome = transaction._infer_bound_scope(inference, *scope, **options)
             backend._last_inference = outcome
         except BaseException:
             if isinstance(backend, Transaction):
@@ -34,8 +47,12 @@ class GraphInference:
             raise
         return self
 
-    def _infer_bound_scope(self, inference, source, destination_graph, destination_identifier):
-        outcome = self.store.backend._native.infer_graph(inference, source, destination_graph)
+    def _infer_bound_scope(
+        self, inference, source, destination_graph, destination_identifier, **options
+    ):
+        outcome = self.store.backend._native.infer_graph(
+            inference, (source, destination_graph), **options
+        )
         if outcome.error_messages:
             # A metadata-only view preserves the destination identity and uses
             # the staged native store's existing namespace mapping.
