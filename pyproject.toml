@@ -19,7 +19,7 @@ Issues = "https://github.com/legra-ai/rdflib-turbo/issues"
 
 [project.optional-dependencies]
 test = [
-    "pyshacl-turbo==0.4.1",
+    "pyshacl-turbo==0.5.0",
     "pytest<10,>=8",
     "pytest-cov>=7.1,<8",
     "ruff>=0.12",
@@ -59,13 +59,16 @@ branch = true
 fail_under = 100
 show_missing = true
 
+[tool.uv.sources]
+pyshacl-turbo = { git = "https://github.com/legra-ai/pyshacl-turbo", rev = "03aaa3645b0c4891d504c59226381f48d93e570c" }
+
 [dependency-groups]
 dev = ["mypy>=1.15,<3"]
 coverage = [
     "rdflib==7.6.0",
     "owlrl==7.6.2",
     "pyshacl==0.40.1",
-    "pyshacl-turbo==0.4.1",
+    "pyshacl-turbo==0.5.0",
     "pytest==9.1.1",
     "pytest-cov==7.1.0",
     "ruff==0.17.1",

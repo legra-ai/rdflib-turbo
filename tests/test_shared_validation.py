@@ -1,5 +1,8 @@
 """SHACL borrows the dataset runtime; data never crosses a Python conversion."""
 
+import tomllib
+from pathlib import Path
+
 import pytest
 from rdflib import BNode, Graph, Literal, URIRef
 from rdflib.compare import isomorphic
@@ -127,3 +130,13 @@ def test_unknown_settings_and_invalid_focus_iris_are_hard_errors():
     for settings in ('{"focus_nodes":["not an IRI"]}', '{"max_rule_iterations":-1}', "[]"):
         with pytest.raises(ValueError):
             program.validate(data._native, settings, False)
+
+
+def test_python_test_companion_uses_the_embedded_engine_revision():
+    root = Path(__file__).resolve().parents[1]
+    cargo = tomllib.loads((root / "Cargo.toml").read_text())
+    python = tomllib.loads((root / "pyproject.toml").read_text())
+    engine = cargo["dependencies"]["pyshacl-turbo-engine"]
+    companion = python["tool"]["uv"]["sources"]["pyshacl-turbo"]
+    assert companion["git"] == engine["git"]
+    assert companion["rev"] == engine["rev"]

@@ -501,18 +501,10 @@ wheels = [
 
 [[package]]
 name = "pyshacl-turbo"
-version = "0.4.1"
-source = { registry = "https://pypi.org/simple" }
+version = "0.5.0"
+source = { git = "https://github.com/legra-ai/pyshacl-turbo?rev=03aaa3645b0c4891d504c59226381f48d93e570c#03aaa3645b0c4891d504c59226381f48d93e570c" }
 dependencies = [
     { name = "rdflib" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/4e/c0/b9312b5fd5cbc0a819ea051fe037bc838fbeebcf11e5b4bd3aa14a72746c/pyshacl_turbo-0.4.1.tar.gz", hash = "sha256:6976e1f161a9db8a83a602953a730f9c007d964641b7349096f95fd489c6a7c2", size = 1678751, upload-time = "2026-10-19T13:51:34.98Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/96/df/295f032da14e65de4db541c0e72ca1d5e718d8d41859ecaee10de2fc4d98/pyshacl_turbo-0.4.1-cp311-abi3-macosx_10_12_x86_64.whl", hash = "sha256:0d7ded3e8faffa17f73aa4918520040ea2a05e1adbb8cfb400d9e97c876f3091", size = 3885481, upload-time = "2026-10-19T13:51:26.814Z" },
-    { url = "https://files.pythonhosted.org/packages/8e/e4/6f640edb84d750132dfa2b0d7599e6ad51443f311ad6ba1d82ecec917010/pyshacl_turbo-0.4.1-cp311-abi3-macosx_11_0_arm64.whl", hash = "sha256:58ede4d110456d1dedcf7f747018a1118c7b3ef7b93f510b57c519a9810736d2", size = 3734832, upload-time = "2026-10-19T13:51:28.547Z" },
-    { url = "https://files.pythonhosted.org/packages/48/85/74c05a7bbd44d465ecf9d88a903ad4477aee0991d311b30e1d4270032388/pyshacl_turbo-0.4.1-cp311-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:702856d38d3f800c69b87bab1f1125c79bdacb98aebaaaf83a7964a6f3d82fd6", size = 4042051, upload-time = "2026-10-19T13:51:30.163Z" },
-    { url = "https://files.pythonhosted.org/packages/14/71/91aef360b71e3d5d47c55664bd0faad8d05892b1149145be0846d45825ce/pyshacl_turbo-0.4.1-cp311-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:4449d5eda7a2f0770ddebfc630711163b8cbc7ef835e42d0f9175b9f979ff8e4", size = 4104440, upload-time = "2026-10-19T13:51:31.746Z" },
-    { url = "https://files.pythonhosted.org/packages/1d/62/8d51f5ef70c9144647fd522eaa451c08df85eaf6410b35ddf1991926fb98/pyshacl_turbo-0.4.1-cp311-abi3-win_amd64.whl", hash = "sha256:7d08a59d43dd617277b5ff98366fd0931790334c1544d3fd7209d27f0d2dfdd0", size = 3737629, upload-time = "2026-10-19T13:51:33.291Z" },
 ]
 
 [[package]]
@@ -594,7 +586,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "pyshacl-turbo", marker = "extra == 'test'", specifier = "==0.4.1" },
+    { name = "pyshacl-turbo", marker = "extra == 'test'", git = "https://github.com/legra-ai/pyshacl-turbo?rev=03aaa3645b0c4891d504c59226381f48d93e570c" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8,<10" },
     { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=7.1,<8" },
     { name = "rdflib", specifier = ">=7.3,<8" },
@@ -606,7 +598,7 @@ provides-extras = ["test"]
 coverage = [
     { name = "owlrl", specifier = "==7.6.2" },
     { name = "pyshacl", specifier = "==0.40.1" },
-    { name = "pyshacl-turbo", specifier = "==0.4.1" },
+    { name = "pyshacl-turbo", git = "https://github.com/legra-ai/pyshacl-turbo?rev=03aaa3645b0c4891d504c59226381f48d93e570c" },
     { name = "pytest", specifier = "==9.1.1" },
     { name = "pytest-cov", specifier = "==7.1.0" },
     { name = "rdflib", specifier = "==7.6.0" },

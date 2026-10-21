@@ -12,8 +12,8 @@ assumption between two independently built extensions.
 The internal Python integration protocol is SHARED_SHACL_PROTOCOL=1. It exposes
 immutable SharedShapes and report output to pyshacl-turbo. All Dataset and engine
 objects remain inside this extension. Ordinary validation holds a read lock and
-borrows the original Dataset. Only operations with active rules make a working
-copy; inplace rule validation takes a write lock, stages all changes, constructs
+borrows the original Dataset. Active inplace rules stage only additions over the borrowed source;
+inplace rule validation takes a write lock, constructs
 the complete report, and commits after success. No evaluation caches survive a
 call. Named-graph unions remain private evaluation views. Tests prohibit Python
 data copying/conversion during validation, cover concurrent reuse, later data
@@ -38,8 +38,7 @@ engine. Keep the fingerprint check strict and test the actual wheel combination.
 The installed-wheel revision regression also checks the reported revision against
 the declared Cargo source, preventing metadata from silently drifting from code.
 
-Python warning policy is part of successful validation. Rule evaluation reuses
-its existing working copy, but an operation with recursion warnings must release
+Python warning policy is part of successful validation. Rule evaluation stages only its additions, but an operation with recursion warnings must release
 the dataset lock before invoking Python's warning machinery. The provider emits
 the public `pyshacl_turbo.ShapeRecursionWarning` category at the same caller
 location as ordinary Graph validation and returns no deferred warning messages.
@@ -53,8 +52,8 @@ Independent copies start independent revisions. Accepted warnings are followed
 by one compare-and-commit under the write lock. Any intervening write causes a
 hard transaction-conflict error: preserve that write, discard the outer staged
 rule changes, and never retry Python callbacks. Revision exhaustion fails before
-mutation. Validation without warnings retains its original single lock and
-working-copy cost; no additional dataset snapshot is introduced.
+mutation. Validation without warnings applies additions under its original lock;
+no dataset snapshot is introduced.
 
 `SharedShapes.expand(dataset, settings, inplace)` runs the pinned engine's rule
 expansion directly, without validation evaluation, report formatting or report
@@ -64,7 +63,7 @@ expansion returns a newly owned native dataset and an empty warning list. The
 consumer retains the original inplace wrapper or wraps the new native owner.
 Names, graph contexts, exact terms and namespace metadata remain native.
 
-Active inplace rules stage one working state for rollback and the same owner
+Active inplace rules stage only additions for rollback and the same owner
 revision comparison used by validation. A successful no-op inplace expansion
 still advances its owner's revision. When no selected rule is active, the engine
 validates options under the write lock without copying graph data. Nonmutating
@@ -72,3 +71,8 @@ expansion necessarily owns its complete output, starts an independent revision,
 and does not snapshot the input again. Rule-only expansion never constructs a
 validation report. This extends protocol 1 using an existing pinned engine API;
 its source revision and engine fingerprint do not change.
+
+The Python test companion uses a uv source pinned to the same immutable Git
+revision as the embedded Rust engine. Coverage requirement exports derive that
+source from uv.lock. Published wheel tests must not pair a newer embedded engine
+with an older published facade; the fingerprint check remains strict.
