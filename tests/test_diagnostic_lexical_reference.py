@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 FIXTURES = Path(__file__).resolve().parents[1] / "src/inference/diagnostic_datatypes"
 ORACLE = r"""
 import decimal
@@ -25,7 +27,7 @@ warnings.simplefilter("ignore")
 signals = ["InvalidOperation", "Inexact", "Rounded", "Subnormal", "Underflow", "Overflow", "Clamped"]
 count = 0
 for name in ["reference.jsonl", "float-contexts.jsonl", "double-contexts.jsonl", "decimal-contexts.jsonl", "cardinality-zero.jsonl"]:
-    for line in (Path(sys.argv[1]) / name).read_text().splitlines():
+    for line in (Path(sys.argv[1]) / name).read_text(encoding="utf-8").splitlines():
         row = json.loads(line)
         with decimal.localcontext() as context:
             if "precision" in row:
@@ -62,8 +64,11 @@ print("Verified", count, "pinned reference outcomes")
 """
 
 
-def test_native_lexical_fixtures_match_actual_pinned_reference():
+@pytest.mark.parametrize("non_utf8_locale", [False, True])
+def test_native_lexical_fixtures_match_actual_pinned_reference(non_utf8_locale):
     environment = dict(os.environ, PYTHONINTMAXSTRDIGITS="4300")
+    if non_utf8_locale:
+        environment.update(PYTHONUTF8="0", PYTHONCOERCECLOCALE="0", LC_ALL="C", LANG="C")
     completed = subprocess.run(
         [sys.executable, "-c", ORACLE, str(FIXTURES)],
         env=environment,
