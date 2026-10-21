@@ -2,6 +2,22 @@
 use crate::algebra::{GraphPattern, JoinAlgorithm};
 use spargebra::{Query, SparqlParser};
 
+#[test]
+fn optional_retry_does_not_treat_values_row_keys_as_source_variables() {
+    let original = parsed("SELECT ?x WHERE { VALUES ?x {1} OPTIONAL { ?s <urn:p> ?z } }");
+    let GraphPattern::Project { inner, .. } = GraphPattern::from_rdflib_algebra(&original) else {
+        panic!("projection")
+    };
+    let GraphPattern::LeftJoin {
+        algorithm: crate::algebra::LeftJoinAlgorithm::RdfLib { variables },
+        ..
+    } = *inner
+    else {
+        panic!("OPTIONAL")
+    };
+    assert!(variables.is_empty());
+}
+
 fn parsed(text: &str) -> spargebra::algebra::GraphPattern {
     let Query::Select { pattern, .. } = SparqlParser::new().parse_query(text).unwrap() else {
         panic!("SELECT required");

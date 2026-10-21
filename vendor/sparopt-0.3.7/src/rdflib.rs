@@ -97,7 +97,10 @@ type Variables = std::collections::BTreeSet<oxrdf::Variable>;
 
 fn graph_variables(pattern: &GraphPattern, output: &mut Variables) {
     match pattern {
-        GraphPattern::Bgp { .. } | GraphPattern::Path { .. } | GraphPattern::Values { .. } => {
+        // RDFLib's ToMultiSet stores VALUES names in row-dictionary keys;
+        // _addVars does not traverse those keys.
+        GraphPattern::Values { .. } => {}
+        GraphPattern::Bgp { .. } | GraphPattern::Path { .. } => {
             pattern.on_in_scope_variable(|variable| {
                 output.insert(variable.clone());
             });
