@@ -36,3 +36,22 @@ This direct provider is a prerequisite for owlrl-turbo's original in-place class
 interface on native Store graph views. SHACL's Store adapter and nonmutating
 functional inference on these views remain separate integration work; their
 absence must not be hidden by whole-dataset conversion.
+
+## Explicit independent graph ownership
+
+Graph.copy and StoreDataset.copy create an independent native Store. Stream the
+selected scope's exact quads and empty named-graph metadata into that new owner's
+transaction. Graph copies exclude unrelated contexts; Dataset copies retain all
+contexts and their exact named/blank identifiers. No RDF document serialization,
+Python triple traversal, legacy Dataset conversion or shared mutable base is
+involved. Copying is explicitly requested output ownership, not an inference
+fallback or a maintained graph mirror.
+
+An active transaction copies its pending view without committing it; the returned
+owner survives a later source rollback. Native failure aborts the source worker
+through its existing operation boundary. An implicit copy uses the existing
+single-writer transaction reservation for a consistent source view and fails
+when that owner already has an active writer. Namespace metadata is independently
+copied through the existing store metadata boundary; inference outcomes are not
+inherited. last_inference is a read-only view of the current owner's invocation
+record, provisional on an active transaction.

@@ -2,7 +2,7 @@
 
 use oxigraph::model::{Dataset, GraphName, Quad};
 
-use super::{InferenceOptions, expand_configured};
+use super::{InferenceOutcome, InferenceRequest, expand_configured};
 use crate::Result;
 
 /// Stage only direct literal publications absent from the exact output graph.
@@ -29,21 +29,21 @@ pub(crate) fn expand_delta(
     data: &mut Dataset,
     mode: &str,
     destination: Option<GraphName>,
-    options: InferenceOptions,
-) -> Result<Dataset> {
+    request: InferenceRequest,
+) -> Result<(Dataset, InferenceOutcome)> {
     if destination.is_none() && data.iter().all(|quad| quad.graph_name.is_default_graph()) {
         let mut transaction = data.insert_transaction();
-        expand_configured(&mut transaction, mode, options)?;
+        let (_, outcome) = expand_configured(&mut transaction, mode, request)?;
         // The returned dataset owns only derived output, never a base snapshot.
         let delta = transaction.inserted().collect();
         transaction.commit();
-        return Ok(delta);
+        return Ok((delta, outcome));
     }
 
     // Retain Dataset inference's existing union semantics for named contexts.
     let mut union = crate::graph::with_union(data);
     let mut union_transaction = union.insert_transaction();
-    let prepared = expand_configured(&mut union_transaction, mode, options)?;
+    let (prepared, outcome) = expand_configured(&mut union_transaction, mode, request)?;
     let destination = destination.unwrap_or(GraphName::DefaultGraph);
     let publications = literal_publications(data, mode, &destination);
     let mut transaction = data.insert_transaction();
@@ -66,5 +66,5 @@ pub(crate) fn expand_delta(
     let delta = transaction.inserted().collect();
     union_transaction.commit();
     transaction.commit();
-    Ok(delta)
+    Ok((delta, outcome))
 }

@@ -35,8 +35,10 @@ spargebra = "=0.4.7"
 sparopt = "=0.3.7"
 spareval = { version = "=0.2.7", features = ["exact-custom-function-terms", "exact-term-builtins", "rdf-set-union"] }
 thiserror = "2"
+roxmltree = "=0.21.1"
 
 [build-dependencies]
+pyo3-build-config = { version = "=0.30.1", features = ["resolve-config"] }
 serde = { version = "1", features = ["derive"] }
 toml = { version = "0.9", default-features = false, features = ["parse", "serde"] }
 

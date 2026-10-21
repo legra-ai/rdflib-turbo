@@ -19,7 +19,7 @@ fn failure_after_an_inference_round_rolls_back_all_axioms_and_derived_facts() {
                 let before = native.dump(py, "nquads").unwrap();
                 assert!(
                     native
-                        .infer(py, "owlrl", destination, false, false)
+                        .infer(py, "owlrl", destination, false, false, None)
                         .unwrap_err()
                         .to_string()
                         .contains("Malformed RDF list")
@@ -29,7 +29,7 @@ fn failure_after_an_inference_round_rolls_back_all_axioms_and_derived_facts() {
                 // the OWL axioms behind. A corrected input can then succeed.
                 native.load(py, "<urn:broken> <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <urn:key>; <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil> .", "turtle", None, true).unwrap();
                 native
-                    .infer(py, "owlrl", destination, false, false)
+                    .infer(py, "owlrl", destination, false, false, None)
                     .unwrap();
             }
         }
@@ -90,7 +90,7 @@ fn inference_noop_modes_and_invalid_modes_are_explicit() {
             },
         ] {
             let mut data = original.clone();
-            inference::expand(&mut data, mode, options).unwrap();
+            inference::expand(&mut data, mode, options.into()).unwrap();
             assert_eq!(data, original);
         }
     }
@@ -119,7 +119,9 @@ fn poisoned_dataset_locks_fail_every_public_native_operation() {
             native.dump(py, "turtle").unwrap_err(),
             native.quads_json(py).unwrap_err(),
             native.query(py, "ASK {}", false).unwrap_err(),
-            native.infer(py, "owlrl", None, false, false).unwrap_err(),
+            native
+                .infer(py, "owlrl", None, false, false, None)
+                .unwrap_err(),
             native.namespaces().unwrap_err(),
             native.bind_namespaces(Vec::new()).unwrap_err(),
         ];
@@ -169,13 +171,13 @@ fn native_input_validation_checks_formats_bases_modes_and_query_failures() {
         );
         assert!(
             native
-                .infer(py, "none", None, false, false)
+                .infer(py, "none", None, false, false, None)
                 .unwrap_err()
                 .is_instance_of::<PyValueError>(py)
         );
         assert!(
             native
-                .infer(py, "owlrl", Some("invalid IRI"), false, false)
+                .infer(py, "owlrl", Some("invalid IRI"), false, false, None)
                 .unwrap_err()
                 .is_instance_of::<PyValueError>(py)
         );
@@ -226,13 +228,15 @@ fn property_chain_validation_and_named_graph_inference_preserve_atomicity() {
             let native = NativeDataset::new();
             native.load(py, source, "turtle", None, true).unwrap();
             let before = native.dump(py, "nquads").unwrap();
-            let failure = native.infer(py, "owlrl", None, false, false).unwrap_err();
+            let failure = native
+                .infer(py, "owlrl", None, false, false, None)
+                .unwrap_err();
             assert!(failure.to_string().contains(message), "{failure}");
             assert_eq!(native.dump(py, "nquads").unwrap(), before);
         }
         let native = NativeDataset::new();
         native.load(py, "<urn:g> { <urn:C> <http://www.w3.org/2000/01/rdf-schema#subClassOf> <urn:D> . <urn:x> a <urn:C> . }", "trig", None, true).unwrap();
-        native.infer(py, "rdfs", None, false, false).unwrap();
+        native.infer(py, "rdfs", None, false, false, None).unwrap();
         assert_eq!(
             native
                 .query(py, "ASK { <urn:x> a <urn:D> }", false)
@@ -248,7 +252,7 @@ fn property_chain_validation_and_named_graph_inference_preserve_atomicity() {
             "false"
         );
         native
-            .infer(py, "owlrl", Some("urn:inferred"), false, false)
+            .infer(py, "owlrl", Some("urn:inferred"), false, false, None)
             .unwrap();
     });
 }
@@ -309,7 +313,7 @@ fn failed_inference_preserves_named_contexts_and_inference_destinations() {
             let before = native.dump(py, "nquads").unwrap();
             assert!(
                 native
-                    .infer(py, "owlrl", destination, false, false)
+                    .infer(py, "owlrl", destination, false, false, None)
                     .is_err()
             );
             assert_eq!(native.dump(py, "nquads").unwrap(), before);

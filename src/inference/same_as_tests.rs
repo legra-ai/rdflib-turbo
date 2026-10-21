@@ -267,7 +267,13 @@ fn new_symmetry_is_not_visible_to_other_rules_in_the_same_round() {
 
 fn frozen_closure(data: &mut Dataset) {
     let mut transaction = data.insert_transaction();
-    super::axioms::owl(&mut transaction, false).unwrap();
+    super::axioms::owl(
+        &mut transaction,
+        false,
+        &mut super::diagnostics::Diagnostics::default(),
+        &super::diagnostic_datatypes::LexicalContext::default(),
+    )
+    .unwrap();
     // bounded: the fixed former rule inventory, retaining its round semantics.
     let rules: Vec<_> = ORIGINAL
         .iter()

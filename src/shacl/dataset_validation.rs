@@ -35,7 +35,7 @@ impl SharedShapes {
                 .write()
                 .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
             options.namespaces = data.namespaces.clone();
-            let revision = data.next_revision()?;
+            let revision = data.next_revision().map_err(crate::error)?;
             let outcome = self
                 .inner
                 .validate_delta(&data.data, options)
@@ -84,7 +84,7 @@ impl SharedShapes {
                 return Ok::<_, PyErr>((report, pending));
             }
             // Reject exhausted mutation counters before executing a write-capable validation.
-            data.next_revision()?;
+            data.next_revision().map_err(crate::error)?;
             let outcome = self
                 .inner
                 .validate_delta(&data.data, options)

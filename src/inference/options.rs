@@ -4,6 +4,7 @@ use oxigraph::io::{RdfFormat, RdfParser};
 use oxigraph::model::*;
 
 use super::backend::Graph;
+use super::{InferenceOutcome, InferenceRequest, expand_inner};
 use crate::graph::{RDF, RDFS, iri};
 use crate::{Error, Result};
 
@@ -107,4 +108,25 @@ impl<'a> PreparedOptions<'a> {
         }
         Ok(())
     }
+}
+
+pub(super) fn expand_configured<'a>(
+    data: &mut impl Graph,
+    mode: &'a str,
+    request: InferenceRequest,
+) -> Result<(PreparedOptions<'a>, InferenceOutcome)> {
+    match mode {
+        "none" | "" => {
+            return Ok((
+                PreparedOptions::new(data, mode, InferenceOptions::default())?,
+                InferenceOutcome::default(),
+            ));
+        }
+        "rdfs" | "owlrl" | "both" => {}
+        _ => return Err(Error::Unsupported(format!("inference: {mode}"))),
+    }
+    let prepared = PreparedOptions::new(data, mode, request.options)?;
+    prepared.insert(|quad| data.insert(quad))?;
+    let outcome = expand_inner(data, mode, request)?;
+    Ok((prepared, outcome))
 }

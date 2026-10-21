@@ -348,11 +348,12 @@ fn every_mutation_attempt_invalidates_prepared_validation() {
             ("uri".into(), "urn:o".into(), None, None),
             None,
         ))),
-        Operation::Infer("rdfs".into(), None, options),
+        Operation::Infer("rdfs".into(), None, options.into()),
         Operation::InferGraph {
             mode: "rdfs".into(),
             source: Some("{\"type\":\"uri\",\"value\":\"urn:empty\"}".into()),
             destination: "{\"type\":\"uri\",\"value\":\"urn:empty\"}".into(),
+            request: Default::default(),
         },
     ];
     for mutation in mutations {

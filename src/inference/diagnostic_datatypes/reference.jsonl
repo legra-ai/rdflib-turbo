@@ -1,0 +1,265 @@
+{"datatype": "http://www.w3.org/2001/XMLSchema#integer", "lexical": "0", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#integer", "lexical": "01", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#integer", "lexical": "-0", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#integer", "lexical": "+1", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#integer", "lexical": " 1 ", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#integer", "lexical": "\u0661\u0662", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#integer", "lexical": "\uff11\uff12", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#integer", "lexical": "1_0", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#integer", "lexical": "1__0", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#integer", "lexical": "_1", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#integer", "lexical": "1_", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#integer", "lexical": "1.0", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#integer", "lexical": "1e2", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#integer", "lexical": "9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#integer", "lexical": "99999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#byte", "lexical": "127", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#byte", "lexical": "128", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#byte", "lexical": "-128", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#byte", "lexical": "-129", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#byte", "lexical": " \u0661_\u0662 ", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#decimal", "lexical": "0", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#decimal", "lexical": "01.0", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#decimal", "lexical": "1_0", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#decimal", "lexical": "1__0", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#decimal", "lexical": "\u0661.\u0662", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#decimal", "lexical": "Infinity", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#decimal", "lexical": "-Infinity", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#decimal", "lexical": "NaN", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#decimal", "lexical": "sNaN", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#decimal", "lexical": "1E2", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#decimal", "lexical": "1e2", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#decimal", "lexical": "", "expected": "InvalidOperation"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#decimal", "lexical": " 1.2 ", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#float", "lexical": "0", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#float", "lexical": "-0", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#float", "lexical": "1e-50", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#float", "lexical": "1.0001e-50", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#float", "lexical": "9.999e39", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#float", "lexical": "1e40", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#float", "lexical": "NaN", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#float", "lexical": "INF", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#float", "lexical": "Infinity", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#float", "lexical": "1_0", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#float", "lexical": "\u0661.\u0662", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#double", "lexical": "0", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#double", "lexical": "1e-330", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#double", "lexical": "1.0001e-330", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#double", "lexical": "1e310", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#double", "lexical": "9.999e309", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#double", "lexical": "NaN", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#double", "lexical": "Infinity", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#hexBinary", "lexical": "", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#hexBinary", "lexical": "F", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#hexBinary", "lexical": "FFF", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#hexBinary", "lexical": "0xF", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#hexBinary", "lexical": "+F", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#hexBinary", "lexical": "-F", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#hexBinary", "lexical": " F ", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#hexBinary", "lexical": "F_F", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#hexBinary", "lexical": "\uff26", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#hexBinary", "lexical": "\u0661", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#base64Binary", "lexical": "", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#base64Binary", "lexical": "YQ==", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#base64Binary", "lexical": "YQ", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#base64Binary", "lexical": "Y Q==", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#base64Binary", "lexical": "YQ====", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#base64Binary", "lexical": "====", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#base64Binary", "lexical": "\u0661\u0662==", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#base64Binary", "lexical": "YWJj", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#boolean", "lexical": "true", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#boolean", "lexical": "TRUE", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#boolean", "lexical": "True", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#boolean", "lexical": "1", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#boolean", "lexical": "false", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#boolean", "lexical": "FALSE", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#boolean", "lexical": "0", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#boolean", "lexical": " true ", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#boolean", "lexical": "yes", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#boolean", "lexical": "\u0661", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#anyURI", "lexical": "", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#anyURI", "lexical": "relative", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#anyURI", "lexical": "?x", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#anyURI", "lexical": ":x", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#anyURI", "lexical": "%20a", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#anyURI", "lexical": "%2Ga", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#anyURI", "lexical": "%", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#anyURI", "lexical": "%A", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#anyURI", "lexical": "http://a", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#anyURI", "lexical": "http://[broken", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#anyURI", "lexical": "a b", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#anyURI", "lexical": "a\\b", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#normalizedString", "lexical": "", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#normalizedString", "lexical": "a", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#normalizedString", "lexical": "a b", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#normalizedString", "lexical": " a ", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#normalizedString", "lexical": "a\nb", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#normalizedString", "lexical": "a\tb", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#normalizedString", "lexical": "a\rb", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#normalizedString", "lexical": "a\u000b", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#token", "lexical": "", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#token", "lexical": "a", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#token", "lexical": "a b", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#token", "lexical": " a ", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#token", "lexical": "a  b", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#token", "lexical": "a\nb", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#token", "lexical": "a\u00a0b", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#token", "lexical": "a\u00a0", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#language", "lexical": "en", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#language", "lexical": "en-US", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#language", "lexical": "e", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#language", "lexical": "englishlang", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#language", "lexical": "en-12345678", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#language", "lexical": "en-123456789", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#language", "lexical": "en\n", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#NMTOKEN", "lexical": "a", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#NMTOKEN", "lexical": "1a", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#NMTOKEN", "lexical": "\u0661a", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#NMTOKEN", "lexical": "a:b", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#NMTOKEN", "lexical": "a b", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#NMTOKEN", "lexical": "a\n", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#NMTOKEN", "lexical": "", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#Name", "lexical": "a", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#Name", "lexical": "1a", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#Name", "lexical": "\u0661a", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#Name", "lexical": ":a", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#Name", "lexical": "-a", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#Name", "lexical": ".a", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#Name", "lexical": "a\n", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#NCName", "lexical": "a", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#NCName", "lexical": "1a", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#NCName", "lexical": "\u0661a", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#NCName", "lexical": ":a", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#NCName", "lexical": "a:b", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#NCName", "lexical": "_a", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#NCName", "lexical": "a\n", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#dateTime", "lexical": "2026-1-1T1:2:3", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#dateTime", "lexical": "2026-01-01T01:02:03", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#dateTime", "lexical": "2026-01-01T01:02:03.1", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#dateTime", "lexical": "2026-01-01T01:02:03.0000001", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#dateTime", "lexical": "2026-01-01T01:02:03.1000000", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#dateTime", "lexical": "2026-01-01T01:02:03Z", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#dateTime", "lexical": "2026-01-01T01:02:03+99:99", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#dateTime", "lexical": "2026-01-01T01:02:03+00:00junk", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#dateTime", "lexical": "2026-01-01T01:02:03.1junk", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#dateTime", "lexical": "2026-01-01t01:02:03", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#dateTime", "lexical": "2026-01-01T24:00:00", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#dateTime", "lexical": "2026-01-01T01:02:60", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#dateTimeStamp", "lexical": "2026-01-01T01:02:03", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#dateTimeStamp", "lexical": "2026-01-01T01:02:03Z", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#date", "lexical": "2026-1-1", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#date", "lexical": "2026-01-01", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#date", "lexical": "0000-01-01", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#date", "lexical": "2026-01-01+99:99", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#date", "lexical": "2026-01-01+00:00junk", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#time", "lexical": "1:2:3", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#time", "lexical": "01:02:03.1", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#time", "lexical": "01:02:03.0000001", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#time", "lexical": "01:02:03+99:99", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#time", "lexical": "01:02:60", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#gYear", "lexical": "2026", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#gYear", "lexical": "026", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#gYear", "lexical": "0000", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#gYear", "lexical": "2026Z", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#gMonth", "lexical": "1", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#gMonth", "lexical": "01", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#gMonth", "lexical": "--01", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#gMonth", "lexical": "12", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#gMonth", "lexical": "13", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#gDay", "lexical": "1", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#gDay", "lexical": "01", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#gDay", "lexical": "---01", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#gDay", "lexical": "31", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#gDay", "lexical": "32", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#gMonthDay", "lexical": "02-29", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#gMonthDay", "lexical": "--02-29", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#gMonthDay", "lexical": "2-29", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#gMonthDay", "lexical": "02-30", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#gYearMonth", "lexical": "2026-1", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#gYearMonth", "lexical": "2026-01", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#gYearMonth", "lexical": "2026-01Z", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral", "lexical": "<x/>", "expected": "valid"}
+{"datatype": "http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral", "lexical": "<x></x>", "expected": "valid"}
+{"datatype": "http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral", "lexical": "text", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral", "lexical": "<x/><y/>", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral", "lexical": "<?xml version=\"1.0\"?><x/>", "expected": "valid"}
+{"datatype": "http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral", "lexical": "<!DOCTYPE x [<!ENTITY e \"hello\">]><x>&e;</x>", "expected": "valid"}
+{"datatype": "http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral", "lexical": "<x a=\"1\" a=\"2\"/>", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral", "lexical": "hello@en", "expected": "valid"}
+{"datatype": "http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral", "lexical": "hello@", "expected": "valid"}
+{"datatype": "http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral", "lexical": "hello", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral", "lexical": "hello@bad_tag", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral", "lexical": "hello@en\n", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral", "lexical": "line\ntext@en", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/1999/02/22-rdf-syntax-ns#HTML", "lexical": "", "expected": "valid"}
+{"datatype": "http://www.w3.org/1999/02/22-rdf-syntax-ns#HTML", "lexical": "<broken>", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#string", "lexical": "", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#string", "lexical": "a\nb", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#integer", "lexical": "\u001c1\u001c", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#hexBinary", "lexical": "\u001c1\u001c", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#decimal", "lexical": "\u001c1\u001c", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#float", "lexical": "\u001c1\u001c", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#integer", "lexical": "\u001d1\u001d", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#hexBinary", "lexical": "\u001d1\u001d", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#decimal", "lexical": "\u001d1\u001d", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#float", "lexical": "\u001d1\u001d", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#integer", "lexical": "\u001e1\u001e", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#hexBinary", "lexical": "\u001e1\u001e", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#decimal", "lexical": "\u001e1\u001e", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#float", "lexical": "\u001e1\u001e", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#integer", "lexical": "\u001f1\u001f", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#hexBinary", "lexical": "\u001f1\u001f", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#decimal", "lexical": "\u001f1\u001f", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#float", "lexical": "\u001f1\u001f", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#integer", "lexical": "\u00851\u0085", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#hexBinary", "lexical": "\u00851\u0085", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#decimal", "lexical": "\u00851\u0085", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#float", "lexical": "\u00851\u0085", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#integer", "lexical": "\u00a01\u00a0", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#hexBinary", "lexical": "\u00a01\u00a0", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#decimal", "lexical": "\u00a01\u00a0", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#float", "lexical": "\u00a01\u00a0", "expected": "valid"}
+{"datatype": "http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral", "lexical": "<p:x/>", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral", "lexical": "<p:x xmlns:p=\"urn:p\"/>", "expected": "valid"}
+{"datatype": "http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral", "lexical": "<x xmlns:p=\"\"/>", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral", "lexical": "<x a=\"&unknown;\"/>", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral", "lexical": "<x>&unknown;</x>", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral", "lexical": "<!DOCTYPE x SYSTEM \"file:///unused\"><x/>", "expected": "valid"}
+{"datatype": "http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral", "lexical": "<!DOCTYPE x [<!ENTITY e SYSTEM \"file:///unused\">]><x>&e;</x>", "expected": "valid"}
+{"datatype": "http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral", "lexical": "<x xmlns:a=\"urn:p\" xmlns:b=\"urn:p\" a:k=\"1\" b:k=\"2\"/>", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral", "lexical": "<?xml version=\"1.1\"?><x/>", "expected": "valid"}
+{"datatype": "http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral", "lexical": "<?xml version=\"1.0\" encoding=\"UTF-16\"?><x/>", "expected": "valid"}
+{"datatype": "http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral", "lexical": "<x>\u0001</x>", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral", "lexical": "<x>&#x1;</x>", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral", "lexical": "<x/><!---->", "expected": "valid"}
+{"datatype": "http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral", "lexical": "<!--x--><x/>", "expected": "valid"}
+{"datatype": "http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral", "lexical": "<!DOCTYPE other><x/>", "expected": "valid"}
+{"datatype": "http://www.w3.org/1999/02/22-rdf-syntax-ns#XMLLiteral", "lexical": "<!DOCTYPE x [<!ENTITY a \"&b;\"><!ENTITY b \"ok\">]><x>&a;</x>", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#anyURI", "lexical": "http://[fe80::1%eth0]", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#anyURI", "lexical": "http://[v1.a]", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#anyURI", "lexical": "http://x\uff0fy", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#anyURI", "lexical": "http://x\u2100y", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#anyURI", "lexical": "http://[::1]:nonnumeric", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#anyURI", "lexical": "a\n:b", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#anyURI", "lexical": " %20a", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#dateTime", "lexical": "", "expected": "IndexError"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#dateTimeStamp", "lexical": "", "expected": "IndexError"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#date", "lexical": "", "expected": "IndexError"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#time", "lexical": "", "expected": "IndexError"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#hexBinary", "lexical": "0x_F", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#hexBinary", "lexical": "0_xF", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#hexBinary", "lexical": "+0x_\u0661", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#hexBinary", "lexical": "--0", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#hexBinary", "lexical": "0__0", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#decimal", "lexical": "Na_N", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#decimal", "lexical": "I_n_f", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#decimal", "lexical": "s_Na_N", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#boolean", "lexical": "TrUe", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#boolean", "lexical": " false ", "expected": "diagnostic"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#token", "lexical": "a\u001cb", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#token", "lexical": "a\u0085b", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#hexBinary", "lexical": "０xF", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#hexBinary", "lexical": "٠xF", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#hexBinary", "lexical": "０X_F", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#hexBinary", "lexical": "0x_F", "expected": "valid"}
+{"datatype": "http://www.w3.org/2001/XMLSchema#hexBinary", "lexical": "٠_xF", "expected": "diagnostic"}
