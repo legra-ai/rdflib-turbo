@@ -12,6 +12,7 @@ mod intersections;
 mod literal_values;
 mod options;
 mod same_as;
+pub(crate) mod scoped;
 mod traversal;
 
 pub(crate) use delta::expand_delta;
