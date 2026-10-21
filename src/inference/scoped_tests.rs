@@ -208,3 +208,40 @@ fn union_source_keeps_existing_store_inference_behavior() {
             .unwrap()
     );
 }
+
+#[test]
+fn configured_scopes_initialize_axioms_only_at_destination_and_preserve_noops() {
+    for mode in ["rdfs", "owlrl", "both", "none", ""] {
+        let store = Store::new().unwrap();
+        let source: GraphName = iri("urn:source").into();
+        let destination: GraphName = iri("urn:destination").into();
+        let mut transaction = store.start_transaction().unwrap();
+        transaction.insert(&quad("urn:x", TYPE, "urn:C", &source));
+        let request = super::super::InferenceOptions {
+            axiomatic_triples: true,
+            datatype_axioms: true,
+        }
+        .into();
+        super::expand(
+            &mut transaction,
+            mode,
+            Some(source.clone()),
+            destination.clone(),
+            request,
+        )
+        .unwrap();
+        assert_eq!(
+            transaction
+                .quads_for_pattern(None, None, None, Some(source.as_ref()))
+                .count(),
+            1
+        );
+        assert_eq!(
+            transaction
+                .quads_for_pattern(None, None, None, Some(destination.as_ref()))
+                .count()
+                > 0,
+            !matches!(mode, "none" | "")
+        );
+    }
+}

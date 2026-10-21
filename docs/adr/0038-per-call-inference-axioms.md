@@ -35,3 +35,9 @@ flag combination. They retain standard-RDF diagnostics and blank nodes, verify
 destination/delta behavior, memory and durable union container enumeration, and
 rollback after an error in a later inference round. This is not a claim of full
 generalized-RDF or complete reasoner parity.
+
+Scoped Graph and StoreDataset inference forwards the same typed per-call flags
+and caller-owned diagnostic history. Scoped sources initialize options through
+the existing configured expansion path; separate destinations receive axioms
+without becoming rule sources. Transaction failure, caller Decimal status
+publication and provisional diagnostic metadata retain their existing boundaries.

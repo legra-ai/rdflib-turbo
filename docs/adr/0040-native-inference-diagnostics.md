@@ -78,3 +78,14 @@ storage cannot reconstruct RDFLib Memory insertion order from an unordered
 source. This change retains the native initial selection and records that
 parity gap; it introduces no new rejection of reference-accepted input and
 does not claim complete list-order parity.
+
+Scoped Graph and StoreDataset inference binds the reference `err` namespace only
+when the invocation emitted diagnostics, using RDFLib's destination namespace
+collision rules. Implicit calls reuse their existing public transaction boundary:
+native RDF writes remain pending while the staged graph binds its namespace.
+Only successful commit replaces owner namespace metadata and publishes its last
+outcome. Explicit transaction views expose provisional bindings and outcomes;
+rollback or a caught binding failure cannot publish them to the original owner.
+Only namespace metadata is copied, never input triples. This deliberately uses
+an owner session for implicit scoped inference so Python namespace failures can
+abort the native writes; no performance improvement is claimed for that change.

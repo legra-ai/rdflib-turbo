@@ -31,6 +31,13 @@ impl NativeTransaction {
         .map_err(error)
     }
 
+    #[pyo3(signature = (graph=None))]
+    fn fork_graph(&self, py: Python<'_>, graph: Option<String>) -> PyResult<super::NativeStore> {
+        py.detach(|| self.session.execute(Operation::ForkGraph(graph)))
+            .map(super::NativeStore::from_copy_reply)
+            .map_err(error)
+    }
+
     fn count_pattern(&self, py: Python<'_>, source: String) -> PyResult<usize> {
         py.detach(|| match self.session.execute(Operation::Count(source))? {
             Reply::Count(count) => Ok(count),
@@ -183,18 +190,24 @@ impl NativeTransaction {
         publisher.complete(py, result)
     }
 
-    #[pyo3(signature = (mode, source_graph, destination_graph))]
+    #[pyo3(signature = (mode, graphs, *, axiomatic_triples=false, datatype_axioms=false, prior_error_messages=None))]
     fn infer_graph(
         &self,
         py: Python<'_>,
         mode: String,
-        source_graph: Option<String>,
-        destination_graph: String,
+        graphs: (Option<String>, String),
+        axiomatic_triples: bool,
+        datatype_axioms: bool,
+        prior_error_messages: Option<Vec<String>>,
     ) -> PyResult<crate::inference::InferenceOutcome> {
+        let (source_graph, destination_graph) = graphs;
         let (request, publisher) = match crate::inference::InferenceRequest::capture(
             py,
-            None,
-            crate::inference::InferenceOptions::default(),
+            prior_error_messages,
+            crate::inference::InferenceOptions {
+                axiomatic_triples,
+                datatype_axioms,
+            },
         ) {
             Ok(request) => request,
             Err(failure) => {
