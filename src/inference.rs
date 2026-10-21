@@ -221,7 +221,7 @@ pub(crate) fn expand(data: &mut Dataset, mode: &str, options: InferenceOptions) 
     Ok(())
 }
 
-/// Infer over the dataset union and put only new statements in the destination.
+/// Infer over the dataset union and put output in the exact destination.
 /// Original graph contexts remain available to callers and report descriptions.
 pub(crate) fn expand_into(
     data: &mut Dataset,
@@ -232,7 +232,9 @@ pub(crate) fn expand_into(
     let mut union = crate::graph::with_union(data);
     let mut transaction = union.insert_transaction();
     let prepared = expand_configured(&mut transaction, mode, options)?;
+    let publications = delta::literal_publications(data, mode, &destination);
     let mut destination_transaction = data.insert_transaction();
+    for quad in publications.iter() { destination_transaction.insert(quad); }
     for quad in transaction.inserted() {
         destination_transaction.insert(&Quad::new(
             quad.subject,

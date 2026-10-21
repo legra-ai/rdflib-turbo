@@ -43,6 +43,48 @@ fn rdfs_literal_identity_is_published_even_when_present_only_in_source() {
     }
 }
 
+#[test]
+fn legacy_dataset_destination_and_delta_include_literal_identity_publication() {
+    // bounded: the two legacy Dataset entry points and two source quads.
+    for delta in [false, true] {
+        let source: GraphName = iri("urn:source").into();
+        let destination: GraphName = iri("urn:destination").into();
+        let original = Quad::new(
+            iri("urn:s"),
+            iri("urn:label"),
+            Literal::new_simple_literal("label"),
+            source.clone(),
+        );
+        let publication = Quad::new(
+            original.subject.clone(),
+            original.predicate.clone(),
+            original.object.clone(),
+            destination.clone(),
+        );
+        let mut data = oxigraph::model::Dataset::from_iter([
+            original.clone(),
+            quad("urn:s", TYPE, "urn:C", &source),
+        ]);
+        if delta {
+            let additions =
+                super::super::expand_delta(&mut data, "rdfs", Some(destination.clone())).unwrap();
+            assert!(additions.contains(&publication));
+            assert!(!additions.contains(&original));
+            assert!(
+                super::super::expand_delta(&mut data, "rdfs", Some(destination.clone()))
+                    .unwrap()
+                    .iter()
+                    .all(|quad| quad != publication.as_ref())
+            );
+        } else {
+            super::super::expand_into(&mut data, "rdfs", destination.clone()).unwrap();
+        }
+        assert!(data.contains(&original));
+        assert!(data.contains(&publication));
+        assert!(!data.contains(&quad("urn:s", TYPE, "urn:C", &destination)));
+    }
+}
+
 fn iri(value: &str) -> NamedNode {
     NamedNode::new(value).unwrap()
 }
