@@ -22,6 +22,7 @@ use pyo3::prelude::*;
 use crate::{error, format};
 use operations::{Operation, runtime};
 use session::{Control, Session, lock};
+pub(crate) use shacl::PreparedValidation;
 pub(crate) use transaction::NativeTransaction;
 use typed::{QuadInput, TermTuple};
 use typed_view::{Position, PreparedTerm};
@@ -167,7 +168,9 @@ impl NativeStore {
 
     fn transaction(&self, py: Python<'_>) -> PyResult<NativeTransaction> {
         py.detach(|| {
-            Session::start(self.control.clone()).map(|session| NativeTransaction { session })
+            Session::start(self.control.clone()).map(|session| NativeTransaction {
+                session: Arc::new(session),
+            })
         })
         .map_err(error)
     }

@@ -1,5 +1,6 @@
 //! Python transaction handle; its native transaction remains on the session owner.
 use pyo3::prelude::*;
+use std::sync::Arc;
 
 use super::operations::{Operation, Reply};
 use super::session::Session;
@@ -8,7 +9,7 @@ use crate::{error, format};
 
 #[pyclass(frozen, module = "rdflib_turbo._native")]
 pub(crate) struct NativeTransaction {
-    pub(super) session: Session,
+    pub(super) session: Arc<Session>,
 }
 
 #[pymethods]

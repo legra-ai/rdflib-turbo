@@ -2,6 +2,7 @@
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread::{self, JoinHandle};
 
+use oxigraph::model::Dataset;
 use oxigraph::store::{Store, Transaction};
 
 use crate::{Error, Result};
@@ -62,6 +63,7 @@ impl Drop for WriterPermit {
 enum Command {
     Execute(Operation, mpsc::SyncSender<Result<Reply>>),
     Finish(bool, mpsc::SyncSender<Result<Reply>>),
+    AcceptValidation(u64, mpsc::SyncSender<Result<Reply>>),
 }
 
 struct Connection {
@@ -126,7 +128,16 @@ impl Session {
         let mut transaction = store
             .start_transaction()
             .map_err(|e| Error::Runtime(e.to_string()))?;
-        let reply = operation.execute(&mut transaction)?;
+        let reply = match operation.execute(&mut transaction)? {
+            Reply::StagedValidation(staged) => {
+                let (report, additions) = *staged;
+                for quad in &additions {
+                    transaction.insert(quad);
+                }
+                Reply::Validation(Box::new(report))
+            }
+            reply => reply,
+        };
         transaction
             .commit()
             .map_err(|e| Error::Runtime(e.to_string()))?;
@@ -169,6 +180,12 @@ impl Session {
         lock(&self.0)?.call(|reply| Command::Execute(operation, reply))
     }
 
+    pub fn accept_validation(&self, revision: u64) -> Result<()> {
+        lock(&self.0)?
+            .call(|reply| Command::AcceptValidation(revision, reply))
+            .map(|_| ())
+    }
+
     pub fn finish(&self, commit: bool) -> Result<()> {
         let mut connection = lock(&self.0)?;
         if connection.sender.is_none() && !commit {
@@ -181,17 +198,61 @@ impl Session {
 }
 
 fn run(mut transaction: Transaction<'_>, receiver: mpsc::Receiver<Command>) {
+    let mut revision = 0_u64;
+    let mut pending: Option<(u64, Dataset)> = None;
     while let Ok(command) = receiver.recv() {
         match command {
             Command::Execute(operation, reply) => {
-                let result = operation.execute(&mut transaction);
+                let result = (|| {
+                    if pending.is_some() && matches!(operation, Operation::Validate { .. }) {
+                        return Err(Error::Runtime(
+                            "Transaction already has pending validation".into(),
+                        ));
+                    }
+                    if operation.mutates() {
+                        revision = next_revision(revision)?;
+                    }
+                    match operation.execute(&mut transaction)? {
+                        Reply::StagedValidation(staged) => {
+                            let (report, additions) = *staged;
+                            pending = Some((revision, additions));
+                            Ok(Reply::PreparedValidation(Box::new((report, revision))))
+                        }
+                        reply => Ok(reply),
+                    }
+                })();
+                let abort = result.is_err();
+                if reply.send(result).is_err() || abort {
+                    return;
+                }
+            }
+            Command::AcceptValidation(expected, reply) => {
+                let result = (|| {
+                    let (prepared_revision, additions) = pending.take().ok_or_else(|| {
+                        Error::Runtime("Transaction has no pending validation".into())
+                    })?;
+                    if expected != prepared_revision || revision != expected {
+                        return Err(Error::Runtime(
+                            "Transaction changed while processing validation output".into(),
+                        ));
+                    }
+                    revision = next_revision(revision)?;
+                    for quad in &additions {
+                        transaction.insert(quad);
+                    }
+                    Ok(Reply::Done)
+                })();
                 let abort = result.is_err();
                 if reply.send(result).is_err() || abort {
                     return;
                 }
             }
             Command::Finish(commit, reply) => {
-                let result = if commit {
+                let result = if commit && pending.is_some() {
+                    Err(Error::Runtime(
+                        "Cannot commit before validation output is accepted".into(),
+                    ))
+                } else if commit {
                     transaction
                         .commit()
                         .map_err(|e| Error::Runtime(e.to_string()))
@@ -204,6 +265,12 @@ fn run(mut transaction: Transaction<'_>, receiver: mpsc::Receiver<Command>) {
             }
         }
     }
+}
+
+fn next_revision(revision: u64) -> Result<u64> {
+    revision
+        .checked_add(1)
+        .ok_or_else(|| Error::Runtime("Transaction revision exhausted".into()))
 }
 
 #[cfg(test)]

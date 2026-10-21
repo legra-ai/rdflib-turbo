@@ -50,7 +50,9 @@ class Transaction(InferenceOperations):
     @contextmanager
     def _validate_shared_shapes(self, program, settings, inplace):
         try:
-            yield program.validate_transaction(self._native, settings, inplace)
+            prepared = program.prepare_transaction(self._native, settings, inplace)
+            yield prepared.output()
+            prepared.accept()
         except BaseException:
             self._native.rollback()
             raise
