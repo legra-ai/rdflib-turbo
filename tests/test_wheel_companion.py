@@ -138,6 +138,17 @@ def test_isolated_project_receives_real_uv_git_source(tmp_path, monkeypatch):
     url = companion.as_uri()
     declaration = f'{{git="{url}",rev="{revision}"}}'
     manifests(tmp_path, declaration, declaration)
+    manifest = tmp_path / "pyproject.toml"
+    manifest.write_text(
+        manifest.read_text()
+        + '[project]\nname="source-fixture"\nversion="0.0.0"\nrequires-python=">=3.11"\n'
+        + '[dependency-groups]\ncoverage=["pyshacl-turbo==0.5.0"]\n'
+    )
+    subprocess.run(
+        ["uv", "lock", "--project", str(tmp_path), "--python", sys.executable],
+        check=True,
+        capture_output=True,
+    )
     archive = tmp_path / "rdflib_turbo-0.0.0-py3-none-any.whl"
     wheel(archive)
     module = driver()
