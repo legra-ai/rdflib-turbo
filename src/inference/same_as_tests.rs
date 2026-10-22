@@ -284,7 +284,10 @@ fn frozen_closure(data: &mut Dataset) {
         )
         .copied()
         .collect();
-    let prepared = queries(&rules);
+    let mut prepared = queries(&rules);
+    // Compare independent equality implementations against the same non-equality
+    // semantics; the shared catalogue replaced the former local schema clauses.
+    prepared.extend(super::shared::CompiledRule::for_mode("owlrl").unwrap());
     loop {
         let mut pending = Pending::default();
         apply_rules(&transaction, &prepared, &mut pending, false).unwrap();
@@ -333,7 +336,21 @@ fn full_closure_matches_frozen_ordinary_rule_engine() {
         let mut reference = data.clone();
         frozen_closure(&mut reference);
         super::expand(&mut data, "owlrl", Default::default()).unwrap();
-        assert_eq!(data, reference, "closure case {case}");
+        for quad in data
+            .iter()
+            .filter(|quad| !reference.contains(*quad))
+            .take(8)
+        {
+            eprintln!("extra consequence: {quad}");
+        }
+        for quad in reference
+            .iter()
+            .filter(|quad| !data.contains(*quad))
+            .take(8)
+        {
+            eprintln!("missing consequence: {quad}");
+        }
+        assert!(data == reference, "closure case {case}");
     }
 }
 
