@@ -14,7 +14,7 @@ pub(super) trait Graph {
         object: Option<TermRef<'a>>,
     ) -> impl Iterator<Item = Result<Quad>> + 'a;
     fn query(&self, query: PreparedSparqlQuery) -> Result<QueryResults<'_>>;
-    fn insert(&mut self, quad: Quad);
+    fn insert(&mut self, quad: Quad) -> Result<()>;
 
     /// Direct reference publication checks the output scope, not the read union.
     fn contains_destination(&self, quad: &Quad) -> Result<bool> {
@@ -48,8 +48,9 @@ impl Graph for InsertTransaction<'_> {
         Ok(query.on_queryable_dataset(&**self).execute()?)
     }
 
-    fn insert(&mut self, quad: Quad) {
+    fn insert(&mut self, quad: Quad) -> Result<()> {
         InsertTransaction::insert(self, &quad);
+        Ok(())
     }
 }
 
@@ -86,8 +87,9 @@ impl Graph for TransactionGraph<'_, '_> {
         Ok(query.on_transaction(self.transaction).execute()?)
     }
 
-    fn insert(&mut self, mut quad: Quad) {
+    fn insert(&mut self, mut quad: Quad) -> Result<()> {
         quad.graph_name = self.destination.clone();
         self.transaction.insert(&quad);
+        Ok(())
     }
 }

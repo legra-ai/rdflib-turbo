@@ -85,7 +85,7 @@ impl Graph for MeasuredGraph<'_> {
         self.explanations.borrow_mut().push(explanation);
         Ok(result?)
     }
-    fn insert(&mut self, _: Quad) {
+    fn insert(&mut self, _: Quad) -> Result<()> {
         panic!("inference candidates must remain staged");
     }
 }

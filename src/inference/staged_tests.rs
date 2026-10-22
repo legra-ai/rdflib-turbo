@@ -75,6 +75,7 @@ fn frozen(
         .insert(|mut quad| {
             quad.graph_name = destination.clone();
             output.insert(&quad);
+            Ok(())
         })
         .unwrap();
     output.commit();

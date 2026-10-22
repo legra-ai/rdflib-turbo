@@ -21,6 +21,8 @@ SHAPES = """@prefix sh:<http://www.w3.org/ns/shacl#>.
         ("abort_on_first", "false"),
         ("focus_nodes", "[]"),
         ("use_shapes", "[]"),
+        ("inference", '"none"'),
+        ("data_namespaces", "[]"),
     ],
 )
 def test_duplicate_known_settings_fail_without_mutating_receiver(field, value):
@@ -47,6 +49,10 @@ def test_duplicate_known_settings_fail_without_mutating_receiver(field, value):
         '{"allow_infos":0}',
         '{"focus_nodes":[false]}',
         '{"max_rule_iterations":-1}',
+        '{"inference":true}',
+        '{"inference":"OWL"}',
+        '{"data_namespaces":[["ex"]]}',
+        '{"data_namespaces":[["ex",false]]}',
     ],
 )
 def test_nonobjects_malformed_unknown_and_wrong_typed_settings_fail(settings):

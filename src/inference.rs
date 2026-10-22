@@ -7,6 +7,10 @@ use crate::{Error, Result};
 
 mod axioms;
 mod backend;
+mod borrowed;
+pub(crate) use borrowed::BorrowedInference;
+pub(crate) use diagnostic_datatypes::SignalPublisher;
+pub(crate) use outcome::bind_error_namespace;
 mod delta;
 mod diagnostic_datatypes;
 mod diagnostics;
@@ -283,7 +287,7 @@ fn expand_inner(
             }
         }
         for quad in literal_publications.0 {
-            data.insert(quad);
+            data.insert(quad)?;
         }
         literal_values::strings(data)?;
     }
@@ -337,7 +341,7 @@ fn expand_inner(
             });
         }
         for quad in additions.0 {
-            data.insert(quad);
+            data.insert(quad)?;
         }
     }
 }
@@ -359,3 +363,9 @@ pub(crate) fn expand_transaction(
     )
     .map(|(_, outcome)| outcome)
 }
+
+#[cfg(test)]
+mod insertion_failure_tests;
+
+#[cfg(test)]
+mod borrowed_tests;

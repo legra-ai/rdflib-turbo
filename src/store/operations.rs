@@ -12,6 +12,13 @@ use super::pattern::{self, Pattern};
 use super::typed::{self, QuadInput, TermTuple};
 
 pub(super) enum Operation {
+    ValidateInferred {
+        shapes: Arc<CompiledShapes>,
+        options: Options,
+        inplace: bool,
+        graph: Option<oxigraph::model::GraphName>,
+        inference: Box<crate::shacl::InferenceStage>,
+    },
     Validate {
         shapes: Arc<CompiledShapes>,
         options: Options,
@@ -82,6 +89,7 @@ impl Operation {
             | Self::Infer(..)
             | Self::InferGraph { .. } => true,
             Self::Validate { .. }
+            | Self::ValidateInferred { .. }
             | Self::Match(_)
             | Self::Count(_)
             | Self::QueryGraph(..)
@@ -98,6 +106,21 @@ impl Operation {
 
     pub fn execute(self, transaction: &mut Transaction<'_>) -> Result<Reply> {
         match self {
+            Self::ValidateInferred {
+                shapes,
+                options,
+                inplace,
+                graph,
+                inference,
+            } => super::shacl_inference::validate(
+                &*transaction,
+                &shapes,
+                options,
+                inplace,
+                graph,
+                *inference,
+            )
+            .map(|output| Reply::StagedValidation(Box::new(output))),
             Self::Validate {
                 shapes,
                 options,
@@ -122,6 +145,7 @@ impl Operation {
                     report,
                     super::shacl::ValidationDelta {
                         data: additions,
+                        inference: Dataset::new(),
                         graph,
                     },
                 ))))

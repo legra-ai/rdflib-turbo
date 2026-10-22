@@ -17,20 +17,62 @@ impl InferenceOutcome {
         if self.error_messages.is_empty() {
             return;
         }
-        let mut prefix = "err".to_owned();
-        let mut suffix = 0;
-        loop {
-            match namespaces.iter().find(|(bound, _)| bound == &prefix) {
-                Some((_, namespace)) if namespace == ERROR_NAMESPACE => return,
-                Some(_) => {
-                    suffix += 1;
-                    prefix = format!("err{suffix}");
-                }
-                None => {
-                    namespaces.push((prefix, ERROR_NAMESPACE.to_owned()));
-                    return;
-                }
+        bind_error_namespace(namespaces);
+    }
+}
+
+pub(crate) fn bind_error_namespace(namespaces: &mut Vec<(String, String)>) {
+    let mut prefix = "err".to_owned();
+    let mut suffix = 0;
+    loop {
+        match namespaces.iter().find(|(bound, _)| bound == &prefix) {
+            Some((_, namespace)) if namespace == ERROR_NAMESPACE => return,
+            Some(_) => {
+                suffix += 1;
+                prefix = format!("err{suffix}");
             }
+            None => {
+                namespaces.retain(|(_, namespace)| namespace != ERROR_NAMESPACE);
+                namespaces.push((prefix, ERROR_NAMESPACE.to_owned()));
+                return;
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn diagnostic_binding_matches_rdflib_prefix_collision_and_rebinding() {
+        for (mut namespaces, expected) in [
+            (vec![], vec![("err".into(), ERROR_NAMESPACE.into())]),
+            (
+                vec![("err".into(), "urn:other:".into())],
+                vec![
+                    ("err".into(), "urn:other:".into()),
+                    ("err1".into(), ERROR_NAMESPACE.into()),
+                ],
+            ),
+            (
+                vec![
+                    ("err".into(), "urn:other:".into()),
+                    ("err1".into(), "urn:more:".into()),
+                ],
+                vec![
+                    ("err".into(), "urn:other:".into()),
+                    ("err1".into(), "urn:more:".into()),
+                    ("err2".into(), ERROR_NAMESPACE.into()),
+                ],
+            ),
+            (
+                vec![("custom".into(), ERROR_NAMESPACE.into())],
+                vec![("err".into(), ERROR_NAMESPACE.into())],
+            ),
+        ] {
+            bind_error_namespace(&mut namespaces);
+            assert_eq!(namespaces, expected);
         }
     }
 }

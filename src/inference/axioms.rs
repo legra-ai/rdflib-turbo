@@ -214,7 +214,7 @@ pub(super) fn owl(
         additions.push(data, quad)?;
     }
     for quad in additions.0 {
-        data.insert(quad);
+        data.insert(quad)?;
     }
     Ok(())
 }

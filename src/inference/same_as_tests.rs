@@ -76,7 +76,7 @@ impl Graph for Measured<'_> {
         self.work.set(self.work.get() + explanation.plan.work());
         Ok(query.on_queryable_dataset(self.data).execute()?)
     }
-    fn insert(&mut self, _: Quad) {
+    fn insert(&mut self, _: Quad) -> Result<()> {
         panic!("round must not mutate its read snapshot")
     }
 }
@@ -294,7 +294,7 @@ fn frozen_closure(data: &mut Dataset) {
             break;
         }
         for quad in pending.0 {
-            Graph::insert(&mut transaction, quad);
+            Graph::insert(&mut transaction, quad).unwrap();
         }
     }
     transaction.commit();

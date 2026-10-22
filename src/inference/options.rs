@@ -62,7 +62,7 @@ impl<'a> PreparedOptions<'a> {
         })
     }
 
-    pub(super) fn insert(&self, mut insert: impl FnMut(Quad)) -> Result<()> {
+    pub(super) fn insert(&self, mut insert: impl FnMut(Quad) -> Result<()>) -> Result<()> {
         for (enabled, rdfs, owl) in [
             (
                 self.options.axiomatic_triples,
@@ -85,7 +85,7 @@ impl<'a> PreparedOptions<'a> {
                     {
                         insert(quad.map_err(|error| {
                             Error::Runtime(format!("Invalid built-in axioms: {error}"))
-                        })?);
+                        })?)?;
                     }
                 }
             }
@@ -103,7 +103,7 @@ impl<'a> PreparedOptions<'a> {
                     predicate,
                     object,
                     GraphName::DefaultGraph,
-                ));
+                ))?;
             }
         }
         Ok(())

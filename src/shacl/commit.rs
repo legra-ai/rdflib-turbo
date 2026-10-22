@@ -9,6 +9,8 @@ use oxigraph::model::Dataset;
 
 pub(super) struct Pending {
     additions: Option<Dataset>,
+    inference: Option<Dataset>,
+    diagnostics: bool,
     expected_revision: u64,
 }
 
@@ -16,6 +18,8 @@ impl Pending {
     pub(super) fn new(additions: Dataset, expected_revision: u64) -> Self {
         Self {
             additions: Some(additions),
+            inference: None,
+            diagnostics: false,
             expected_revision,
         }
     }
@@ -23,6 +27,22 @@ impl Pending {
     pub(super) fn readonly(expected_revision: u64) -> Self {
         Self {
             additions: None,
+            inference: None,
+            diagnostics: false,
+            expected_revision,
+        }
+    }
+
+    pub(super) fn inferred(
+        additions: Dataset,
+        inference: Dataset,
+        diagnostics: bool,
+        expected_revision: u64,
+    ) -> Self {
+        Self {
+            additions: Some(additions),
+            inference: Some(inference),
+            diagnostics,
             expected_revision,
         }
     }
@@ -44,6 +64,12 @@ impl Pending {
             if let Some(additions) = self.additions {
                 let revision = current.next_revision().map_err(crate::error)?;
                 current.extend(additions.iter());
+                if let Some(inference) = self.inference {
+                    current.extend(inference.iter());
+                }
+                if self.diagnostics {
+                    crate::inference::bind_error_namespace(&mut current.namespaces);
+                }
                 current.revision = revision;
             }
             Ok(())
@@ -67,6 +93,13 @@ pub(super) struct Prepared<T> {
 }
 
 impl<T> Prepared<T> {
+    pub(super) fn with_pending(output: T, warnings: Vec<String>, pending: Option<Pending>) -> Self {
+        Self {
+            output,
+            warnings,
+            pending,
+        }
+    }
     pub(super) fn ready(output: T, warnings: Vec<String>) -> Self {
         Self {
             output,

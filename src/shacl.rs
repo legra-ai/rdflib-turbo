@@ -1,18 +1,21 @@
 //! SHACL executes where its dataset or transaction is owned. No Rust pointer crosses a DSO.
 use std::collections::HashMap;
-use std::fmt;
 use std::sync::Arc;
 
 use oxigraph::io::RdfFormat;
-use oxigraph::model::{Dataset, GraphNameRef, NamedNode, Term, TermRef};
+use oxigraph::model::{Dataset, GraphNameRef, TermRef};
 use pyo3::exceptions::{PyNotImplementedError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
-use pyshacl_turbo_engine::{CompiledShapes, Error, Options, ValidationReport, parse_graph};
-use serde::de::{MapAccess, Visitor, value::MapAccessDeserializer};
-use serde::{Deserialize, Deserializer};
+use pyshacl_turbo_engine::{CompiledShapes, Error, ValidationReport, parse_graph};
 
 use crate::NativeDataset;
 use crate::store::{NativeStore, NativeTransaction};
+
+mod settings;
+pub(crate) use settings::InferenceStage;
+#[cfg(test)]
+pub(crate) use settings::Mode as InferenceMode;
+use settings::Settings;
 
 mod report;
 pub(crate) use report::Report;
@@ -20,6 +23,7 @@ pub(crate) use report::Report;
 mod commit;
 mod dataset_validation;
 mod expansion;
+mod inferred_dataset;
 
 pyo3::create_exception!(_native, SharedValidationFailure, PyValueError);
 
@@ -29,61 +33,6 @@ pub(crate) fn error(error: Error) -> PyErr {
         Error::Unsupported(_) => PyNotImplementedError::new_err(error.to_string()),
         Error::Invalid(_) => PyValueError::new_err(error.to_string()),
         _ => PyRuntimeError::new_err(error.to_string()),
-    }
-}
-
-#[derive(Deserialize)]
-#[serde(default, deny_unknown_fields)]
-struct Settings {
-    iterate_rules: bool,
-    max_rule_iterations: usize,
-    max_validation_depth: usize,
-    allow_infos: bool,
-    allow_warnings: bool,
-    abort_on_first: bool,
-    focus_nodes: Vec<String>,
-    use_shapes: Vec<String>,
-}
-
-impl Default for Settings {
-    fn default() -> Self {
-        let defaults = Options::default();
-        Self {
-            iterate_rules: defaults.iterate_rules,
-            max_rule_iterations: defaults.max_rule_iterations,
-            max_validation_depth: defaults.max_validation_depth,
-            allow_infos: defaults.allow_infos,
-            allow_warnings: defaults.allow_warnings,
-            abort_on_first: defaults.abort_on_first,
-            focus_nodes: Vec::new(),
-            use_shapes: Vec::new(),
-        }
-    }
-}
-
-impl Settings {
-    fn options(self) -> PyResult<Options> {
-        fn nodes(values: Vec<String>) -> PyResult<Vec<Term>> {
-            values
-                .into_iter()
-                .map(|value| {
-                    NamedNode::new(value)
-                        .map(Term::from)
-                        .map_err(|e| PyValueError::new_err(e.to_string()))
-                })
-                .collect()
-        }
-        Ok(Options {
-            iterate_rules: self.iterate_rules,
-            max_rule_iterations: self.max_rule_iterations,
-            max_validation_depth: self.max_validation_depth,
-            allow_infos: self.allow_infos,
-            allow_warnings: self.allow_warnings,
-            abort_on_first: self.abort_on_first,
-            focus_nodes: nodes(self.focus_nodes)?,
-            use_shapes: nodes(self.use_shapes)?,
-            namespaces: Vec::new(),
-        })
     }
 }
 
@@ -144,30 +93,6 @@ fn output(report: ValidationReport) -> PyResult<Output> {
     Report::try_new(report)
         .map(Report::into_output)
         .map_err(crate::error)
-}
-
-struct SettingsMap;
-impl<'de> Visitor<'de> for SettingsMap {
-    type Value = Settings;
-    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("a validation settings object")
-    }
-    fn visit_map<A: MapAccess<'de>>(self, map: A) -> std::result::Result<Settings, A::Error> {
-        Settings::deserialize(MapAccessDeserializer::new(map))
-    }
-}
-
-impl Settings {
-    fn parse(source: &str) -> PyResult<Options> {
-        let mut parser = serde_json::Deserializer::from_str(source);
-        let settings = parser
-            .deserialize_map(SettingsMap)
-            .map_err(|error| PyValueError::new_err(error.to_string()))?;
-        parser
-            .end()
-            .map_err(|error| PyValueError::new_err(error.to_string()))?;
-        settings.options()
-    }
 }
 
 #[pyclass(frozen)]
@@ -239,11 +164,35 @@ impl SharedShapes {
         inplace: bool,
         graph: Option<&str>,
     ) -> PyResult<Output> {
-        let options = Settings::parse(settings)?;
+        let captured = Settings::capture(py, settings)?;
         let graph = graph
             .map(crate::store::parse_graph_scope)
             .transpose()
             .map_err(crate::error)?;
+        let settings::Captured {
+            options,
+            inference,
+            publisher,
+        } = captured;
+        if let Some(inference) = inference {
+            if inplace {
+                let result = py.detach(|| {
+                    store.prepare_inferred_validation(self.inner.clone(), options, graph, inference)
+                });
+                let mut prepared = settings::Captured::complete(publisher, py, result)?;
+                let output = prepared.output()?;
+                prepared.accept(py)?;
+                return Ok(output);
+            }
+            return settings::Captured::complete(
+                publisher,
+                py,
+                py.detach(|| {
+                    store.validate_inferred_readonly(&self.inner, options, graph, inference)
+                }),
+            )
+            .map(Report::into_output);
+        }
         py.detach(|| store.validate_shapes(self.inner.clone(), options, inplace, graph))
             .map(Report::into_output)
             .map_err(crate::error)
@@ -258,14 +207,14 @@ impl SharedShapes {
         inplace: bool,
         graph: Option<&str>,
     ) -> PyResult<crate::store::PreparedValidation> {
-        let parsed = Settings::parse(settings).and_then(|options| {
+        let parsed = Settings::capture(py, settings).and_then(|captured| {
             graph
                 .map(crate::store::parse_graph_scope)
                 .transpose()
-                .map(|graph| (options, graph))
+                .map(|graph| (captured, graph))
                 .map_err(crate::error)
         });
-        let (options, graph) = match parsed {
+        let (captured, graph) = match parsed {
             Ok(parsed) => parsed,
             Err(error) => {
                 py.detach(|| transaction.abort_validation())
@@ -273,8 +222,22 @@ impl SharedShapes {
                 return Err(error);
             }
         };
-        py.detach(|| transaction.prepare_validation(self.inner.clone(), options, inplace, graph))
-            .map_err(crate::error)
+        let settings::Captured {
+            options,
+            inference,
+            publisher,
+        } = captured;
+        let result = py.detach(|| match inference {
+            Some(inference) => transaction.prepare_inferred_validation(
+                self.inner.clone(),
+                options,
+                inplace,
+                graph,
+                inference,
+            ),
+            None => transaction.prepare_validation(self.inner.clone(), options, inplace, graph),
+        });
+        settings::Captured::complete(publisher, py, result)
     }
 
     fn validate_transaction(
@@ -284,17 +247,10 @@ impl SharedShapes {
         settings: &str,
         inplace: bool,
     ) -> PyResult<Output> {
-        let options = match Settings::parse(settings) {
-            Ok(options) => options,
-            Err(error) => {
-                py.detach(|| transaction.abort_validation())
-                    .map_err(crate::error)?;
-                return Err(error);
-            }
-        };
-        py.detach(|| transaction.validate_shapes(self.inner.clone(), options, inplace, None))
-            .map(Report::into_output)
-            .map_err(crate::error)
+        let mut prepared = self.prepare_transaction(py, transaction, settings, inplace, None)?;
+        let output = prepared.output()?;
+        prepared.accept(py)?;
+        Ok(output)
     }
 }
 
@@ -322,7 +278,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
 mod tests {
     use std::collections::HashSet;
 
-    use oxigraph::model::{BlankNode, GraphName, Literal, Quad};
+    use oxigraph::model::{BlankNode, GraphName, Literal, NamedNode, Quad};
 
     use super::*;
 
