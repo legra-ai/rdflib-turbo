@@ -21,6 +21,8 @@ mod shared;
 #[cfg(test)]
 mod shared_rule_tests;
 mod staged;
+#[cfg(test)]
+mod staged_tests;
 mod traversal;
 
 pub(crate) use delta::expand_delta;
