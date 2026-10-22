@@ -213,14 +213,12 @@ def test_boolean_membership_accepts_list_pattern_and_case_insensitive_language()
 @pytest.mark.parametrize(
     "slot,invalid",
     [
-        (0, ("literal", "x", None, None)),
-        (1, ("bnode", "p", None, None)),
         (2, ("literal", "x", "urn:datatype", "en")),
         (3, ("literal", "x", None, None)),
         (0, ("uri", "x", "urn:datatype", None)),
     ],
 )
-def test_boolean_membership_validates_term_positions(slot, invalid):
+def test_boolean_membership_validates_metadata_and_graph_position(slot, invalid):
     graph = Graph().add(TRIPLE)
     args = [*map(encode, TRIPLE), None]
     args[slot] = invalid
@@ -244,10 +242,26 @@ def test_failed_native_boolean_read_propagates_without_row_retry(monkeypatch):
 
 
 def test_membership_semantic_error_still_aborts_explicit_owner():
+    class InvalidLanguage(Literal):
+        @property
+        def language(self):
+            return "!"
+
     graph = Graph().add(TRIPLE)
     with pytest.raises(RuntimeError, match="closed"):
         with graph.transaction() as transaction:
             transaction.add(ABSENT)
             with pytest.raises(ValueError):
-                _ = (Literal("invalid subject"), PREDICATE, OBJECT) in transaction
+                _ = (SUBJECT, PREDICATE, InvalidLanguage("invalid language")) in transaction
     assert ABSENT not in graph
+
+
+@pytest.mark.parametrize(
+    "slot,value", [(0, ("literal", "x", None, None)), (1, ("bnode", "p", None, None))]
+)
+def test_boolean_membership_impossible_positions_are_absent(slot, value):
+    graph = Graph().add(TRIPLE)
+    args = [*map(encode, TRIPLE), None]
+    args[slot] = value
+    assert not graph.store.backend._native.contains_terms(*args)
+    assert TRIPLE in graph

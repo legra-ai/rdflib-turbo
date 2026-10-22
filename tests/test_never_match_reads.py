@@ -1,5 +1,7 @@
 """Impossible standard-RDF read positions are empty after complete input validation."""
 
+import json
+
 import pytest
 from rdflib import BNode, Literal, URIRef
 from rdflib import Graph as ReferenceGraph
@@ -137,3 +139,19 @@ def test_later_metadata_reentry_can_close_impossible_pattern_owner(membership):
         else:
             list(graph.triples(pattern))
     assert events == ["datatype", "language"]
+
+
+@pytest.mark.parametrize(
+    "subject,predicate", [(Literal("subject"), None), (None, BNode("predicate"))]
+)
+def test_impossible_json_reads_do_not_abort_pending_writes(subject, predicate):
+    from rdflib_turbo._operations import _encode
+
+    graph = Graph()
+    source = json.dumps([_encode(subject), _encode(predicate), None, None])
+    with graph.transaction() as pending:
+        pending.add((SUBJECT, PREDICATE, OBJECT))
+        native = pending.store.backend._native
+        assert json.loads(native.match_quads(source)) == []
+        assert native.count_pattern(source) == 0
+    assert set(graph) == {(SUBJECT, PREDICATE, OBJECT)}
