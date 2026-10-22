@@ -3,7 +3,9 @@
 use datalog_structural_model::{Atom, BuiltinFilter, Literal, Rule, Term};
 use oxigraph::model::NamedNodeRef;
 use oxigraph::sparql::{PreparedSparqlQuery, SparqlEvaluator};
-use rdf_reasoning::{Owlrl762RuleId, RuleId::*, TRIPLE_RELATION};
+use rdf_reasoning::{
+    ListRuleId, Owlrl762RuleId, RDF_LIST_MEMBER_RELATION, RuleId::*, TRIPLE_RELATION,
+};
 use spargebra::term::Variable;
 
 use crate::{Error, Result};
@@ -19,7 +21,7 @@ impl CompiledRule {
         let mut body = String::new();
         for literal in &rule.body {
             match literal {
-                Literal::Positive(atom) => body.push_str(&Self::atom(atom)?),
+                Literal::Positive(atom) => body.push_str(&Self::body_atom(atom)?),
                 Literal::Filter(BuiltinFilter::Ne(left, right)) => {
                     body.push_str(&format!(
                         "FILTER(!sameTerm({}, {})) ",
@@ -39,6 +41,22 @@ impl CompiledRule {
             .parse_query(&format!("CONSTRUCT {{ {head} }} WHERE {{ {body} }}"))
             .map(Self)
             .map_err(|error| Error::Runtime(format!("Invalid shared inference rule: {error}")))
+    }
+
+    fn body_atom(atom: &Atom) -> Result<String> {
+        if atom.predicate.as_str() != RDF_LIST_MEMBER_RELATION {
+            return Self::atom(atom);
+        }
+        if atom.terms.len() != 2 {
+            return Err(Error::Unsupported(
+                "Shared list membership requires exactly two terms".into(),
+            ));
+        }
+        Ok(format!(
+            "{} <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>*/<http://www.w3.org/1999/02/22-rdf-syntax-ns#first> {} . ",
+            Self::term(&atom.terms[0])?,
+            Self::term(&atom.terms[1])?
+        ))
     }
 
     fn atom(atom: &Atom) -> Result<String> {
@@ -134,6 +152,14 @@ impl CompiledRule {
             .collect::<Result<Vec<_>>>()?;
         if mode != "rdfs" {
             for id in Owlrl762RuleId::ALL {
+                queries.push(Self::try_new(&id.definition())?.into_query());
+            }
+            for id in ListRuleId::ALL {
+                // The native property path supplies the exact auxiliary relation;
+                // it does not materialize membership facts in the caller's graph.
+                if matches!(id, ListRuleId::MemberFirst | ListRuleId::MemberRest) {
+                    continue;
+                }
                 queries.push(Self::try_new(&id.definition())?.into_query());
             }
         }

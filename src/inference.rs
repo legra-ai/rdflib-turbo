@@ -65,18 +65,6 @@ const OWL_RULES: &[(&str, &str)] = &[
     ),
     ("?s ?q ?o", "?p owl:sameAs ?q . ?s ?p ?o"),
     (
-        "?x a ?member",
-        "?c owl:intersectionOf ?list . ?list rdf:rest*/rdf:first ?member . ?x a ?c",
-    ),
-    (
-        "?x a ?c",
-        "?c owl:unionOf ?list . ?list rdf:rest*/rdf:first ?member . ?x a ?member",
-    ),
-    (
-        "?x a ?c",
-        "?c owl:oneOf ?list . ?list rdf:rest*/rdf:first ?x",
-    ),
-    (
         "?y owl:sameAs ?z",
         "?r owl:onProperty ?p ; owl:maxCardinality ?n . FILTER(?n = 1) ?x a ?r ; ?p ?y, ?z",
     ),
@@ -87,14 +75,6 @@ const OWL_RULES: &[(&str, &str)] = &[
     (
         "?y owl:sameAs ?z",
         "?r owl:onProperty ?p ; owl:maxQualifiedCardinality ?n ; owl:onClass owl:Thing . FILTER(?n = 1) ?x a ?r ; ?p ?y, ?z",
-    ),
-    (
-        "?c rdfs:subClassOf ?member",
-        "?c owl:intersectionOf ?list . ?list rdf:rest*/rdf:first ?member",
-    ),
-    (
-        "?member rdfs:subClassOf ?c",
-        "?c owl:unionOf ?list . ?list rdf:rest*/rdf:first ?member",
     ),
 ];
 

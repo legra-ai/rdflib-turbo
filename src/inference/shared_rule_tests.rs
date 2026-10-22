@@ -221,3 +221,94 @@ fn shared_owl_mode_executes_restrictions_and_reference_schema() {
         "versioned rdf:Property consequence missing"
     );
 }
+
+#[test]
+fn shared_list_relation_reaches_cycles_and_branches_without_crossing_lists() {
+    let variable = |name| Term::Variable(VariableSymbol::new(name));
+    let constant = |name| Term::Constant(ConstantSymbol::new(name));
+    let rule = datalog_structural_model::Rule::try_new(
+        Atom {
+            predicate: PredicateSymbol::new(rdf_reasoning::TRIPLE_RELATION),
+            terms: vec![
+                variable("member"),
+                constant("urn:selected"),
+                constant("urn:yes"),
+            ],
+        },
+        vec![
+            Literal::Positive(Atom {
+                predicate: PredicateSymbol::new(rdf_reasoning::TRIPLE_RELATION),
+                terms: vec![
+                    constant("urn:owner"),
+                    constant("urn:list"),
+                    variable("list"),
+                ],
+            }),
+            Literal::Positive(Atom {
+                predicate: PredicateSymbol::new("urn:rdf-reasoning:list-member"),
+                terms: vec![variable("list"), variable("member")],
+            }),
+        ],
+    )
+    .unwrap();
+    let mut dataset = Dataset::new();
+    let first = "http://www.w3.org/1999/02/22-rdf-syntax-ns#first";
+    let rest = "http://www.w3.org/1999/02/22-rdf-syntax-ns#rest";
+    for (subject, predicate, object) in [
+        ("urn:owner", "urn:list", "urn:l"),
+        ("urn:l", first, "urn:A"),
+        ("urn:l", rest, "urn:tail"),
+        ("urn:l", rest, "urn:branch"),
+        ("urn:tail", first, "urn:B"),
+        ("urn:tail", rest, "urn:l"),
+        ("urn:branch", first, "urn:C"),
+        ("urn:other", first, "urn:unrelated"),
+    ] {
+        dataset.insert(&Quad::new(
+            NamedNode::new(subject).unwrap(),
+            NamedNode::new(predicate).unwrap(),
+            NamedNode::new(object).unwrap(),
+            GraphName::DefaultGraph,
+        ));
+    }
+    let query = super::shared::CompiledRule::try_new(&rule).unwrap();
+    let QueryResults::Graph(triples) = query
+        .into_query()
+        .on_queryable_dataset(&dataset)
+        .execute()
+        .unwrap()
+    else {
+        panic!("expected graph result")
+    };
+    // bounded: the three reachable members in this eight-triple fixture.
+    let subjects = triples
+        .map(|triple| triple.unwrap().subject.to_string())
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        subjects,
+        ["<urn:A>", "<urn:B>", "<urn:C>"].map(str::to_owned).into()
+    );
+}
+
+#[test]
+fn shared_list_consumers_compile_but_auxiliary_heads_and_bad_arity_fail() {
+    for id in rdf_reasoning::ListRuleId::ALL {
+        let result = super::shared::CompiledRule::try_new(&id.definition());
+        assert_eq!(
+            result.is_ok(),
+            !matches!(
+                id,
+                rdf_reasoning::ListRuleId::MemberFirst | rdf_reasoning::ListRuleId::MemberRest
+            )
+        );
+    }
+    let mut rule = rdf_reasoning::ListRuleId::ClsOo.definition();
+    let Literal::Positive(member) = &mut rule.body[1] else {
+        panic!("list membership atom")
+    };
+    member
+        .terms
+        .push(Term::Constant(ConstantSymbol::new("urn:extra")));
+    assert!(rule.is_safe());
+    assert!(super::shared::CompiledRule::try_new(&rule).is_err());
+}
