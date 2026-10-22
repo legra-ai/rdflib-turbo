@@ -1,4 +1,6 @@
-use datalog_structural_model::{Atom, Literal, PredicateSymbol, Term, VariableSymbol};
+use datalog_structural_model::{
+    Atom, ConstantSymbol, Literal, PredicateSymbol, Term, VariableSymbol,
+};
 use oxigraph::model::{Dataset, GraphName, NamedNode, Quad};
 use oxigraph::sparql::QueryResults;
 use rdf_reasoning::RuleId;
@@ -52,5 +54,33 @@ fn shared_adapter_rejects_unimplemented_semantics_before_execution() {
         predicate: PredicateSymbol::new("urn:p"),
         terms: vec![],
     }));
+    assert!(super::shared::CompiledRule::try_new(&rule).is_err());
+}
+
+#[test]
+fn shared_adapter_validates_terms_even_in_safe_rules() {
+    let mut rule = RuleId::Rdfs2.definition();
+    rule.head.terms.pop();
+    assert!(super::shared::CompiledRule::try_new(&rule).is_err());
+
+    rule = RuleId::Rdfs2.definition();
+    let injected = Term::Variable(VariableSymbol::new("s } WHERE { ?x ?y ?z"));
+    rule.head.terms[0] = injected.clone();
+    let Literal::Positive(atom) = &mut rule.body[1] else {
+        panic!("catalogue positive atom")
+    };
+    atom.terms[0] = injected;
+    assert!(rule.is_safe());
+    assert!(super::shared::CompiledRule::try_new(&rule).is_err());
+
+    rule = RuleId::Rdfs2.definition();
+    rule.head.terms[1] = Term::Constant(ConstantSymbol::new("not an IRI"));
+    assert!(super::shared::CompiledRule::try_new(&rule).is_err());
+
+    rule = RuleId::Rdfs2.definition();
+    rule.head.terms[0] = Term::Skolem {
+        name: ConstantSymbol::new("urn:skolem"),
+        args: vec![],
+    };
     assert!(super::shared::CompiledRule::try_new(&rule).is_err());
 }
