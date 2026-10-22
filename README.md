@@ -139,8 +139,18 @@ Pending views see the same transaction's writes; normal exit commits statements
 and namespace changes together, while exceptions abort them. Native operation
 failures abort even when caught inside the scope. Nested transactions and manual
 commit()/rollback() on the RDFLib adapter are unsupported. Parsing is atomic and
-uses RDFLib input-source handling followed by the native parser; parser-specific
-keyword options are rejected.
+uses RDFLib input-source handling followed by the native parser. JSON-LD accepts
+`version` and `base`; ordinary string/file input in the default 1.1 mode uses
+the native parser. Input sources exposing JSON-LD HTTP context-link metadata
+execute the selected RDFLib plugin so that metadata is preserved.
+Options such as `context`, `skolemize`, `encoding`, `extract_all_scripts`, and
+version 1.0 execute the selected RDFLib JSON-LD parser directly into the same
+native transaction. Plugin errors abort its writes and namespace changes.
+Unknown options, unsupported versions, generalized RDF output, and keyword
+options for other formats raise explicit errors. Plugin parsing has its own
+Python execution cost. JSON-LD preserves explicitly supplied blank-node IDs;
+generated IDs remain fresh. Other document syntaxes, including Turtle, scope
+blank-node labels to each parse operation.
 
 SPARQL uses the native processor. Queries accept strings or supported prepared
 RDFLib queries; updates require strings. Both accept RDFLib `initBindings`,

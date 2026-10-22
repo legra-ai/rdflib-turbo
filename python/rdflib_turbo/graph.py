@@ -21,6 +21,7 @@ from ._inference import GraphInference
 from ._namespaces import NamespaceBindings
 from ._operations import _encode, _term
 from ._ownership import GraphOwnership
+from ._parsing import JsonLdOptions
 from ._reads import ProjectedReads, encode, encode_graph, scoped_rows
 from ._validation import GraphValidation
 from .store import Store, Transaction
@@ -294,29 +295,37 @@ class Graph(GraphOwnership, GraphInference, GraphValidation, ProjectedReads, RDF
     def parse(
         self, source=None, publicID=None, format=None, location=None, file=None, data=None, **args
     ):
-        if args:
-            raise TypeError(f"Unsupported native parser options: {sorted(args)}")
         if isinstance(self.store.backend, Transaction):
             try:
                 input_source = create_input_source(
-                    source=source, publicID=publicID, location=location, file=file, data=data
+                    source=source,
+                    publicID=publicID,
+                    location=location,
+                    file=file,
+                    data=data,
+                    format=format,
                 )
                 try:
-                    stream = input_source.getCharacterStream() or input_source.getByteStream()
-                    document = stream.read()
-                    if isinstance(document, bytes):
-                        document = document.decode("utf-8")
                     rdf_format = (
                         format
                         or input_source.content_type
                         or guess_format(input_source.getPublicId())
                         or "turtle"
                     )
+                    options = JsonLdOptions(
+                        rdf_format, args, publicID or input_source.getPublicId() or self.base
+                    )
+                    if options.parse_plugin(input_source, self):
+                        return self
+                    stream = input_source.getCharacterStream() or input_source.getByteStream()
+                    document = stream.read()
+                    if isinstance(document, bytes):
+                        document = document.decode("utf-8")
                     prefixes = json.loads(
                         self.store.backend._native.load_graph(
                             document,
-                            rdf_format,
-                            publicID or input_source.getPublicId() or self.base,
+                            options.format,
+                            options.base,
                             "" if isinstance(self, StoreDataset) else self.store._graph(self),
                             isinstance(self, StoreDataset),
                         )
@@ -331,7 +340,7 @@ class Graph(GraphOwnership, GraphInference, GraphValidation, ProjectedReads, RDF
                 raise
         else:
             with self.transaction() as graph:
-                graph.parse(source, publicID, format, location, file, data)
+                graph.parse(source, publicID, format, location, file, data, **args)
         return self
 
     @contextmanager
