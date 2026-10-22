@@ -348,7 +348,7 @@ fn expand_inner(
             });
         }
         for quad in additions.0 {
-            data.insert(quad);
+            data.insert_derived(quad);
         }
     }
 }

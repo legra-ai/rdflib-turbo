@@ -176,11 +176,14 @@ impl Graph for StagedDataset<'_> {
     }
 
     fn contains(&self, quad: &Quad) -> Result<bool> {
-        Ok(self.source_contains_triple(quad.as_ref())
-            || self.output.additions.contains(QuadRef {
-                graph_name: GraphNameRef::DefaultGraph,
-                ..quad.as_ref()
-            }))
+        Ok(self.output.additions.contains(QuadRef {
+            graph_name: GraphNameRef::DefaultGraph,
+            ..quad.as_ref()
+        }) || self.source_contains_triple(quad.as_ref()))
+    }
+
+    fn insert_derived(&mut self, quad: Quad) {
+        self.output.additions.insert(&quad);
     }
 
     fn insert(&mut self, mut quad: Quad) {
