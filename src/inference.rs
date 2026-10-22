@@ -325,7 +325,7 @@ fn expand_inner(
         }
     }
     // bounded: one prepared query per built-in rule.
-    let mut queries = shared::queries(mode)?;
+    let mut queries = shared::CompiledRule::for_mode(mode)?;
     queries.extend(
         rules
             .iter()

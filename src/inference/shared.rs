@@ -3,7 +3,7 @@
 use datalog_structural_model::{Atom, Literal, Rule, Term};
 use oxigraph::model::NamedNodeRef;
 use oxigraph::sparql::{PreparedSparqlQuery, SparqlEvaluator};
-use rdf_reasoning::{RuleId, TRIPLE_RELATION};
+use rdf_reasoning::{RuleId::*, TRIPLE_RELATION};
 use spargebra::term::Variable;
 
 use crate::{Error, Result};
@@ -64,23 +64,25 @@ impl CompiledRule {
     }
 }
 
-pub(super) fn queries(mode: &str) -> Result<Vec<PreparedSparqlQuery>> {
-    use RuleId::*;
-    // bounded: twelve RDFS clauses plus four OWL property clauses.
-    let mut selected = Vec::new();
-    if mode != "owlrl" {
-        // Resource seeding stays in the reference initialization boundary.
-        selected.extend([
-            Rdf1, Rdfs2, Rdfs3, Rdfs5, Rdfs6, Rdfs7, Rdfs8, Rdfs9, Rdfs10, Rdfs11, Rdfs12, Rdfs13,
-        ]);
-    } else {
-        selected.extend([Rdfs2, Rdfs3, Rdfs7, Rdfs9]);
+impl CompiledRule {
+    pub(super) fn for_mode(mode: &str) -> Result<Vec<PreparedSparqlQuery>> {
+        // bounded: twelve RDFS clauses plus four OWL property clauses.
+        let mut selected = Vec::new();
+        if mode != "owlrl" {
+            // Resource seeding stays in the reference initialization boundary.
+            selected.extend([
+                Rdf1, Rdfs2, Rdfs3, Rdfs5, Rdfs6, Rdfs7, Rdfs8, Rdfs9, Rdfs10, Rdfs11, Rdfs12,
+                Rdfs13,
+            ]);
+        } else {
+            selected.extend([Rdfs2, Rdfs3, Rdfs7, Rdfs9]);
+        }
+        if mode != "rdfs" {
+            selected.extend([PrpSymp, PrpTrp, PrpInv1, PrpInv2]);
+        }
+        selected
+            .into_iter()
+            .map(|id| CompiledRule::try_new(&id.definition()).map(CompiledRule::into_query))
+            .collect()
     }
-    if mode != "rdfs" {
-        selected.extend([PrpSymp, PrpTrp, PrpInv1, PrpInv2]);
-    }
-    selected
-        .into_iter()
-        .map(|id| CompiledRule::try_new(&id.definition()).map(CompiledRule::into_query))
-        .collect()
 }
