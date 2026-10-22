@@ -94,6 +94,7 @@ fn copying_pending_quads_keeps_prepared_validation_acceptable() {
             shapes: Arc::new(shapes),
             options: Default::default(),
             inplace: true,
+            graph: None,
         })
         .unwrap()
     else {

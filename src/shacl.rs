@@ -230,35 +230,50 @@ impl SharedShapes {
         self.prepare_dataset_validation(py, dataset, settings, inplace)
     }
 
+    #[pyo3(signature = (store, settings, inplace, graph=None))]
     fn validate_store(
         &self,
         py: Python<'_>,
         store: &NativeStore,
         settings: &str,
         inplace: bool,
+        graph: Option<&str>,
     ) -> PyResult<Output> {
         let options = Settings::parse(settings)?;
-        py.detach(|| store.validate_shapes(self.inner.clone(), options, inplace))
+        let graph = graph
+            .map(crate::store::parse_graph_scope)
+            .transpose()
+            .map_err(crate::error)?;
+        py.detach(|| store.validate_shapes(self.inner.clone(), options, inplace, graph))
             .map(Report::into_output)
             .map_err(crate::error)
     }
 
+    #[pyo3(signature = (transaction, settings, inplace, graph=None))]
     fn prepare_transaction(
         &self,
         py: Python<'_>,
         transaction: &NativeTransaction,
         settings: &str,
         inplace: bool,
+        graph: Option<&str>,
     ) -> PyResult<crate::store::PreparedValidation> {
-        let options = match Settings::parse(settings) {
-            Ok(options) => options,
+        let parsed = Settings::parse(settings).and_then(|options| {
+            graph
+                .map(crate::store::parse_graph_scope)
+                .transpose()
+                .map(|graph| (options, graph))
+                .map_err(crate::error)
+        });
+        let (options, graph) = match parsed {
+            Ok(parsed) => parsed,
             Err(error) => {
                 py.detach(|| transaction.abort_validation())
                     .map_err(crate::error)?;
                 return Err(error);
             }
         };
-        py.detach(|| transaction.prepare_validation(self.inner.clone(), options, inplace))
+        py.detach(|| transaction.prepare_validation(self.inner.clone(), options, inplace, graph))
             .map_err(crate::error)
     }
 
@@ -277,7 +292,7 @@ impl SharedShapes {
                 return Err(error);
             }
         };
-        py.detach(|| transaction.validate_shapes(self.inner.clone(), options, inplace))
+        py.detach(|| transaction.validate_shapes(self.inner.clone(), options, inplace, None))
             .map(Report::into_output)
             .map_err(crate::error)
     }

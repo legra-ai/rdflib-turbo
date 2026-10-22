@@ -5,10 +5,32 @@ use super::shacl_read::CommittedGraph;
 use super::{NativeStore, NativeTransaction};
 use crate::Result;
 use crate::shacl::Report;
+use oxigraph::model::{Dataset, GraphName, QuadRef};
+use oxigraph::store::Transaction;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use pyshacl_turbo_engine::{CompiledShapes, Options};
 use std::sync::Arc;
+
+/// Derived-only output retains its logical scope until final publication.
+pub(super) struct ValidationDelta {
+    pub data: Dataset,
+    pub graph: Option<GraphName>,
+}
+
+impl ValidationDelta {
+    pub fn apply(&self, transaction: &mut Transaction<'_>) {
+        for quad in &self.data {
+            transaction.insert(QuadRef {
+                graph_name: self
+                    .graph
+                    .as_ref()
+                    .map_or(quad.graph_name, GraphName::as_ref),
+                ..quad
+            });
+        }
+    }
+}
 
 impl Reply {
     fn into_validation(self) -> Report {
@@ -25,6 +47,7 @@ impl NativeStore {
         shapes: Arc<CompiledShapes>,
         options: Options,
         inplace: bool,
+        graph: Option<GraphName>,
     ) -> Result<Report> {
         if inplace {
             return Session::execute_inline(
@@ -33,13 +56,22 @@ impl NativeStore {
                     shapes,
                     options,
                     inplace,
+                    graph,
                 },
             )
             .map(Reply::into_validation);
         }
         let store = self.snapshot()?;
         let source = CommittedGraph(store.read_snapshot());
-        Report::try_new(shapes.validate_staged(&source, options)?)
+        let report = if let Some(graph) = graph {
+            shapes.validate_staged(
+                &pyshacl_turbo_engine::ScopedGraph::new(&source, graph),
+                options,
+            )?
+        } else {
+            shapes.validate_staged(&source, options)?
+        };
+        Report::try_new(report)
     }
 }
 
@@ -49,8 +81,9 @@ impl NativeTransaction {
         shapes: Arc<CompiledShapes>,
         options: Options,
         inplace: bool,
+        graph: Option<GraphName>,
     ) -> Result<Report> {
-        let (report, revision) = self.prepare_shapes(shapes, options, inplace)?;
+        let (report, revision) = self.prepare_shapes(shapes, options, inplace, graph)?;
         self.session.accept_validation(revision)?;
         Ok(report)
     }
@@ -60,11 +93,13 @@ impl NativeTransaction {
         shapes: Arc<CompiledShapes>,
         options: Options,
         inplace: bool,
+        graph: Option<GraphName>,
     ) -> Result<(Report, u64)> {
         match self.session.execute(Operation::Validate {
             shapes,
             options,
             inplace,
+            graph,
         })? {
             Reply::PreparedValidation(prepared) => Ok(*prepared),
             _ => unreachable!("native prepared validation reply type"),
@@ -76,8 +111,9 @@ impl NativeTransaction {
         shapes: Arc<CompiledShapes>,
         options: Options,
         inplace: bool,
+        graph: Option<GraphName>,
     ) -> Result<PreparedValidation> {
-        let (report, revision) = self.prepare_shapes(shapes, options, inplace)?;
+        let (report, revision) = self.prepare_shapes(shapes, options, inplace, graph)?;
         Ok(PreparedValidation {
             session: self.session.clone(),
             report: Some(report),

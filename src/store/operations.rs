@@ -16,6 +16,7 @@ pub(super) enum Operation {
         shapes: Arc<CompiledShapes>,
         options: Options,
         inplace: bool,
+        graph: Option<oxigraph::model::GraphName>,
     },
     InsertTerms(Box<QuadInput>),
     Remove(String),
@@ -55,7 +56,7 @@ pub(super) enum Operation {
 
 pub(super) enum Reply {
     Validation(Box<crate::shacl::Report>),
-    StagedValidation(Box<(crate::shacl::Report, Dataset)>),
+    StagedValidation(Box<(crate::shacl::Report, super::shacl::ValidationDelta)>),
     PreparedValidation(Box<(crate::shacl::Report, u64)>),
     Done,
     Store(oxigraph::store::Store),
@@ -99,15 +100,29 @@ impl Operation {
                 shapes,
                 options,
                 inplace,
+                graph,
             } => {
-                let outcome = shapes.validate_delta(&*transaction, options)?;
+                let outcome = if let Some(graph) = &graph {
+                    shapes.validate_delta(
+                        &pyshacl_turbo_engine::ScopedGraph::new(&*transaction, graph.clone()),
+                        options,
+                    )?
+                } else {
+                    shapes.validate_delta(&*transaction, options)?
+                };
                 let report = crate::shacl::Report::try_new(outcome.report)?;
                 let additions = if inplace {
                     outcome.additions
                 } else {
                     Dataset::new()
                 };
-                Ok(Reply::StagedValidation(Box::new((report, additions))))
+                Ok(Reply::StagedValidation(Box::new((
+                    report,
+                    super::shacl::ValidationDelta {
+                        data: additions,
+                        graph,
+                    },
+                ))))
             }
             Self::Count(source) => {
                 let pattern = Pattern::parse(&source)?;

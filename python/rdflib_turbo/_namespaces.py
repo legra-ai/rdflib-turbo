@@ -5,6 +5,7 @@ from rdflib import URIRef
 
 class NamespaceBindings:
     def __init__(self, source=()):
+        self.revision = 0
         if isinstance(source, NamespaceBindings):
             self._namespaces = source._namespaces.copy()
             self._prefixes = source._prefixes.copy()
@@ -24,6 +25,7 @@ class NamespaceBindings:
         return self._prefixes.get(namespace)
 
     def bind(self, prefix, namespace, override=True):
+        self.revision += 1
         prefix, namespace = str(prefix), URIRef(namespace)
         bound_namespace = self._namespaces.get(prefix)
         bound_prefix = self._prefixes.get(namespace)
@@ -46,5 +48,6 @@ class NamespaceBindings:
         return type(self)(self)
 
     def replace(self, source):
+        self.revision += 1
         self._namespaces = source._namespaces.copy()
         self._prefixes = source._prefixes.copy()

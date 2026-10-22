@@ -313,6 +313,7 @@ fn validation_additions_are_private_until_report_acceptance() {
             shapes: Arc::new(shapes),
             options: pyshacl_turbo_engine::Options::default(),
             inplace: true,
+            graph: None,
         })
         .unwrap();
     assert!(matches!(
@@ -369,6 +370,7 @@ fn every_mutation_attempt_invalidates_prepared_validation() {
                 shapes: Arc::new(shapes),
                 options: Default::default(),
                 inplace: true,
+                graph: None,
             })
             .unwrap()
         else {

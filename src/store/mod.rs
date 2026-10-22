@@ -25,6 +25,7 @@ use pyo3::prelude::*;
 
 use crate::{error, format};
 use operations::{Operation, runtime};
+pub(crate) use pattern::graph as parse_graph_scope;
 pub(crate) use registration::register;
 use session::{Control, Session, lock};
 pub(crate) use shacl::PreparedValidation;
