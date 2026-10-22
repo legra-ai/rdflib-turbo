@@ -253,7 +253,7 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
-      - uses: legra-ai/github-actions/.github/actions/tag-tested-release@4f443f3a748fd9a35e9069108479c80e02cb1997
+      - uses: legra-ai/github-actions/.github/actions/tag-tested-release@87feab0f30d03f3d2185de73efc07f1e67175d70
         with:
           version: ${{ needs.prepare.outputs.cargo-version }}
           revision: ${{ needs.prepare.outputs.revision }}
