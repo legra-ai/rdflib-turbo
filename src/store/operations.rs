@@ -127,7 +127,9 @@ impl Operation {
                 ))))
             }
             Self::Count(source) => {
-                let pattern = Pattern::parse(&source)?;
+                let Some(pattern) = Pattern::parse_read(&source)? else {
+                    return Ok(Reply::Count(0));
+                };
                 pattern
                     .count(
                         |graph| transaction.graph_len(graph).map_err(runtime),
@@ -220,7 +222,9 @@ impl Operation {
                 Ok(Reply::Done)
             }
             Self::Match(source) => {
-                let pattern = Pattern::parse(&source)?;
+                let Some(pattern) = Pattern::parse_read(&source)? else {
+                    return Ok(Reply::Text("[]".into()));
+                };
                 pattern::output(transaction.quads_for_pattern(
                     pattern.subject.as_ref().map(|v| v.as_ref()),
                     pattern.predicate.as_ref().map(|v| v.as_ref()),

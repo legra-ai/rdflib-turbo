@@ -227,8 +227,6 @@ def test_blank_node_contexts_commit_and_abort_with_dataset_transactions():
 @pytest.mark.parametrize(
     "pattern",
     [
-        [{"type": "literal", "value": "bad-subject"}, None, None, None],
-        [None, {"type": "bnode", "value": "bad-predicate"}, None, None],
         [None, None, {"type": "unknown", "value": "bad-object"}, None],
         [None, None, None, json.dumps({"type": "literal", "value": "bad-graph"})],
     ],

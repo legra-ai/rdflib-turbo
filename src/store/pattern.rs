@@ -82,6 +82,36 @@ impl Pattern {
         count(quads(), self.graph.is_none())
     }
 
+    pub fn parse_read(source: &str) -> Result<Option<Self>> {
+        let (subject, predicate, object, graph_name): (
+            Option<InputTerm>,
+            Option<InputTerm>,
+            Option<InputTerm>,
+            Option<String>,
+        ) = serde_json::from_str(source).map_err(invalid)?;
+        let subject = subject.map(InputTerm::term).transpose()?;
+        let predicate = predicate.map(InputTerm::term).transpose()?;
+        let object = object.map(InputTerm::term).transpose()?;
+        let graph = graph_name.map(|source| graph(&source)).transpose()?;
+        let subject = match subject {
+            Some(Term::NamedNode(node)) => Some(node.into()),
+            Some(Term::BlankNode(node)) => Some(node.into()),
+            Some(Term::Literal(_)) => return Ok(None),
+            None => None,
+        };
+        let predicate = match predicate {
+            Some(Term::NamedNode(node)) => Some(node),
+            Some(_) => return Ok(None),
+            None => None,
+        };
+        Ok(Some(Self {
+            subject,
+            predicate,
+            object,
+            graph,
+        }))
+    }
+
     pub fn parse(source: &str) -> Result<Self> {
         let (subject, predicate, object, graph_name): (
             Option<InputTerm>,
