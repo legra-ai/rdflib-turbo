@@ -1,4 +1,4 @@
-# ADR 0050: Carry graph scope into native SPARQL UPDATE
+# ADR 0051: Carry graph scope into native SPARQL UPDATE
 
 Status: implemented locally; pending paired source integration.
 
