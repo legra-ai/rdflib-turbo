@@ -216,7 +216,7 @@ pub(crate) fn expand_into(
 ) -> Result<InferenceOutcome> {
     let (additions, outcome) = staged::expand(data, mode, destination.clone(), request)?;
     let mut destination_transaction = data.insert_transaction();
-    for quad in &additions {
+    for quad in additions.iter() {
         destination_transaction.insert(&Quad::new(
             quad.subject,
             quad.predicate,

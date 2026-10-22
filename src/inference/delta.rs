@@ -23,7 +23,7 @@ pub(crate) fn expand_delta(
     let destination = destination.unwrap_or(GraphName::DefaultGraph);
     let (additions, outcome) = super::staged::expand(data, mode, destination.clone(), request)?;
     let mut transaction = data.insert_transaction();
-    for quad in &additions {
+    for quad in additions.iter() {
         transaction.insert(&Quad::new(
             quad.subject,
             quad.predicate,

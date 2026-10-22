@@ -13,15 +13,32 @@ mod query;
 
 struct StagedDataset<'a> {
     source: &'a Dataset,
-    additions: Dataset,
+    output: Output,
     destination: GraphName,
+}
+
+/// Disjoint output sets distinguish new facts from existing-source publications.
+#[derive(Default)]
+pub(super) struct Output {
+    additions: Dataset,
+    publications: Dataset,
+}
+
+impl Output {
+    pub(super) fn iter(&self) -> impl Iterator<Item = QuadRef<'_>> {
+        self.additions.iter().chain(self.publications.iter())
+    }
+
+    fn contains(&self, quad: QuadRef<'_>) -> bool {
+        self.additions.contains(quad) || self.publications.contains(quad)
+    }
 }
 
 impl<'a> StagedDataset<'a> {
     fn new(source: &'a Dataset, destination: GraphName) -> Self {
         Self {
             source,
-            additions: Dataset::new(),
+            output: Output::default(),
             destination,
         }
     }
@@ -44,18 +61,13 @@ impl<'a> StagedDataset<'a> {
         predicate: Option<NamedNodeRef<'_>>,
         object: Option<TermRef<'_>>,
     ) -> impl Iterator<Item = QuadRef<'b>> + use<'a, 'b> {
+        // bounded: one borrowed previous SPO; unscoped native indexes order graph last.
+        let mut previous = None;
         self.source
             .quads_for_pattern(subject, predicate, object, None)
-            .filter(|quad| {
-                self.source
-                    .quads_for_pattern(
-                        Some(quad.subject),
-                        Some(quad.predicate),
-                        Some(quad.object),
-                        None,
-                    )
-                    .next()
-                    == Some(*quad)
+            .filter(move |quad| {
+                let triple = TripleRef::new(quad.subject, quad.predicate, quad.object);
+                previous.replace(triple) != Some(triple)
             })
             .map(|quad| QuadRef {
                 graph_name: GraphNameRef::DefaultGraph,
@@ -90,9 +102,9 @@ impl<'a> StagedDataset<'a> {
         };
         Box::new(
             source.chain(
-                self.additions
-                    .quads_for_pattern(subject, predicate, object, graph)
-                    .filter(|quad| !self.source_contains_triple(*quad)),
+                self.output
+                    .additions
+                    .quads_for_pattern(subject, predicate, object, graph),
             ),
         )
     }
@@ -145,7 +157,7 @@ impl Graph for StagedDataset<'_> {
 
     fn contains_destination(&self, quad: &Quad) -> Result<bool> {
         Ok(self.output_contains(quad)
-            || self.additions.contains(QuadRef {
+            || self.output.contains(QuadRef {
                 graph_name: GraphNameRef::DefaultGraph,
                 ..quad.as_ref()
             }))
@@ -154,7 +166,11 @@ impl Graph for StagedDataset<'_> {
     fn insert(&mut self, mut quad: Quad) {
         if !self.output_contains(&quad) {
             quad.graph_name = GraphName::DefaultGraph;
-            self.additions.insert(&quad);
+            if self.source_contains_triple(quad.as_ref()) {
+                self.output.publications.insert(&quad);
+            } else {
+                self.output.additions.insert(&quad);
+            }
         }
     }
 }
@@ -164,8 +180,8 @@ pub(super) fn expand(
     mode: &str,
     destination: GraphName,
     request: InferenceRequest,
-) -> Result<(Dataset, InferenceOutcome)> {
+) -> Result<(Output, InferenceOutcome)> {
     let mut graph = StagedDataset::new(source, destination);
     let (_, outcome) = expand_configured(&mut graph, mode, request)?;
-    Ok((graph.additions, outcome))
+    Ok((graph.output, outcome))
 }

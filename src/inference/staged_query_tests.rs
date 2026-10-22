@@ -63,7 +63,7 @@ fn borrowed_queries_preserve_contexts_exact_terms_and_invalid_bound_patterns() {
     ));
     // bounded: a frozen union of the six synthetic source quads and two additions.
     let mut expected = crate::graph::with_union(&source);
-    expected.extend(&staged.additions);
+    expected.extend(staged.output.iter());
     for query in [
         "SELECT ?s ?p ?o WHERE { ?s ?p ?o }",
         "SELECT ?s ?p ?o ?g WHERE { GRAPH ?g { ?s ?p ?o } }",
