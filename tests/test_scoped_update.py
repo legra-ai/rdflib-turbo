@@ -83,3 +83,13 @@ def test_caught_native_invalid_scope_aborts_prior_mutations():
             with pytest.raises(ValueError):
                 transaction._native.update("INSERT DATA {}", "{}", '{"type":"unknown"}')
         assert len(store) == 0
+
+
+def test_invalid_update_binding_keeps_committed_store_open_and_unchanged():
+    graph = StoreDataset().graph(EX.selected)
+    graph.add((EX.existing, EX.p, EX.o))
+    with pytest.raises(TypeError, match="Unsupported RDF term"):
+        graph.update("INSERT {?s <urn:scoped-update:q> ?v} WHERE {}", initBindings={"v": object()})
+    assert set(graph) == {(EX.existing, EX.p, EX.o)}
+    graph.update("INSERT DATA {<urn:new> <urn:scoped-update:p> <urn:o>}")
+    assert len(graph) == 2
