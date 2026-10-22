@@ -23,6 +23,63 @@ fn rows(results: QueryResults<'_>) -> Vec<Vec<(String, String)>> {
 }
 
 #[test]
+fn borrowed_union_matches_frozen_indexes_for_uniform_and_mixed_scopes() {
+    let scopes = [
+        GraphName::DefaultGraph,
+        NamedNode::new_unchecked("urn:source").into(),
+        BlankNode::new("source").unwrap().into(),
+    ];
+    for count in 0..=scopes.len() {
+        for first in 0..scopes.len() {
+            let mut source = Dataset::new();
+            // bounded: at most 24 synthetic quads, including duplicated logical triples.
+            for graph in scopes.iter().cycle().skip(first).take(count) {
+                for s in ["urn:s", "urn:other"] {
+                    for p in ["urn:p", "urn:other-p"] {
+                        for o in ["urn:o", "urn:other-o"] {
+                            source.insert(QuadRef::new(
+                                NamedNodeRef::new_unchecked(s),
+                                NamedNodeRef::new_unchecked(p),
+                                NamedNodeRef::new_unchecked(o),
+                                graph.as_ref(),
+                            ));
+                        }
+                    }
+                }
+            }
+            let staged = StagedDataset::new(&source, GraphName::DefaultGraph);
+            let frozen = crate::graph::with_union(&source);
+            for mask in 0..8 {
+                let s = (mask & 1 != 0).then(|| NamedNodeRef::new_unchecked("urn:s").into());
+                let p = (mask & 2 != 0).then(|| NamedNodeRef::new_unchecked("urn:p"));
+                let o = (mask & 4 != 0).then(|| NamedNodeRef::new_unchecked("urn:o").into());
+                for graph in [
+                    None,
+                    Some(scopes[first].as_ref()),
+                    Some(GraphNameRef::DefaultGraph),
+                ] {
+                    // bounded: rows from the fixed 24-quad fixture only.
+                    let mut actual: Vec<_> = staged
+                        .matching_refs(s, p, o, graph)
+                        .map(|q| q.to_string())
+                        .collect();
+                    let mut expected: Vec<_> = frozen
+                        .quads_for_pattern(s, p, o, graph)
+                        .map(|q| q.to_string())
+                        .collect();
+                    actual.sort();
+                    expected.sort();
+                    assert_eq!(
+                        actual, expected,
+                        "count={count}, first={first}, mask={mask}, graph={graph:?}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn borrowed_queries_preserve_contexts_exact_terms_and_invalid_bound_patterns() {
     let mut source = Dataset::new();
     let subject = NamedNode::new_unchecked("urn:s");

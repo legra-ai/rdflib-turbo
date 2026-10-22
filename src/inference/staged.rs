@@ -17,6 +17,7 @@ mod allocation_tests;
 
 struct StagedDataset<'a> {
     source: &'a Dataset,
+    source_scope: Option<GraphNameRef<'a>>,
     output: Output,
     destination: GraphName,
 }
@@ -40,8 +41,15 @@ impl Output {
 
 impl<'a> StagedDataset<'a> {
     fn new(source: &'a Dataset, destination: GraphName) -> Self {
+        // bounded: one borrowed graph identifier; detect uniform scope without copying RDF.
+        let source_scope = source
+            .iter()
+            .next()
+            .map(|quad| quad.graph_name)
+            .filter(|graph| source.iter().all(|quad| quad.graph_name == *graph));
         Self {
             source,
+            source_scope,
             output: Output::default(),
             destination,
         }
@@ -53,7 +61,7 @@ impl<'a> StagedDataset<'a> {
                 Some(quad.subject),
                 Some(quad.predicate),
                 Some(quad.object),
-                None,
+                self.source_scope,
             )
             .next()
             .is_some()
@@ -68,7 +76,7 @@ impl<'a> StagedDataset<'a> {
         // bounded: one borrowed previous SPO; unscoped native indexes order graph last.
         let mut previous = None;
         self.source
-            .quads_for_pattern(subject, predicate, object, None)
+            .quads_for_pattern(subject, predicate, object, self.source_scope)
             .filter(move |quad| {
                 let triple = TripleRef::new(quad.subject, quad.predicate, quad.object);
                 previous.replace(triple) != Some(triple)
