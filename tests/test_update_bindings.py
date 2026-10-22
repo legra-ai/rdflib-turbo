@@ -101,11 +101,11 @@ def test_native_invalid_update_parameter_payload_aborts_transaction():
         assert len(store) == 0
 
 
-def test_named_update_scope_remains_explicit_and_dooms_transaction():
+def test_named_update_scope_binds_terms_and_commits_the_same_transaction():
     with Store() as store:
-        with pytest.raises(RuntimeError, match="closed"), store.transaction() as transaction:
+        with store.transaction() as transaction:
             graph = Graph(store=transaction, identifier=EX.named)
             graph.add((EX.a, EX.p, EX.o))
-            with pytest.raises(NotImplementedError, match="Scoped named-graph"):
-                graph.update("INSERT {?s <urn:q> ?v} WHERE {}", initBindings={"s": EX.a})
-        assert len(store) == 0
+            graph.update("INSERT {?s <urn:q> ?v} WHERE {}", initBindings={"s": EX.a, "v": EX.o})
+            assert (EX.a, EX.q, EX.o) in graph
+        assert len(Graph(store=store, identifier=EX.named)) == 2

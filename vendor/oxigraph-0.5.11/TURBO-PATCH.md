@@ -88,3 +88,24 @@ deadlocks during non-inplace validation. See ADR 0037 and shacl_read tests.
 Expose the evaluator's explicit owned RDFLib prepared algebra on
 PreparedSparqlQuery. Query form, dataset, base and template remain typed query
 fields; there is no query-text reconstruction path.
+
+## Typed default graph for scoped RDFLib UPDATE
+
+`PreparedSparqlUpdate.with_default_graph(GraphName)` selects implicit WHERE reads
+and default write targets on the same native transaction, including blank-node
+graph identifiers that cannot be represented in SPARQL source syntax. Explicit
+WITH/USING datasets and GRAPH output templates keep their own selections. Scoped
+updates use readable transactions so pending writes remain visible; no source
+dataset is copied. Default INSERT/DELETE DATA, DELETE/INSERT WHERE and CLEAR/DROP
+operate on the supplied graph. Replacing the builder scope updates reads and
+writes together; original explicit dataset specifications remain immutable. This source patch must be byte-identical in the
+canonical companion engine dependency under ADR0048.
+
+Committed memory pattern selection stops probing later SPOG indexes once a
+supplied component has no index entry. The absent component keeps its zero
+cardinality and therefore remains the selected empty chain. Existing historical
+chains still undergo snapshot filtering; zero visible cardinality is not used as
+proof of absence. No cache, index, retained pattern or production counter is
+added. Per-reader test instrumentation counts actual index probes; regressions
+cover all missing component positions, all sixteen masks, commits, rollback and
+retained snapshots. Installed-wheel measurements report boundary costs separately.

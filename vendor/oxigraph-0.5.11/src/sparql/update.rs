@@ -46,6 +46,7 @@ pub struct PreparedSparqlUpdate {
     evaluator: QueryEvaluator,
     update: spargebra::Update,
     using_datasets: Vec<Option<QueryDatasetSpecification>>,
+    default_graph: Option<OxGraphName>,
     #[cfg(feature = "http-client")]
     http_timeout: Option<Duration>,
     #[cfg(feature = "http-client")]
@@ -53,6 +54,16 @@ pub struct PreparedSparqlUpdate {
 }
 
 impl PreparedSparqlUpdate {
+    /// Select the implicit read and write graph without rewriting SPARQL source.
+    ///
+    /// Explicit WITH/USING datasets and GRAPH templates retain their own scopes.
+    /// Blank graph identifiers are supported although SPARQL has no syntax for them.
+    #[must_use]
+    pub fn with_default_graph(mut self, graph: OxGraphName) -> Self {
+        self.default_graph = Some(graph);
+        self
+    }
+
     /// Set RDFLib initial context, independently for every update operation.
     #[must_use]
     pub fn with_initial_bindings(
@@ -74,6 +85,7 @@ impl PreparedSparqlUpdate {
             evaluator,
             update: update.inner,
             using_datasets: update.using_datasets,
+            default_graph: None,
             #[cfg(feature = "http-client")]
             http_timeout,
             #[cfg(feature = "http-client")]
@@ -107,7 +119,7 @@ impl PreparedSparqlUpdate {
     /// # Ok::<_, Box<dyn std::error::Error>>(())
     /// ```
     pub fn on_store(self, store: &Store) -> BoundPreparedSparqlUpdate<'_, '_> {
-        let transaction = if update_requires_read(&self.update) {
+        let transaction = if self.default_graph.is_some() || update_requires_read(&self.update) {
             store
                 .storage()
                 .start_readable_transaction()
@@ -122,6 +134,7 @@ impl PreparedSparqlUpdate {
             evaluator: self.evaluator,
             update: self.update,
             using_datasets: self.using_datasets,
+            default_graph: self.default_graph,
             #[cfg(feature = "http-client")]
             http_timeout: self.http_timeout,
             #[cfg(feature = "http-client")]
@@ -153,6 +166,7 @@ impl PreparedSparqlUpdate {
             evaluator: self.evaluator,
             update: self.update,
             using_datasets: self.using_datasets,
+            default_graph: self.default_graph,
             #[cfg(feature = "http-client")]
             http_timeout: self.http_timeout,
             #[cfg(feature = "http-client")]
@@ -184,6 +198,7 @@ pub struct BoundPreparedSparqlUpdate<'a, 'b> {
     evaluator: QueryEvaluator,
     update: spargebra::Update,
     using_datasets: Vec<Option<QueryDatasetSpecification>>,
+    default_graph: Option<OxGraphName>,
     #[cfg(feature = "http-client")]
     http_timeout: Option<Duration>,
     #[cfg(feature = "http-client")]
@@ -200,6 +215,7 @@ impl BoundPreparedSparqlUpdate<'_, '_> {
                     transaction: &mut transaction,
                     base_iri: self.update.base_iri.clone(),
                     query_evaluator: self.evaluator,
+                    default_graph: self.default_graph,
                     #[cfg(feature = "http-client")]
                     client: Client::new(self.http_timeout, self.http_redirection_limit),
                 }
@@ -211,6 +227,7 @@ impl BoundPreparedSparqlUpdate<'_, '_> {
                 transaction,
                 base_iri: self.update.base_iri.clone(),
                 query_evaluator: self.evaluator,
+                default_graph: self.default_graph,
                 #[cfg(feature = "http-client")]
                 client: Client::new(self.http_timeout, self.http_redirection_limit),
             }
@@ -242,11 +259,21 @@ struct ReadableUpdateEvaluator<'a, 'b> {
     transaction: &'a mut StorageReadableTransaction<'b>,
     base_iri: Option<Iri<String>>,
     query_evaluator: QueryEvaluator,
+    default_graph: Option<OxGraphName>,
     #[cfg(feature = "http-client")]
     client: Client,
 }
 
 impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
+    fn scope_quad(&self, mut quad: OxQuad) -> OxQuad {
+        if quad.graph_name.is_default_graph() {
+            if let Some(graph) = &self.default_graph {
+                quad.graph_name = graph.clone();
+            }
+        }
+        quad
+    }
+
     fn eval_all(
         &mut self,
         updates: &[GraphUpdateOperation],
@@ -305,14 +332,14 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
     fn eval_insert_data(&mut self, data: &[Quad]) {
         let mut bnodes = FxHashMap::default();
         for quad in data {
-            let quad = convert_quad(quad, &mut bnodes);
+            let quad = self.scope_quad(convert_quad(quad, &mut bnodes));
             self.transaction.insert(quad.as_ref());
         }
     }
 
     fn eval_delete_data(&mut self, data: &[GroundQuad]) {
         for quad in data {
-            let quad = convert_ground_quad(quad);
+            let quad = self.scope_quad(convert_ground_quad(quad));
             self.transaction.remove(quad.as_ref());
         }
     }
@@ -332,25 +359,47 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
             algebra,
         );
         *prepared.dataset_mut() = using.clone();
+        if using.is_default_dataset() {
+            if let Some(graph) = &self.default_graph {
+                // bounded: the caller selects exactly one implicit graph scope.
+                prepared
+                    .dataset_mut()
+                    .set_default_graph(vec![graph.clone()]);
+            }
+        }
         let mutations = prepared
             .execute(DatasetView::new(self.transaction.reader()))?
             .collect::<Result<Vec<_>, _>>()?;
         for mutation in mutations {
             match mutation {
-                DeleteInsertQuad::Delete(quad) => self.transaction.remove(quad.as_ref()),
-                DeleteInsertQuad::Insert(quad) => self.transaction.insert(quad.as_ref()),
+                DeleteInsertQuad::Delete(quad) => {
+                    let quad = self.scope_quad(quad);
+                    self.transaction.remove(quad.as_ref());
+                }
+                DeleteInsertQuad::Insert(quad) => {
+                    let quad = self.scope_quad(quad);
+                    self.transaction.insert(quad.as_ref());
+                }
             }
         }
         Ok(())
     }
 
     fn eval_load(&mut self, from: &NamedNode, to: &GraphName) -> Result<(), UpdateEvaluationError> {
+        let default_graph = &self.default_graph;
         eval_load(
             from,
             to,
             #[cfg(feature = "http-client")]
             &self.client,
-            |q| self.transaction.insert(q.as_ref()),
+            |mut quad| {
+                if quad.graph_name.is_default_graph() {
+                    if let Some(graph) = default_graph {
+                        quad.graph_name = graph.clone();
+                    }
+                }
+                self.transaction.insert(quad.as_ref());
+            },
         )
     }
 
@@ -397,7 +446,11 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
                 }
             }
             GraphTarget::DefaultGraph => {
-                self.transaction.clear_graph(GraphNameRef::DefaultGraph)?;
+                self.transaction.clear_graph(
+                    self.default_graph
+                        .as_ref()
+                        .map_or(GraphNameRef::DefaultGraph, OxGraphName::as_ref),
+                )?;
                 Ok(())
             }
             GraphTarget::NamedGraphs => Ok(self.transaction.clear_all_named_graphs()?),
@@ -425,9 +478,11 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
                     Err(UpdateEvaluationError::GraphDoesNotExist(graph_name.clone()))
                 }
             }
-            GraphTarget::DefaultGraph => {
-                Ok(self.transaction.clear_graph(GraphNameRef::DefaultGraph)?)
-            }
+            GraphTarget::DefaultGraph => Ok(self.transaction.clear_graph(
+                self.default_graph
+                    .as_ref()
+                    .map_or(GraphNameRef::DefaultGraph, OxGraphName::as_ref),
+            )?),
             GraphTarget::NamedGraphs => Ok(self.transaction.remove_all_named_graphs()?),
             GraphTarget::AllGraphs => Ok(self.transaction.clear()?),
         }

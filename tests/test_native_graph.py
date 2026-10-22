@@ -307,11 +307,10 @@ def test_query_and_update_options_fail_without_python_fallback(factory):
     graph.update("INSERT DATA {}", initNs={}, initBindings={})
 
 
-def test_store_query_default_scope_and_named_update_rejection():
+def test_store_query_default_scope_and_named_update():
     dataset = rdflib_turbo.StoreDataset()
     assert bool(dataset.store.query("ASK {}", {}, {}, None))
-    with pytest.raises(NotImplementedError, match="Scoped named"):
-        dataset.graph(EX.named).update("INSERT DATA {}")
+    assert dataset.graph(EX.named).update("INSERT DATA {}") is None
 
 
 def test_close_and_manual_transaction_controls_are_explicit():

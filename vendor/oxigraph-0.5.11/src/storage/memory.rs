@@ -71,6 +71,8 @@ impl MemoryStorage {
             quad_count: published.total,
             #[cfg(test)]
             visited_nodes: Arc::new(AtomicUsize::new(0)),
+            #[cfg(test)]
+            index_probes: Arc::new(AtomicUsize::new(0)),
             _lifetime: PhantomData,
         }
     }
@@ -115,6 +117,8 @@ pub struct MemoryStorageReader<'a> {
     quad_count: usize,
     #[cfg(test)]
     visited_nodes: Arc<AtomicUsize>,
+    #[cfg(test)]
+    index_probes: Arc<AtomicUsize>,
     _lifetime: PhantomData<&'a ()>,
 }
 
@@ -142,16 +146,31 @@ impl<'a> MemoryStorageReader<'a> {
         object: Option<&EncodedTerm>,
         graph_name: Option<&EncodedTerm>,
     ) -> QuadIterator<'a> {
-        fn get_start_and_count(
-            map: &DashMap<EncodedTerm, (Weak<QuadListNode>, u64), BuildHasherDefault<FxHasher>>,
-            term: Option<&EncodedTerm>,
-        ) -> (Option<Weak<QuadListNode>>, u64) {
+        let mut absent = false;
+        let mut get_start_and_count = |map: &DashMap<
+            EncodedTerm,
+            (Weak<QuadListNode>, u64),
+            BuildHasherDefault<FxHasher>,
+        >,
+                                       term: Option<&EncodedTerm>|
+         -> (Option<Weak<QuadListNode>>, u64) {
             let Some(term) = term else {
                 return (None, u64::MAX);
             };
-            map.view(term, |_, (node, count)| (Some(Weak::clone(node)), *count))
-                .unwrap_or_default()
-        }
+            if absent {
+                return (None, u64::MAX);
+            }
+            #[cfg(test)]
+            self.index_probes.fetch_add(1, Ordering::Relaxed);
+            let result = map
+                .view(term, |_, (node, count)| (Some(Weak::clone(node)), *count))
+                .unwrap_or_default();
+            // An absent index entry proves the pattern empty. Retain its zero count
+            // so selection still chooses that empty chain; skip subsequent probes.
+            // A present historical chain must still be checked at this snapshot.
+            absent = result.0.is_none();
+            result
+        };
 
         let (subject_start, subject_count) =
             get_start_and_count(&self.storage.content.last_quad_by_subject, subject);
@@ -458,6 +477,8 @@ impl MemoryStorageTransaction<'_> {
             quad_count: self.counts.total,
             #[cfg(test)]
             visited_nodes: Arc::new(AtomicUsize::new(0)),
+            #[cfg(test)]
+            index_probes: Arc::new(AtomicUsize::new(0)),
             _lifetime: PhantomData,
         }
     }
@@ -1262,3 +1283,7 @@ mod lease_tests;
 #[cfg(test)]
 #[path = "memory_count_tests.rs"]
 mod cardinality_tests;
+
+#[cfg(test)]
+#[path = "memory_missing_pattern_tests.rs"]
+mod missing_pattern_tests;
