@@ -169,6 +169,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "datalog-structural-model"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3044a7dd3f85df97b7032b9e0a98b6a90ad9789674860e21ce1c1f9402008c0a"
+dependencies = [
+ "rhusky",
+ "rustc-hash",
+ "serde",
+]
+
+[[package]]
 name = "digest"
 version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -967,6 +978,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9a9a77e61cd9f37af08f952c1c072081563e129c0949ac4ede30f9e8b6b4b74f"
 
 [[package]]
+name = "rdf-reasoning"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a7a13638fa75a40e80d5be8b80e070085894051c15a2e2e8af7ef3628d997ed6"
+dependencies = [
+ "datalog-structural-model",
+ "rhusky",
+ "serde",
+]
+
+[[package]]
 name = "rdf-syntax"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1001,12 +1023,14 @@ dependencies = [
 name = "rdflib-turbo-native"
 version = "0.2.0-alpha.7"
 dependencies = [
+ "datalog-structural-model",
  "oxigraph",
  "oxilangtag",
  "oxrdf",
  "pyo3",
  "pyo3-build-config",
  "pyshacl-turbo-engine",
+ "rdf-reasoning",
  "roxmltree",
  "serde",
  "serde_json",

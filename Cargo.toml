@@ -24,6 +24,8 @@ allocation-profiling = []
 persistence = ["oxigraph/rocksdb"]
 
 [dependencies]
+datalog-structural-model = "=1.0.0"
+rdf-reasoning = "=0.1.0"
 pyshacl-turbo-engine = { git = "https://github.com/legra-ai/pyshacl-turbo", rev = "665bf494eab65501affd6e16b08b94ef8a41900c" }
 serde = { version = "1", features = ["derive"] }
 oxigraph = { version = "=0.5.11", default-features = false, features = ["exact-term-storage"] }
