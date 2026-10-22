@@ -17,6 +17,9 @@ mod outcome;
 mod request;
 mod same_as;
 pub(crate) mod scoped;
+mod shared;
+#[cfg(test)]
+mod shared_rule_tests;
 mod traversal;
 
 pub(crate) use delta::expand_delta;
@@ -46,29 +49,6 @@ PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX owl: <http://www.w3.org/2002/07/owl#>
 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>";
 
-const RDFS_RULES: &[(&str, &str)] = &[
-    ("?p a rdf:Property", "?s ?p ?o"),
-    ("?s a ?c", "?p rdfs:domain ?c . ?s ?p ?o"),
-    ("?o a ?c", "?p rdfs:range ?c . ?s ?p ?o"),
-    (
-        "?p rdfs:subPropertyOf ?r",
-        "?p rdfs:subPropertyOf ?q . ?q rdfs:subPropertyOf ?r",
-    ),
-    ("?p rdfs:subPropertyOf ?p", "?p a rdf:Property"),
-    ("?s ?q ?o", "?p rdfs:subPropertyOf ?q . ?s ?p ?o"),
-    ("?c rdfs:subClassOf rdfs:Resource, ?c", "?c a rdfs:Class"),
-    ("?s a ?d", "?c rdfs:subClassOf ?d . ?s a ?c"),
-    (
-        "?a rdfs:subClassOf ?c",
-        "?a rdfs:subClassOf ?b . ?b rdfs:subClassOf ?c",
-    ),
-    (
-        "?p rdfs:subPropertyOf rdfs:member",
-        "?p a rdfs:ContainerMembershipProperty",
-    ),
-    ("?d rdfs:subClassOf rdfs:Literal", "?d a rdfs:Datatype"),
-];
-
 // OWL 2 RL/RDF entailment rules, represented as native CONSTRUCT programs.
 // https://www.w3.org/TR/owl2-profiles/#Reasoning_in_OWL_2_RL_and_RDF_Graphs
 const OWL_RULES: &[(&str, &str)] = &[
@@ -77,8 +57,6 @@ const OWL_RULES: &[(&str, &str)] = &[
         "?s ?p ?o",
     ),
     ("?s ?q ?o", "?p owl:sameAs ?q . ?s ?p ?o"),
-    ("?s a ?c", "?p rdfs:domain ?c . ?s ?p ?o"),
-    ("?o a ?c", "?p rdfs:range ?c . ?s ?p ?o"),
     (
         "?y owl:sameAs ?z",
         "?p a owl:FunctionalProperty . ?x ?p ?y, ?z",
@@ -87,19 +65,10 @@ const OWL_RULES: &[(&str, &str)] = &[
         "?x owl:sameAs ?y",
         "?p a owl:InverseFunctionalProperty . ?x ?p ?z . ?y ?p ?z",
     ),
-    ("?y ?p ?x", "?p a owl:SymmetricProperty . ?x ?p ?y"),
-    (
-        "?x ?p ?z",
-        "?p a owl:TransitiveProperty . ?x ?p ?y . ?y ?p ?z",
-    ),
-    ("?x ?q ?y", "?p rdfs:subPropertyOf ?q . ?x ?p ?y"),
     (
         "?p rdfs:subPropertyOf ?q . ?q rdfs:subPropertyOf ?p",
         "?p owl:equivalentProperty ?q FILTER(!sameTerm(?p, ?q))",
     ),
-    ("?y ?q ?x", "?p owl:inverseOf ?q . ?x ?p ?y"),
-    ("?y ?p ?x", "?p owl:inverseOf ?q . ?x ?q ?y"),
-    ("?x a ?d", "?c rdfs:subClassOf ?d . ?x a ?c"),
     (
         "?c rdfs:subClassOf ?d . ?d rdfs:subClassOf ?c",
         "?c owl:equivalentClass ?d FILTER(!sameTerm(?c, ?d))",
@@ -340,9 +309,6 @@ fn expand_inner(
     let mut diagnostics = diagnostics::Diagnostics::new(request.prior_error_messages);
     // bounded: the fixed RDFS/OWL rule tables above.
     let mut rules = Vec::new();
-    if mode != "owlrl" {
-        rules.extend_from_slice(RDFS_RULES);
-    }
     if mode != "rdfs" {
         rules.extend_from_slice(OWL_RULES);
         axioms::owl(
@@ -359,16 +325,19 @@ fn expand_inner(
         }
     }
     // bounded: one prepared query per built-in rule.
-    let queries = rules
-        .iter()
-        .map(|(template, pattern)| {
-            SparqlEvaluator::new()
-                .parse_query(&format!(
-                    "{PREFIXES}\nCONSTRUCT {{ {template} }} WHERE {{ {pattern} }}"
-                ))
-                .map_err(|e| Error::Runtime(format!("Invalid inference rule: {e}")))
-        })
-        .collect::<Result<Vec<_>>>()?;
+    let mut queries = shared::CompiledRule::for_mode(mode)?;
+    queries.extend(
+        rules
+            .iter()
+            .map(|(template, pattern)| {
+                SparqlEvaluator::new()
+                    .parse_query(&format!(
+                        "{PREFIXES}\nCONSTRUCT {{ {template} }} WHERE {{ {pattern} }}"
+                    ))
+                    .map_err(|e| Error::Runtime(format!("Invalid inference rule: {e}")))
+            })
+            .collect::<Result<Vec<_>>>()?,
+    );
     loop {
         if mode != "rdfs" {
             diagnostics.round(data)?;
