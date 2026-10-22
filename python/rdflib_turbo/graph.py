@@ -183,19 +183,20 @@ class RDFLibStore(ReferenceStore):
             result.graph = Graph().parse(data=payload, format="nt")
         return result
 
-    def update(self, update, initNs, initBindings, queryGraph, **kwargs):
+    def update(self, update, initNs, initBindings, queryGraph, *, _dataset_context=False, **kwargs):
         try:
             source = self._query_source(update, initNs, kwargs)
             bindings = json.dumps(
                 {str(Variable(name)): _encode(term) for name, term in initBindings.items()}
             )
-            if queryGraph not in (None, "__UNION__", self.default_identifier):
-                raise NotImplementedError("Scoped named-graph SPARQL Update is not implemented")
+            graph = (
+                None if _dataset_context or queryGraph == "__UNION__" else self._graph(queryGraph)
+            )
         except BaseException:
             if isinstance(self.backend, Transaction):
                 self.backend._native.rollback()
             raise
-        self.backend._native.update(source, bindings)
+        self.backend._native.update(source, bindings, graph)
 
     def commit(self):
         raise RuntimeError("Use Graph.transaction() or StoreDataset.transaction() scoped context")
@@ -414,6 +415,7 @@ class StoreDataset(GraphOwnership, GraphInference, RDFLibDataset):
                 dict(self.namespaces()) if initNs is None else initNs,
                 {} if initBindings is None else initBindings,
                 DATASET_DEFAULT_GRAPH_ID,
+                _dataset_context=True,
                 **kwargs,
             )
         except BaseException:

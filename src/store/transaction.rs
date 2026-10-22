@@ -230,11 +230,20 @@ impl NativeTransaction {
         publisher.complete(py, result)
     }
 
-    #[pyo3(signature = (source, bindings=None))]
-    fn update(&self, py: Python<'_>, source: String, bindings: Option<String>) -> PyResult<()> {
+    #[pyo3(signature = (source, bindings=None, graph=None))]
+    fn update(
+        &self,
+        py: Python<'_>,
+        source: String,
+        bindings: Option<String>,
+        graph: Option<String>,
+    ) -> PyResult<()> {
         py.detach(|| {
             self.session
-                .execute(Operation::Update(source, bindings))
+                .execute(match graph {
+                    Some(graph) => Operation::UpdateGraph(source, graph, bindings),
+                    None => Operation::Update(source, bindings),
+                })
                 .map(|_| ())
         })
         .map_err(error)

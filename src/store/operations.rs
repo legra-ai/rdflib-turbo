@@ -42,6 +42,7 @@ pub(super) enum Operation {
         base: Option<String>,
     },
     Update(String, Option<String>),
+    UpdateGraph(String, String, Option<String>),
     Infer(String, Option<String>, crate::inference::InferenceRequest),
     InferGraph {
         mode: String,
@@ -76,6 +77,7 @@ impl Operation {
             | Self::Graph(_, _)
             | Self::Load { .. }
             | Self::Update(..)
+            | Self::UpdateGraph(..)
             | Self::Infer(..)
             | Self::InferGraph { .. } => true,
             Self::Validate { .. }
@@ -281,22 +283,11 @@ impl Operation {
                     .map(Reply::Inference)
             }
             Self::Update(source, bindings) => {
-                let evaluator = SparqlEvaluator::new();
-                let evaluator = if bindings.is_some() {
-                    evaluator.with_rdflib_query_context()
-                } else {
-                    evaluator
-                };
-                let update = evaluator.parse_update(&source).map_err(invalid)?;
-                let update = if let Some(bindings) = bindings {
-                    update.with_initial_bindings(super::bindings::decode(&bindings)?)
-                } else {
-                    update
-                };
-                update
-                    .on_transaction(transaction)
-                    .execute()
-                    .map_err(runtime)?;
+                execute_update(transaction, source, bindings, None)?;
+                Ok(Reply::Done)
+            }
+            Self::UpdateGraph(source, graph, bindings) => {
+                execute_update(transaction, source, bindings, Some(pattern::graph(&graph)?))?;
                 Ok(Reply::Done)
             }
             Self::Query(source, union, bindings) => {
@@ -327,4 +318,28 @@ pub(super) fn invalid(error: impl std::fmt::Display) -> Error {
 
 pub(super) fn runtime(error: impl std::fmt::Display) -> Error {
     Error::Runtime(error.to_string())
+}
+
+fn execute_update(
+    transaction: &mut Transaction<'_>,
+    source: String,
+    bindings: Option<String>,
+    graph: Option<oxigraph::model::GraphName>,
+) -> Result<()> {
+    let evaluator = if bindings.is_some() {
+        SparqlEvaluator::new().with_rdflib_query_context()
+    } else {
+        SparqlEvaluator::new()
+    };
+    let mut update = evaluator.parse_update(&source).map_err(invalid)?;
+    if let Some(bindings) = bindings {
+        update = update.with_initial_bindings(super::bindings::decode(&bindings)?);
+    }
+    if let Some(graph) = graph {
+        update = update.with_default_graph(graph);
+    }
+    update
+        .on_transaction(transaction)
+        .execute()
+        .map_err(runtime)
 }
