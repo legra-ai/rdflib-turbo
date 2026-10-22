@@ -362,8 +362,11 @@ impl NativeStore {
 
     fn match_quads(&self, py: Python<'_>, source: &str) -> PyResult<String> {
         py.detach(|| {
-            let pattern = pattern::Pattern::parse(source)?;
+            let pattern = pattern::Pattern::parse_read(source)?;
             let store = self.snapshot()?;
+            let Some(pattern) = pattern else {
+                return Ok("[]".into());
+            };
             pattern::output(store.quads_for_pattern(
                 pattern.subject.as_ref().map(|v| v.as_ref()),
                 pattern.predicate.as_ref().map(|v| v.as_ref()),
@@ -376,8 +379,11 @@ impl NativeStore {
 
     fn count_pattern(&self, py: Python<'_>, source: &str) -> PyResult<usize> {
         py.detach(|| {
-            let pattern = pattern::Pattern::parse(source)?;
+            let pattern = pattern::Pattern::parse_read(source)?;
             let store = self.snapshot()?;
+            let Some(pattern) = pattern else {
+                return Ok(0);
+            };
             pattern.count(
                 |graph| store.graph_len(graph).map_err(runtime),
                 || {

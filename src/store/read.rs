@@ -37,6 +37,11 @@ pub(super) fn start(
     graph: Option<TermView<'_>>,
     mask: u8,
 ) -> Result<FirstBatch> {
+    if mask & !7 != 0 {
+        return Err(Error::Invalid(
+            "Projection mask must be between 0 and 7".into(),
+        ));
+    }
     if mask == 0
         && let (Some(subject), Some(predicate), Some(object)) = (subject, predicate, object)
     {
@@ -51,7 +56,11 @@ pub(super) fn start(
             None,
         ));
     }
-    let cursor = open(store, subject, predicate, object, graph, mask)?;
+    let pattern = PreparedRead::new(subject, predicate, object, graph)?;
+    if !pattern.can_match() {
+        return Ok((Vec::new(), None));
+    }
+    let cursor = open(store, &pattern, mask)?;
     let (rows, finished) = cursor.batch()?;
     Ok((rows, if finished { None } else { Some(cursor) }))
 }
@@ -63,12 +72,14 @@ pub(super) fn contains_exact(
     object: TermView<'_>,
     graph: Option<TermView<'_>>,
 ) -> Result<bool> {
-    let subject = PreparedTerm::new(subject, Position::Subject)?;
-    let predicate = PreparedTerm::new(predicate, Position::Predicate)?;
-    let object = PreparedTerm::new(object, Position::Object)?;
-    let graph = graph
-        .map(|source| PreparedTerm::new(source, Position::Subject))
-        .transpose()?;
+    let pattern = PreparedRead::new(Some(subject), Some(predicate), Some(object), graph)?;
+    if !pattern.can_match() {
+        return Ok(false);
+    }
+    let subject = pattern.subject.as_ref().expect("bound subject");
+    let predicate = pattern.predicate.as_ref().expect("bound predicate");
+    let object = pattern.object.as_ref().expect("bound object");
+    let graph = &pattern.graph;
     store
         .contains(QuadRef::new(
             subject.subject_ref(),
@@ -81,31 +92,57 @@ pub(super) fn contains_exact(
         .map_err(runtime)
 }
 
-fn open(
-    store: &Store,
-    subject_source: Option<TermView<'_>>,
-    predicate_source: Option<TermView<'_>>,
-    object_source: Option<TermView<'_>>,
-    graph_source: Option<TermView<'_>>,
-    mask: u8,
-) -> Result<ReadCursor> {
-    if mask & !7 != 0 {
-        return Err(Error::Invalid(
-            "Projection mask must be between 0 and 7".into(),
-        ));
+// bounded: four optional caller-owned RDF term views per read operation.
+struct PreparedRead<'a> {
+    subject: Option<PreparedTerm<'a>>,
+    predicate: Option<PreparedTerm<'a>>,
+    object: Option<PreparedTerm<'a>>,
+    graph: Option<PreparedTerm<'a>>,
+}
+
+impl<'a> PreparedRead<'a> {
+    fn new(
+        subject: Option<TermView<'a>>,
+        predicate: Option<TermView<'a>>,
+        object: Option<TermView<'a>>,
+        graph: Option<TermView<'a>>,
+    ) -> Result<Self> {
+        // Read terms are valid RDF terms even when their positions cannot match.
+        // Validate every term before deciding absence, including later metadata.
+        Ok(Self {
+            subject: subject
+                .map(|v| PreparedTerm::new(v, Position::Object))
+                .transpose()?,
+            predicate: predicate
+                .map(|v| PreparedTerm::new(v, Position::Object))
+                .transpose()?,
+            object: object
+                .map(|v| PreparedTerm::new(v, Position::Object))
+                .transpose()?,
+            graph: graph
+                .map(|v| PreparedTerm::new(v, Position::Subject))
+                .transpose()?,
+        })
     }
-    let subject = subject_source
-        .map(|source| PreparedTerm::new(source, Position::Subject))
-        .transpose()?;
-    let predicate = predicate_source
-        .map(|source| PreparedTerm::new(source, Position::Predicate))
-        .transpose()?;
-    let object = object_source
-        .map(|source| PreparedTerm::new(source, Position::Object))
-        .transpose()?;
-    let graph = graph_source
-        .map(|source| PreparedTerm::new(source, Position::Subject))
-        .transpose()?;
+
+    fn can_match(&self) -> bool {
+        self.subject
+            .as_ref()
+            .is_none_or(|v| !matches!(v.term_ref(), oxigraph::model::TermRef::Literal(_)))
+            && self
+                .predicate
+                .as_ref()
+                .is_none_or(|v| matches!(v.term_ref(), oxigraph::model::TermRef::NamedNode(_)))
+    }
+}
+
+fn open(store: &Store, pattern: &PreparedRead<'_>, mask: u8) -> Result<ReadCursor> {
+    let PreparedRead {
+        subject,
+        predicate,
+        object,
+        graph,
+    } = pattern;
     let iter = store
         .quads_for_pattern(
             subject.as_ref().map(PreparedTerm::subject_ref),

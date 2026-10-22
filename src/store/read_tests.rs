@@ -1,7 +1,19 @@
 use oxigraph::model::{BlankNode, GraphName, Literal, NamedNode, Quad};
 use oxigraph::store::{LexicalTerm, Store};
 
-use super::{BATCH_ROWS, TermView, open, start};
+use super::{BATCH_ROWS, TermView, start};
+
+fn open(
+    store: &Store,
+    subject: Option<TermView<'_>>,
+    predicate: Option<TermView<'_>>,
+    object: Option<TermView<'_>>,
+    graph: Option<TermView<'_>>,
+    mask: u8,
+) -> crate::Result<super::ReadCursor> {
+    let pattern = super::PreparedRead::new(subject, predicate, object, graph)?;
+    super::open(store, &pattern, mask)
+}
 
 fn uri(value: &str) -> TermView<'_> {
     TermView::new("uri", value, None, None)
@@ -192,13 +204,23 @@ fn snapshots_are_owned_and_independent() {
 }
 
 #[test]
-fn invalid_term_positions_and_masks_fail() {
+fn impossible_read_positions_are_empty_but_invalid_metadata_and_masks_fail() {
     let store = Store::new().unwrap();
     let literal = || TermView::new("literal", "x", None, None);
-    assert!(open(&store, Some(literal()), None, None, None, 7).is_err());
-    assert!(open(&store, None, Some(literal()), None, None, 7).is_err());
+    assert!(
+        start(&store, Some(literal()), None, None, None, 7)
+            .unwrap()
+            .0
+            .is_empty()
+    );
+    assert!(
+        start(&store, None, Some(literal()), None, None, 7)
+            .unwrap()
+            .0
+            .is_empty()
+    );
     assert!(open(&store, None, None, None, Some(literal()), 7).is_err());
-    assert!(open(&store, None, None, None, None, 8).is_err());
+    assert!(start(&store, None, None, None, None, 8).is_err());
     assert!(
         open(
             &store,
@@ -405,9 +427,19 @@ fn exact_membership_preserves_graph_scope_lexicals_and_validation() {
         .is_empty()
     );
     assert!(lookup(object, Some(uri("graph"))).is_empty());
+    for (subject, predicate) in [(object, predicate), (subject, subject)] {
+        let (rows, cursor) = start(
+            &store,
+            Some(subject),
+            Some(predicate),
+            Some(object),
+            Some(graph),
+            0,
+        )
+        .unwrap();
+        assert!(rows.is_empty() && cursor.is_none());
+    }
     for (subject, predicate, object, graph) in [
-        (object, predicate, object, Some(graph)),
-        (subject, subject, object, Some(graph)),
         (
             subject,
             predicate,
