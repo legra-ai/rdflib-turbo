@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 
-def render_badge(label, covered, count):
+def badge_data(label, covered, count):
     if any(type(value) is not int or value < 0 for value in (covered, count)) or covered > count:
         raise ValueError("Invalid measured coverage counts")
     tenths = covered * 1000 // count if count else None
@@ -20,6 +20,17 @@ def render_badge(label, covered, count):
         if tenths is not None and tenths >= 700
         else "#e05d44"
     )
+    return {
+        "schemaVersion": 1,
+        "label": label,
+        "message": percentage,
+        "color": color.removeprefix("#"),
+    }
+
+
+def render_badge(label, covered, count):
+    data = badge_data(label, covered, count)
+    percentage, color = data["message"], "#" + data["color"]
     left = len(label) * 7 + 14
     width = left + 62
     title = html.escape(f"{label}: {percentage}", quote=True)
@@ -52,25 +63,25 @@ def build_site(python, rust, output, project, revision):
         if lines <= 0 or metrics["lines"]["count"] <= 0:
             raise ValueError("Executable source coverage is missing")
         badges = {
-            "python-lines.svg": render_badge("Python lines", covered_lines, lines),
-            "python-branches.svg": render_badge("Python branches", covered_branches, branches),
-            "coverage.svg": render_badge(
-                "Python coverage", covered_lines + covered_branches, lines + branches
-            ),
+            "python-lines": ("Python lines", covered_lines, lines),
+            "python-branches": ("Python branches", covered_branches, branches),
+            "coverage": ("Python coverage", covered_lines + covered_branches, lines + branches),
         }
         for metric in ("lines", "regions", "functions"):
-            badges[f"rust-{metric}.svg"] = render_badge(
+            badges[f"rust-{metric}"] = (
                 ("Shared Rust " if shared else "Rust ") + metric,
                 metrics[metric]["covered"],
                 metrics[metric]["count"],
             )
     except (KeyError, TypeError) as error:
         raise ValueError("Missing measured coverage counts") from error
+    payloads = {name: badge_data(*counts) for name, counts in badges.items()}
     output.mkdir(parents=True, exist_ok=True)
-    for filename, svg in badges.items():
-        (output / filename).write_text(svg)
+    for name, counts in badges.items():
+        (output / f"{name}.svg").write_text(render_badge(*counts))
+        (output / f"{name}.json").write_text(json.dumps(payloads[name]) + "\n")
     images = "\n".join(
-        f'<p><img src="{name}" alt="{name}"></p>' for name in badges if name != "coverage.svg"
+        f'<p><img src="{name}.svg" alt="{name}"></p>' for name in badges if name != "coverage"
     )
     python_prefix = "owlrl-" if shared else ""
     text = f"""<!doctype html><html lang="en"><meta charset="utf-8">
