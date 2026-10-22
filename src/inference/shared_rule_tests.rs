@@ -169,3 +169,55 @@ fn shared_inequality_retains_distinct_numeric_lexical_forms() {
     };
     assert_eq!(triples.count(), 2);
 }
+
+#[test]
+fn shared_owl_mode_executes_restrictions_and_reference_schema() {
+    let n = |name: &str| NamedNode::new(name.to_owned()).unwrap();
+    let rdf = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+    let owl = "http://www.w3.org/2002/07/owl#";
+    let mut dataset = Dataset::new();
+    for (subject, predicate, object) in [
+        ("urn:R", format!("{owl}onProperty"), "urn:p".to_owned()),
+        ("urn:R", format!("{owl}hasValue"), "urn:v".to_owned()),
+        ("urn:a", format!("{rdf}type"), "urn:R".to_owned()),
+        ("urn:p", format!("{rdf}type"), format!("{rdf}Property")),
+        ("urn:C", format!("{owl}equivalentClass"), "urn:C".to_owned()),
+    ] {
+        dataset.insert(&Quad::new(
+            n(subject),
+            n(&predicate),
+            n(&object),
+            GraphName::DefaultGraph,
+        ));
+    }
+    let mut value = false;
+    let mut self_equivalent = false;
+    for query in super::shared::CompiledRule::for_mode("owlrl").unwrap() {
+        let QueryResults::Graph(triples) = query.on_queryable_dataset(&dataset).execute().unwrap()
+        else {
+            panic!("expected graph result")
+        };
+        for triple in triples {
+            let triple = triple.unwrap();
+            value |= triple.subject == n("urn:a").into()
+                && triple.predicate == n("urn:p")
+                && triple.object == n("urn:v").into();
+            self_equivalent |= triple.subject == n("urn:p").into()
+                && triple.predicate == n(&format!("{owl}equivalentProperty"))
+                && triple.object == n("urn:p").into();
+            assert_ne!(
+                triple,
+                oxigraph::model::Triple::new(
+                    n("urn:C"),
+                    n("http://www.w3.org/2000/01/rdf-schema#subClassOf"),
+                    n("urn:C")
+                )
+            );
+        }
+    }
+    assert!(value, "shared hasValue consequence missing");
+    assert!(
+        self_equivalent,
+        "versioned rdf:Property consequence missing"
+    );
+}

@@ -3,7 +3,7 @@
 use datalog_structural_model::{Atom, BuiltinFilter, Literal, Rule, Term};
 use oxigraph::model::NamedNodeRef;
 use oxigraph::sparql::{PreparedSparqlQuery, SparqlEvaluator};
-use rdf_reasoning::{RuleId::*, TRIPLE_RELATION};
+use rdf_reasoning::{Owlrl762RuleId, RuleId::*, TRIPLE_RELATION};
 use spargebra::term::Variable;
 
 use crate::{Error, Result};
@@ -78,7 +78,7 @@ impl CompiledRule {
 
 impl CompiledRule {
     pub(super) fn for_mode(mode: &str) -> Result<Vec<PreparedSparqlQuery>> {
-        // bounded: twelve RDFS clauses plus four OWL property clauses.
+        // bounded: the fixed published RDFS and OWL relational clause inventory.
         let mut selected = Vec::new();
         if mode != "owlrl" {
             // Resource seeding stays in the reference initialization boundary.
@@ -90,11 +90,53 @@ impl CompiledRule {
             selected.extend([Rdfs2, Rdfs3, Rdfs7, Rdfs9]);
         }
         if mode != "rdfs" {
-            selected.extend([PrpSymp, PrpTrp, PrpInv1, PrpInv2]);
+            selected.extend([
+                PrpSymp,
+                PrpTrp,
+                PrpInv1,
+                PrpInv2,
+                PrpFp,
+                PrpIfp,
+                ClsSvf1,
+                ClsSvf2,
+                ClsAvf,
+                ClsHv1,
+                ClsHv2,
+                CaxEqc1,
+                CaxEqc2,
+                ScmClsSelfSubclass,
+                ScmClsSelfEquivalent,
+                ScmClsThing,
+                ScmClsNothing,
+                ScmEqc2,
+                ScmOpSelfSubproperty,
+                ScmOpSelfEquivalent,
+                ScmDpSelfSubproperty,
+                ScmDpSelfEquivalent,
+                ScmDom1,
+                ScmDom2,
+                ScmRng1,
+                ScmRng2,
+                ScmHv,
+                ScmSvf1,
+                ScmSvf2,
+                ScmAvf1,
+                ScmAvf2,
+            ]);
+            if mode == "owlrl" {
+                selected.push(Rdfs6);
+            }
         }
-        selected
+        // bounded: one prepared query per fixed catalogue clause.
+        let mut queries = selected
             .into_iter()
-            .map(|id| CompiledRule::try_new(&id.definition()).map(CompiledRule::into_query))
-            .collect()
+            .map(|id| Self::try_new(&id.definition()).map(Self::into_query))
+            .collect::<Result<Vec<_>>>()?;
+        if mode != "rdfs" {
+            for id in Owlrl762RuleId::ALL {
+                queries.push(Self::try_new(&id.definition())?.into_query());
+            }
+        }
+        Ok(queries)
     }
 }
