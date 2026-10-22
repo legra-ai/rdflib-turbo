@@ -2,15 +2,17 @@
 
 use oxigraph::model::*;
 use oxigraph::sparql::{PreparedSparqlQuery, QueryResults};
-use pyshacl_turbo_engine::{GraphRead, QueryGraph, UnionGraph};
+use pyshacl_turbo_engine::GraphRead;
 
 use super::backend::Graph;
 use super::{InferenceOutcome, InferenceRequest, expand_configured};
 use crate::Result;
 
+#[path = "staged_query.rs"]
+mod query;
+
 struct StagedDataset<'a> {
     source: &'a Dataset,
-    union: UnionGraph<'a, Dataset>,
     additions: Dataset,
     destination: GraphName,
 }
@@ -19,18 +21,80 @@ impl<'a> StagedDataset<'a> {
     fn new(source: &'a Dataset, destination: GraphName) -> Self {
         Self {
             source,
-            union: UnionGraph::new(source),
             additions: Dataset::new(),
             destination,
         }
     }
 
-    fn source_contains_triple(&self, quad: &Quad) -> bool {
+    fn source_contains_triple(&self, quad: QuadRef<'_>) -> bool {
         self.source
-            .quads_for_subject(quad.subject.as_ref())
-            .any(|stored| {
-                stored.predicate == quad.predicate.as_ref() && stored.object == quad.object.as_ref()
+            .quads_for_pattern(
+                Some(quad.subject),
+                Some(quad.predicate),
+                Some(quad.object),
+                None,
+            )
+            .next()
+            .is_some()
+    }
+
+    fn default_refs<'b>(
+        &'b self,
+        subject: Option<NamedOrBlankNodeRef<'_>>,
+        predicate: Option<NamedNodeRef<'_>>,
+        object: Option<TermRef<'_>>,
+    ) -> impl Iterator<Item = QuadRef<'b>> + use<'a, 'b> {
+        self.source
+            .quads_for_pattern(subject, predicate, object, None)
+            .filter(|quad| {
+                self.source
+                    .quads_for_pattern(
+                        Some(quad.subject),
+                        Some(quad.predicate),
+                        Some(quad.object),
+                        None,
+                    )
+                    .next()
+                    == Some(*quad)
             })
+            .map(|quad| QuadRef {
+                graph_name: GraphNameRef::DefaultGraph,
+                ..quad
+            })
+    }
+
+    fn matching_refs<'b>(
+        &'b self,
+        subject: Option<NamedOrBlankNodeRef<'_>>,
+        predicate: Option<NamedNodeRef<'_>>,
+        object: Option<TermRef<'_>>,
+        graph: Option<GraphNameRef<'_>>,
+    ) -> Box<dyn Iterator<Item = QuadRef<'b>> + 'b> {
+        let source: Box<dyn Iterator<Item = QuadRef<'b>> + 'b> = match graph {
+            Some(GraphNameRef::DefaultGraph) => {
+                Box::new(self.default_refs(subject, predicate, object))
+            }
+            Some(graph) => {
+                Box::new(
+                    self.source
+                        .quads_for_pattern(subject, predicate, object, Some(graph)),
+                )
+            }
+            None => Box::new(
+                self.default_refs(subject, predicate, object).chain(
+                    self.source
+                        .quads_for_pattern(subject, predicate, object, None)
+                        .filter(|quad| !quad.graph_name.is_default_graph()),
+                ),
+            ),
+        };
+        Box::new(
+            source.chain(
+                self.additions
+                    .quads_for_pattern(subject, predicate, object, graph)
+                    .filter(|quad| !self.source_contains_triple(*quad)),
+            ),
+        )
     }
 
     fn output_contains(&self, quad: &Quad) -> bool {
@@ -49,16 +113,8 @@ impl<'source> GraphRead for StagedDataset<'source> {
         object: Option<TermRef<'_>>,
         graph: Option<GraphNameRef<'_>>,
     ) -> impl Iterator<Item = pyshacl_turbo_engine::Result<Quad>> + use<'a, 'source> {
-        self.union
-            .matching_quads(subject, predicate, object, graph)
-            .chain(
-                self.additions
-                    .matching_quads(subject, predicate, object, graph)
-                    .filter_map(|quad| match quad {
-                        Ok(quad) if self.source_contains_triple(&quad) => None,
-                        other => Some(other),
-                    }),
-            )
+        self.matching_refs(subject, predicate, object, graph)
+            .map(|quad| Ok(quad.into_owned()))
     }
 
     fn named_graphs(
@@ -84,9 +140,7 @@ impl Graph for StagedDataset<'_> {
     }
 
     fn query(&self, query: PreparedSparqlQuery) -> Result<QueryResults<'_>> {
-        Ok(query
-            .on_queryable_dataset(QueryGraph::new(self))
-            .execute()?)
+        Ok(query.on_queryable_dataset(self).execute()?)
     }
 
     fn contains_destination(&self, quad: &Quad) -> Result<bool> {
