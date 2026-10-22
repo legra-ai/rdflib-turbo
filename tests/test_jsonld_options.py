@@ -189,6 +189,15 @@ def test_caught_parser_option_failure_dooms_explicit_transaction():
     assert not graph
 
 
+def test_unsupported_jsonld_version_is_explicit_and_never_writes():
+    graph = Graph()
+    before = dict(graph.namespaces())
+    with pytest.raises(NotImplementedError, match="Unsupported JSON-LD version"):
+        graph.parse(data=DOCUMENT, format="json-ld", version=2.0)
+    assert not graph
+    assert dict(graph.namespaces()) == before
+
+
 def test_default_jsonld_parse_still_uses_native_parser(monkeypatch):
     def forbidden(*args, **kwargs):
         raise AssertionError("default parser dispatched to Python")
