@@ -1,14 +1,51 @@
 # rdflib-turbo
 
-[![PyPI](https://img.shields.io/pypi/v/rdflib-turbo)](https://pypi.org/project/rdflib-turbo/)
+[![PyPI](https://img.shields.io/pypi/v/rdflib-turbo?style=flat)](https://pypi.org/project/rdflib-turbo/)
+[![Tests and wheels](https://img.shields.io/github/actions/workflow/status/legra-ai/rdflib-turbo/ci.yml?branch=main&label=Tests%20and%20wheels&logo=github&style=flat)](https://github.com/legra-ai/rdflib-turbo/actions/workflows/ci.yml)
+[![Python line coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Flegra-ai.github.io%2Frdflib-turbo%2Fpython-lines.json&style=flat)](https://legra-ai.github.io/rdflib-turbo/)
+[![Python branch coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Flegra-ai.github.io%2Frdflib-turbo%2Fpython-branches.json&style=flat)](https://legra-ai.github.io/rdflib-turbo/)
+[![Rust line coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Flegra-ai.github.io%2Frdflib-turbo%2Frust-lines.json&style=flat)](https://legra-ai.github.io/rdflib-turbo/)
+[![Rust region coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Flegra-ai.github.io%2Frdflib-turbo%2Frust-regions.json&style=flat)](https://legra-ai.github.io/rdflib-turbo/)
+[![Rust function coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Flegra-ai.github.io%2Frdflib-turbo%2Frust-functions.json&style=flat)](https://legra-ai.github.io/rdflib-turbo/)
 
-[![Tests and wheels](https://github.com/legra-ai/rdflib-turbo/actions/workflows/ci.yml/badge.svg)](https://github.com/legra-ai/rdflib-turbo/actions/workflows/ci.yml)
+## Performance
 
-[![Python line coverage](https://legra-ai.github.io/rdflib-turbo/python-lines.svg)](https://legra-ai.github.io/rdflib-turbo/)
-[![Python branch coverage](https://legra-ai.github.io/rdflib-turbo/python-branches.svg)](https://legra-ai.github.io/rdflib-turbo/)
-[![Rust line coverage](https://legra-ai.github.io/rdflib-turbo/rust-lines.svg)](https://legra-ai.github.io/rdflib-turbo/)
-[![Rust region coverage](https://legra-ai.github.io/rdflib-turbo/rust-regions.svg)](https://legra-ai.github.io/rdflib-turbo/)
-[![Rust function coverage](https://legra-ai.github.io/rdflib-turbo/rust-functions.svg)](https://legra-ai.github.io/rdflib-turbo/)
+Compare **RDFLib + OWL-RL + pySHACL** with
+[rdflib-turbo](https://github.com/legra-ai/rdflib-turbo),
+[owlrl-turbo](https://github.com/legra-ai/owlrl-turbo) and
+[pyshacl-turbo](https://github.com/legra-ai/pyshacl-turbo) used together.
+The Turbo pipeline keeps **one native dataset** through parsing, in-place
+inference and SHACL validation.
+
+**End-to-end measurements for 1,000 synthetic nodes:**
+
+| Platform | Inference | Python trio (ms) | Turbo trio (ms) | Python peak (MiB) | Turbo peak (MiB) |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Linux x86-64 | RDFS | 522.5 | **47.6** | 47.15 | 68.66 |
+| Linux x86-64 | OWL-RL | 801.3 | **56.4** | 48.69 | 69.29 |
+| macOS ARM64 | RDFS | 702.8 | **80.7** | 55.38 | 59.94 |
+| macOS ARM64 | OWL-RL | 1,028.5 | **72.5** | 55.91 | 60.42 |
+
+**Turbo uses more memory in these runs: 8–46% higher whole-process peak RSS.**
+Ordinary RDF inference closures and complete SHACL report graphs match.
+Generalized RDF statements and report text differ, so these timings are
+**not a full-output speedup claim** or a claim of complete drop-in parity.
+
+Measured in CI on **21 October 2026**, using source-built wheels and Python 3.13:
+`rdflib-turbo 0.2.0a7`, `owlrl-turbo 0.1.0a3`, `pyshacl-turbo 0.6.0` versus
+`rdflib 7.6.0`, `owlrl 7.6.2`, `pyshacl 0.40.1`.
+Times are medians of seven samples after warmup and include data parsing,
+shape compilation, inference, validation and full report construction. Shapes
+are parsed before timing. Memory is the median peak RSS of three fresh processes,
+including the interpreter, imports and retained output. Shared CI hosts and small
+synthetic cases do not establish universal speedups or large-dataset capacity.
+
+See the complete [Linux measurements](https://github.com/legra-ai/pyshacl-turbo/blob/bc3082b44e680d8c8193407c2d1c826d80bc51d5/runs/39687798434-1/ubuntu-latest/releases.md),
+[macOS measurements](https://github.com/legra-ai/pyshacl-turbo/blob/bc3082b44e680d8c8193407c2d1c826d80bc51d5/runs/39687798434-1/macos-latest/releases.md) and
+[continuously recorded benchmark history](https://github.com/legra-ai/pyshacl-turbo/tree/benchmark-results)
+for all samples, source identities, dependency locks and other dataset sizes.
+
+## Overview
 
 Functional alpha of a native RDF dataset runtime for Python, built on Oxigraph
 and exact-term compatibility work extracted from pyshacl-turbo.
