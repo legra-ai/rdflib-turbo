@@ -4,18 +4,36 @@ import json
 from collections.abc import Iterator
 from contextlib import contextmanager
 from importlib.metadata import version
-from typing import Self
+from typing import TYPE_CHECKING, Self
 
 from rdflib import Dataset as RDFLibDataset
 from rdflib import Graph as RDFLibGraph
 
 from ._native import NativeDataset
 from ._operations import GraphOperations, _term
-from .graph import Graph, StoreDataset
-from .store import Store, Transaction, ValidationError
+
+if TYPE_CHECKING:
+    from .graph import Graph, StoreDataset
+    from .store import Store, Transaction, ValidationError
 
 __version__ = version("rdflib-turbo")
 __all__ = ["Dataset", "Graph", "Store", "StoreDataset", "Transaction", "ValidationError"]
+
+
+def __getattr__(name: str) -> object:
+    if name in {"Graph", "StoreDataset"}:
+        from . import graph
+
+        return getattr(graph, name)
+    if name in {"Store", "Transaction", "ValidationError"}:
+        from . import store
+
+        return getattr(store, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(__all__))
 
 
 class Dataset(GraphOperations):
