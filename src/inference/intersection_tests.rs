@@ -167,3 +167,36 @@ fn intersection_rewrite_preserves_empty_dangling_cyclic_and_branching_paths() {
         );
     }
 }
+
+#[test]
+fn unrelated_intersections_do_not_multiply_a_fixed_individual_population() {
+    let individuals = 64_u64;
+    for classes in [8_u64, 16, 32] {
+        let mut source = String::from(
+            "@prefix owl: <http://www.w3.org/2002/07/owl#> .\n\
+             @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n",
+        );
+        for index in 0..classes {
+            source.push_str(&format!(
+                "<urn:C{index}> owl:intersectionOf (<urn:A{index}> <urn:B{index}>) .\n"
+            ));
+        }
+        for index in 0..individuals {
+            source.push_str(&format!("<urn:x{index}> a <urn:A0> .\n"));
+            if index % 2 == 0 {
+                source.push_str(&format!("<urn:x{index}> a <urn:B0> .\n"));
+            }
+        }
+        let data = dataset(&source);
+        let (actual, work) = current(&data);
+        assert_eq!(actual.len() as u64, individuals / 2);
+        for triple in actual {
+            assert_eq!(triple.object, NamedNode::new("urn:C0").unwrap().into());
+        }
+        let budget = 8 * classes + 8 * individuals;
+        assert!(
+            work <= budget,
+            "{classes} intersections visited {work} rows; budget {budget}"
+        );
+    }
+}
