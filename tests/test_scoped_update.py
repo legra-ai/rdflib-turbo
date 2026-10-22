@@ -91,5 +91,8 @@ def test_invalid_update_binding_keeps_committed_store_open_and_unchanged():
     with pytest.raises(TypeError, match="Unsupported RDF term"):
         graph.update("INSERT {?s <urn:scoped-update:q> ?v} WHERE {}", initBindings={"v": object()})
     assert set(graph) == {(EX.existing, EX.p, EX.o)}
-    graph.update("INSERT DATA {<urn:new> <urn:scoped-update:p> <urn:o>}")
+    with graph.transaction() as transaction:
+        transaction.update("INSERT DATA {<urn:new> <urn:scoped-update:p> <urn:o>}")
+        assert len(transaction) == 2
+        assert len(graph) == 1
     assert len(graph) == 2
