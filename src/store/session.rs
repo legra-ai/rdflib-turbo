@@ -2,7 +2,6 @@
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread::{self, JoinHandle};
 
-use oxigraph::model::Dataset;
 use oxigraph::store::{Store, Transaction};
 
 use crate::{Error, Result};
@@ -131,9 +130,7 @@ impl Session {
         let reply = match operation.execute(&mut transaction)? {
             Reply::StagedValidation(staged) => {
                 let (report, additions) = *staged;
-                for quad in &additions {
-                    transaction.insert(quad);
-                }
+                additions.apply(&mut transaction);
                 Reply::Validation(Box::new(report))
             }
             reply => reply,
@@ -199,7 +196,7 @@ impl Session {
 
 fn run(mut transaction: Transaction<'_>, receiver: mpsc::Receiver<Command>) {
     let mut revision = 0_u64;
-    let mut pending: Option<(u64, Dataset)> = None;
+    let mut pending: Option<(u64, super::shacl::ValidationDelta)> = None;
     while let Ok(command) = receiver.recv() {
         match command {
             Command::Execute(operation, reply) => {
@@ -237,9 +234,7 @@ fn run(mut transaction: Transaction<'_>, receiver: mpsc::Receiver<Command>) {
                         ));
                     }
                     revision = next_revision(revision)?;
-                    for quad in &additions {
-                        transaction.insert(quad);
-                    }
+                    additions.apply(&mut transaction);
                     Ok(Reply::Done)
                 })();
                 let abort = result.is_err();

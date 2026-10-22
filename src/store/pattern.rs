@@ -50,7 +50,7 @@ impl InputTerm {
     }
 }
 
-pub(super) fn graph(source: &str) -> Result<GraphName> {
+pub(crate) fn graph(source: &str) -> Result<GraphName> {
     if source.is_empty() {
         return Ok(GraphName::DefaultGraph);
     }
