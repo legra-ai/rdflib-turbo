@@ -54,8 +54,8 @@ eagerly materialized. No performance or complete-conformance claim is made.
 
 ## RDFLib Graph and dataset facades
 
-Graph and StoreDataset are currently unreleased source APIs. Import them explicitly
-from rdflib_turbo; importing rdflib continues to select the original RDFLib classes.
+Import Graph and StoreDataset explicitly from rdflib_turbo; importing rdflib
+continues to select the original RDFLib classes.
 
 | API | Data owner and intended use |
 |---|---|
@@ -105,15 +105,17 @@ commit()/rollback() on the RDFLib adapter are unsupported. Parsing is atomic and
 uses RDFLib input-source handling followed by the native parser; parser-specific
 keyword options are rejected.
 
-SPARQL requires query/update strings and the native processor. Graph and
-StoreDataset queries accept RDFLib `initBindings`, including variables hidden
-by nested projections. Parameter terms remain native; they are never inserted
-into query text. Prepared RDFLib queries, nonempty Update `initBindings`,
-alternate processors and scoped named-Graph SPARQL Update are rejected.
-Use StoreDataset.update() for dataset updates,
-including explicit GRAPH clauses. Quoted graphs and arbitrary RDFLib store
-plugins are unsupported. See the [facade decision](docs/adr/0009-native-rdflib-graph-facade.md)
-and [bounded read contract](docs/adr/0011-bounded-typed-scoped-reads.md).
+SPARQL uses the native processor. Queries accept strings or supported prepared
+RDFLib queries; updates require strings. Both accept RDFLib `initBindings`,
+including variables hidden by nested projections. Parameter terms remain native;
+they are never inserted into query text. Graph.update() uses that graph for
+unqualified reads and writes, including graphs identified by blank nodes, and
+retains the enclosing transaction. Use StoreDataset.update() for dataset updates,
+including explicit GRAPH clauses. Alternate processors, prepared updates, quoted
+graphs and arbitrary RDFLib store plugins are unsupported. See the
+[facade decision](docs/adr/0009-native-rdflib-graph-facade.md),
+[scoped UPDATE contract](docs/adr/0051-scoped-native-graph-update.md) and
+[bounded read contract](docs/adr/0011-bounded-typed-scoped-reads.md).
 
 ## Transactional storage
 
