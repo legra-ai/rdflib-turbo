@@ -1,5 +1,5 @@
 //! Preserve the previous materialized-union algorithm as an independent oracle.
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use super::*;
 
@@ -138,47 +138,71 @@ fn failed_borrowed_inference_preserves_source_and_destination() {
 #[test]
 #[ignore = "explicit local timing comparison against the frozen named-union algorithm"]
 fn benchmark_borrowed_named_union_against_frozen() {
-    let mut input = Dataset::new();
-    let class = NamedNode::new_unchecked("urn:Child");
-    let graph = NamedNode::new_unchecked("urn:source");
-    // bounded: fixed 2,000-subject synthetic benchmark, never production input.
-    for index in 0..2000 {
+    for subjects in [2000, 20000] {
+        let mut input = Dataset::new();
+        let class = NamedNode::new_unchecked("urn:Child");
+        let graph = NamedNode::new_unchecked("urn:source");
+        // bounded: at most 20,000 synthetic subjects, never production input.
+        for index in 0..subjects {
+            input.insert(&Quad::new(
+                NamedNode::new_unchecked(format!("urn:s:{index}")),
+                crate::graph::iri(crate::graph::RDF, "type"),
+                class.clone(),
+                graph.clone(),
+            ));
+        }
         input.insert(&Quad::new(
-            NamedNode::new_unchecked(format!("urn:s:{index}")),
-            crate::graph::iri(crate::graph::RDF, "type"),
-            class.clone(),
-            graph.clone(),
+            class,
+            crate::graph::iri(crate::graph::RDFS, "subClassOf"),
+            NamedNode::new_unchecked("urn:Parent"),
+            graph,
         ));
+        for mode in ["rdfs", "owlrl"] {
+            // bounded: one warmup and seven retained paired samples per algorithm.
+            let mut old_samples = Vec::with_capacity(7);
+            let mut current_samples = Vec::with_capacity(7);
+            for sample in 0..8 {
+                let (old, current) = if sample % 2 == 0 {
+                    (timed(&input, mode, false), timed(&input, mode, true))
+                } else {
+                    let current = timed(&input, mode, true);
+                    (timed(&input, mode, false), current)
+                };
+                assert_eq!(current.1, old.1);
+                if sample != 0 {
+                    old_samples.push(old.0);
+                    current_samples.push(current.0);
+                }
+            }
+            old_samples.sort_unstable();
+            current_samples.sort_unstable();
+            println!(
+                "NAMED_UNION subjects={subjects} mode={mode} frozen={:?} borrowed={:?} frozen_samples={old_samples:?} borrowed_samples={current_samples:?}",
+                old_samples[3], current_samples[3]
+            );
+        }
     }
-    input.insert(&Quad::new(
-        class,
-        crate::graph::iri(crate::graph::RDFS, "subClassOf"),
-        NamedNode::new_unchecked("urn:Parent"),
-        graph,
-    ));
-    for mode in ["rdfs", "owlrl"] {
-        let mut old = input.clone();
-        let start = Instant::now();
-        frozen(
-            &mut old,
-            mode,
-            GraphName::DefaultGraph,
-            InferenceRequest::default(),
-        );
-        let old_time = start.elapsed();
-        let mut current = input.clone();
-        let start = Instant::now();
+}
+
+fn timed(input: &Dataset, mode: &str, borrowed: bool) -> (Duration, Dataset) {
+    // bounded: the explicitly capped benchmark fixture, excluded from the timer.
+    let mut data = input.clone();
+    let start = Instant::now();
+    if borrowed {
         expand_into(
-            &mut current,
+            &mut data,
             mode,
             GraphName::DefaultGraph,
             InferenceRequest::default(),
         )
         .unwrap();
-        println!(
-            "NAMED_UNION mode={mode} frozen={old_time:?} borrowed={:?}",
-            start.elapsed()
+    } else {
+        frozen(
+            &mut data,
+            mode,
+            GraphName::DefaultGraph,
+            InferenceRequest::default(),
         );
-        assert_eq!(current, old);
     }
+    (start.elapsed(), data)
 }

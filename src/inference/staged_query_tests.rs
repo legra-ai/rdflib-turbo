@@ -8,7 +8,7 @@ fn rows(results: QueryResults<'_>) -> Vec<Vec<(String, String)>> {
     let QueryResults::Solutions(solutions) = results else {
         panic!("SELECT must return solution rows");
     };
-    // bounded: every query runs against this test's fixed five-quad fixture.
+    // bounded: every query runs against this test's fixed small fixture.
     let mut rows: Vec<_> = solutions
         .map(|solution| {
             solution
