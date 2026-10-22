@@ -28,6 +28,14 @@ Only successful inference publishes the retained additions, through the existing
 insertion transaction. An isolated allocation budget catches source-sized
 lexical copies even when the invocation produces no output.
 
+Keep stored query terms borrowed through joins. The pinned dataset's unscoped
+indexes group each exact SPO before graph names, allowing union deduplication
+with one previous borrowed triple. Classify output once on insertion: genuinely
+new facts participate in later reads; publications already in the source union
+only need destination writeback. These sets are disjoint and retain no duplicate
+base index. Boolean membership uses exact indexed probes and must not reconstruct
+owned lexical payloads; an isolated allocation budget enforces this separately.
+
 The returned dataset owns the derived output and therefore consumes memory
 proportional to that output. This is not a bounded-memory materialization claim.
 RDFLib adapters can convert this delta and write only additions, avoiding term

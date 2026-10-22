@@ -11,6 +11,10 @@ use crate::Result;
 #[path = "staged_query.rs"]
 mod query;
 
+#[cfg(all(test, feature = "allocation-profiling"))]
+#[path = "staged_allocation_tests.rs"]
+mod allocation_tests;
+
 struct StagedDataset<'a> {
     source: &'a Dataset,
     output: Output,
@@ -158,6 +162,14 @@ impl Graph for StagedDataset<'_> {
     fn contains_destination(&self, quad: &Quad) -> Result<bool> {
         Ok(self.output_contains(quad)
             || self.output.contains(QuadRef {
+                graph_name: GraphNameRef::DefaultGraph,
+                ..quad.as_ref()
+            }))
+    }
+
+    fn contains(&self, quad: &Quad) -> Result<bool> {
+        Ok(self.source_contains_triple(quad.as_ref())
+            || self.output.additions.contains(QuadRef {
                 graph_name: GraphNameRef::DefaultGraph,
                 ..quad.as_ref()
             }))
