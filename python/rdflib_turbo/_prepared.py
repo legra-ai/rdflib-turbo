@@ -3,7 +3,6 @@
 import json
 
 from rdflib import BNode, Literal, Variable
-from rdflib.plugins.sparql.sparql import Query
 
 from ._operations import _encode
 
@@ -210,6 +209,8 @@ def pattern(value):
 
 
 def snapshot(query, *, dataset_context=False):
+    from rdflib.plugins.sparql.sparql import Query
+
     if not isinstance(query, Query):
         raise TypeError("A prepared RDFLib Query is required")
     algebra = query.algebra
