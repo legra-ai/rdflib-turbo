@@ -132,9 +132,13 @@ impl Operation {
                 graph,
                 allow_named_graphs,
             } => {
-                let mut parser = RdfParser::from_format(format)
-                    .rename_blank_nodes()
-                    .with_default_graph(pattern::graph(&graph)?);
+                let mut parser =
+                    RdfParser::from_format(format).with_default_graph(pattern::graph(&graph)?);
+                // RDFLib's JSON-LD parser retains supplied blank IDs. Other document
+                // syntaxes scope their blank labels to each parse operation.
+                if !matches!(format, RdfFormat::JsonLd { .. }) {
+                    parser = parser.rename_blank_nodes();
+                }
                 if !allow_named_graphs {
                     parser = parser.without_named_graphs();
                 }

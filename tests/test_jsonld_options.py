@@ -7,6 +7,7 @@ from rdflib import BNode, Literal, URIRef, plugin
 from rdflib import Dataset as ReferenceDataset
 from rdflib import Graph as ReferenceGraph
 from rdflib.compare import isomorphic
+from rdflib.parser import StringInputSource
 from rdflib.plugins.parsers.jsonld import JsonLDParser
 from rdflib.plugins.stores.memory import Memory
 from rdflib_turbo import Graph, StoreDataset
@@ -198,9 +199,95 @@ def test_unsupported_jsonld_version_is_explicit_and_never_writes():
     assert dict(graph.namespaces()) == before
 
 
-def test_default_jsonld_parse_still_uses_native_parser(monkeypatch):
+@pytest.mark.parametrize("rdf_format", ["json-ld", "application/ld+json"])
+def test_default_jsonld_parse_still_uses_native_parser(monkeypatch, rdf_format):
     def forbidden(*args, **kwargs):
         raise AssertionError("default parser dispatched to Python")
 
     monkeypatch.setattr(JsonLDParser, "parse", forbidden)
-    assert len(Graph().parse(data=DOCUMENT, format="json-ld")) == 1
+    assert len(Graph().parse(data=DOCUMENT, format=rdf_format)) == 1
+
+
+@pytest.mark.parametrize("options", [{}, {"version": 1.1}, {"base": "https://example.org/"}])
+@pytest.mark.parametrize("dynamic", [False, True])
+@pytest.mark.parametrize("content_type", ["application/json", "application/ld+json"])
+def test_context_link_metadata_matches_reference_without_duplicate_callbacks(
+    monkeypatch, options, dynamic, content_type
+):
+    class Source(StringInputSource):
+        def __init__(self):
+            super().__init__('{"@id":"urn:s","p":"value"}')
+            self.content_type = content_type
+            self.reads = {"url": 0, "links": 0}
+
+        def metadata(self, name):
+            self.reads[name] += 1
+            return {
+                "url": "https://example.org/document.json",
+                "links": ['<context.json>; rel="http://www.w3.org/ns/json-ld#context"'],
+            }[name]
+
+    class LinkedSource(Source):
+        @property
+        def url(self):
+            return self.metadata("url")
+
+        @property
+        def links(self):
+            return self.metadata("links")
+
+    class DynamicSource(Source):
+        def __getattr__(self, name):
+            if name in {"url", "links"}:
+                return self.metadata(name)
+            raise AttributeError(name)
+
+    def load(url, *args, **kwargs):
+        assert url == "https://example.org/context.json"
+        return {"@context": {"p": "urn:p"}}, None
+
+    monkeypatch.setattr("rdflib.plugins.shared.jsonld.context.source_to_json", load)
+    source_type = DynamicSource if dynamic else LinkedSource
+    reference_source, native_source = source_type(), source_type()
+    expected = ReferenceGraph().parse(source=reference_source, format="json-ld", **options)
+    actual = Graph().parse(source=native_source, format="json-ld", **options)
+    triples = {(URIRef("urn:s"), URIRef("urn:p"), Literal("value"))}
+    assert (
+        set(actual) == set(expected) == (triples if content_type == "application/json" else set())
+    )
+    assert native_source.reads == reference_source.reads
+
+
+@pytest.mark.parametrize("options", [{}, {"version": 1.1}, {"base": "https://example.org/"}])
+def test_native_jsonld_preserves_explicit_blank_ids(options):
+    document = '{"@id":"_:shared","urn:new":"new"}'
+    expected, actual = ReferenceGraph(), Graph()
+    for graph in (expected, actual):
+        graph.add((BNode("shared"), URIRef("urn:old"), Literal("old")))
+        graph.parse(data=document, format="json-ld", **options)
+    assert set(actual) == set(expected)
+    assert (BNode("shared"), URIRef("urn:new"), Literal("new")) in actual
+
+
+@pytest.mark.parametrize(
+    "rdf_format,document", [("json-ld", '{"urn:p":"value"}'), ("turtle", '[] <urn:p> "value" .')]
+)
+def test_generated_blank_nodes_remain_fresh_across_documents(rdf_format, document):
+    expected, actual = ReferenceGraph(), Graph()
+    for graph in (expected, actual):
+        graph.parse(data=document, format=rdf_format)
+        graph.parse(data=document, format=rdf_format)
+    assert len(set(actual.subjects())) == len(set(expected.subjects())) == 2
+    assert len(actual) == len(expected) == 2
+    assert {(p, o) for _, p, o in actual} == {(p, o) for _, p, o in expected}
+
+
+def test_turtle_explicit_blank_labels_keep_per_document_scope():
+    expected, actual = ReferenceGraph(), Graph()
+    for graph in (expected, actual):
+        graph.add((BNode("shared"), URIRef("urn:old"), Literal("old")))
+        graph.parse(data='_:shared <urn:new> "one" .', format="turtle")
+        graph.parse(data='_:shared <urn:new> "two" .', format="turtle")
+    assert len(set(actual.subjects())) == len(set(expected.subjects())) == 3
+    assert len(actual) == len(expected) == 3
+    assert {(p, o) for _, p, o in actual} == {(p, o) for _, p, o in expected}
