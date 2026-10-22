@@ -9,7 +9,9 @@ those operations unchanged would silently mutate the dataset default graph.
 Carry the exact native graph name through Store/Transaction update dispatch to
 PreparedSparqlUpdate.with_default_graph. The evaluator selects this implicit
 WHERE dataset only when WITH/USING has not selected another dataset, and maps
-default output quads and default graph management to the supplied scope. Explicit
+default output quads and default graph management to the supplied scope. The builder stores only the
+current scope; implicit read-dataset selection occurs at execution, so replacing
+the scope cannot retain a previous read target. Explicit
 GRAPH templates keep their named targets. Graph names may be blank nodes, which
 SPARQL AST graph-name types cannot express; never interpolate identifiers or
 rewrite query strings to emulate scope.

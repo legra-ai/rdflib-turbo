@@ -79,3 +79,64 @@ fn explicit_update_dataset_and_templates_override_implicit_scope() {
     );
     assert_eq!(store.graph_len(&node("implicit")).unwrap(), 0);
 }
+
+#[test]
+fn replacing_update_scope_changes_reads_and_writes_without_changing_explicit_datasets() {
+    for graph in [
+        node("replacement").into(),
+        BlankNode::new("replacement").unwrap().into(),
+        GraphName::DefaultGraph,
+    ] {
+        let store = Store::new().unwrap();
+        for (subject, target) in [
+            (node("old"), node("initial").into()),
+            (node("selected"), graph.clone()),
+            (node("explicit"), node("explicit").into()),
+        ] {
+            store
+                .insert(&Quad::new(subject, node("p"), node("o"), target))
+                .unwrap();
+        }
+        SparqlEvaluator::new()
+            .parse_update("INSERT {?s <urn:q> ?o} WHERE {?s <urn:p> ?o}")
+            .unwrap()
+            .with_default_graph(node("initial").into())
+            .with_default_graph(graph.clone())
+            .on_store(&store)
+            .execute()
+            .unwrap();
+        assert!(
+            store
+                .contains(&Quad::new(
+                    node("selected"),
+                    node("q"),
+                    node("o"),
+                    graph.clone()
+                ))
+                .unwrap()
+        );
+        assert!(
+            !store
+                .contains(&Quad::new(node("old"), node("q"), node("o"), graph.clone()))
+                .unwrap()
+        );
+        SparqlEvaluator::new()
+            .parse_update("WITH <urn:explicit> INSERT {?s <urn:r> ?o} WHERE {?s <urn:p> ?o}")
+            .unwrap()
+            .with_default_graph(node("initial").into())
+            .with_default_graph(graph)
+            .on_store(&store)
+            .execute()
+            .unwrap();
+        assert!(
+            store
+                .contains(&Quad::new(
+                    node("explicit"),
+                    node("r"),
+                    node("o"),
+                    node("explicit")
+                ))
+                .unwrap()
+        );
+    }
+}

@@ -97,5 +97,6 @@ graph identifiers that cannot be represented in SPARQL source syntax. Explicit
 WITH/USING datasets and GRAPH output templates keep their own selections. Scoped
 updates use readable transactions so pending writes remain visible; no source
 dataset is copied. Default INSERT/DELETE DATA, DELETE/INSERT WHERE and CLEAR/DROP
-operate on the supplied graph. This source patch must be byte-identical in the
+operate on the supplied graph. Replacing the builder scope updates reads and
+writes together; original explicit dataset specifications remain immutable. This source patch must be byte-identical in the
 canonical companion engine dependency under ADR0048.

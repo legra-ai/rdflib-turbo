@@ -60,11 +60,6 @@ impl PreparedSparqlUpdate {
     /// Blank graph identifiers are supported although SPARQL has no syntax for them.
     #[must_use]
     pub fn with_default_graph(mut self, graph: OxGraphName) -> Self {
-        for dataset in self.using_datasets_mut() {
-            if dataset.is_default_dataset() {
-                dataset.set_default_graph(vec![graph.clone()]);
-            }
-        }
         self.default_graph = Some(graph);
         self
     }
@@ -364,6 +359,14 @@ impl<'a, 'b: 'a> ReadableUpdateEvaluator<'a, 'b> {
             algebra,
         );
         *prepared.dataset_mut() = using.clone();
+        if using.is_default_dataset() {
+            if let Some(graph) = &self.default_graph {
+                // bounded: the caller selects exactly one implicit graph scope.
+                prepared
+                    .dataset_mut()
+                    .set_default_graph(vec![graph.clone()]);
+            }
+        }
         let mutations = prepared
             .execute(DatasetView::new(self.transaction.reader()))?
             .collect::<Result<Vec<_>, _>>()?;
