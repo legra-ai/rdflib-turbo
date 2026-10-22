@@ -7,6 +7,8 @@ from pathlib import Path
 
 # bounded: the fixed storage contracts must never silently select zero tests.
 REQUIRED_TESTS = (
+    "storage::memory::missing_pattern_tests::missing_pattern_stops_probing_indexes_after_first_absent_component",
+    "storage::memory::missing_pattern_tests::missing_pattern_reads_follow_commits_rollback_and_retained_snapshots",
     "storage::memory::cardinality_tests::cardinality_snapshot_len_does_not_visit_physical_history",
     "storage::memory::cardinality_tests::cardinality_snapshot_pair_matches_its_visible_rows_during_publication",
     "storage::lexical_hash_tests::lexical_hash_vectors_are_stable",

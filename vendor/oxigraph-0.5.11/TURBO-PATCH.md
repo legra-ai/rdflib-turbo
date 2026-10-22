@@ -100,3 +100,12 @@ dataset is copied. Default INSERT/DELETE DATA, DELETE/INSERT WHERE and CLEAR/DRO
 operate on the supplied graph. Replacing the builder scope updates reads and
 writes together; original explicit dataset specifications remain immutable. This source patch must be byte-identical in the
 canonical companion engine dependency under ADR0048.
+
+Committed memory pattern selection stops probing later SPOG indexes once a
+supplied component has no index entry. The absent component keeps its zero
+cardinality and therefore remains the selected empty chain. Existing historical
+chains still undergo snapshot filtering; zero visible cardinality is not used as
+proof of absence. No cache, index, retained pattern or production counter is
+added. Per-reader test instrumentation counts actual index probes; regressions
+cover all missing component positions, all sixteen masks, commits, rollback and
+retained snapshots. Installed-wheel measurements report boundary costs separately.
