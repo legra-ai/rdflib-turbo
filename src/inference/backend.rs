@@ -16,11 +16,6 @@ pub(super) trait Graph {
     fn query(&self, query: PreparedSparqlQuery) -> Result<QueryResults<'_>>;
     fn insert(&mut self, quad: Quad);
 
-    /// Insert a distinct round result already proved absent from the read snapshot.
-    fn insert_derived(&mut self, quad: Quad) {
-        self.insert(quad);
-    }
-
     /// Direct reference publication checks the output scope, not the read union.
     fn contains_destination(&self, quad: &Quad) -> Result<bool> {
         self.contains(quad)

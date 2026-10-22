@@ -13,7 +13,7 @@ fn logical_membership_borrows_source_lexical() {
     );
     let mut source = Dataset::new();
     source.insert(&quad);
-    let staged = StagedDataset::new(&source, GraphName::DefaultGraph);
+    let staged = JournalGraph::new(&mut source, GraphName::DefaultGraph);
     let (present, allocated) = measure_allocated(|| Graph::contains(&staged, &quad).unwrap());
     assert!(present);
     println!("STAGED_MEMBERSHIP allocated_bytes={allocated}");

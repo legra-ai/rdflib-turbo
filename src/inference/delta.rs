@@ -1,6 +1,6 @@
 //! Export additions from the insertion journal before committing inference.
 
-use oxigraph::model::{Dataset, GraphName, Quad};
+use oxigraph::model::{Dataset, GraphName};
 
 use super::{InferenceOutcome, InferenceRequest, expand_configured};
 use crate::Result;
@@ -21,16 +21,8 @@ pub(crate) fn expand_delta(
     }
 
     let destination = destination.unwrap_or(GraphName::DefaultGraph);
-    let (additions, outcome) = super::staged::expand(data, mode, destination.clone(), request)?;
-    let mut transaction = data.insert_transaction();
-    for quad in additions.iter() {
-        transaction.insert(&Quad::new(
-            quad.subject,
-            quad.predicate,
-            quad.object,
-            destination.clone(),
-        ));
-    }
+    let mut transaction = super::staged::JournalGraph::new(data, destination);
+    let (_, outcome) = expand_configured(&mut transaction, mode, request)?;
     // The base journal excludes any exact quad already present at destination.
     let delta = transaction.inserted().collect();
     transaction.commit();

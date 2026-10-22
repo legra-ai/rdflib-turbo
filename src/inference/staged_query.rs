@@ -13,7 +13,7 @@ type Rows<'a> = Box<dyn Iterator<Item = Result<InternalQuad<QueryTerm<'a>>, Infa
 #[path = "staged_query_tests.rs"]
 mod tests;
 
-impl<'a, 'source> QueryableDataset<'a> for &'a StagedDataset<'source> {
+impl<'a> QueryableDataset<'a> for StagedDataset<'a> {
     type InternalTerm = QueryTerm<'a>;
     type Error = Infallible;
 
@@ -23,8 +23,7 @@ impl<'a, 'source> QueryableDataset<'a> for &'a StagedDataset<'source> {
         predicate: Option<&Self::InternalTerm>,
         object: Option<&Self::InternalTerm>,
         graph_name: Option<Option<&Self::InternalTerm>>,
-    ) -> impl Iterator<Item = Result<InternalQuad<QueryTerm<'a>>, Infallible>> + use<'a, 'source>
-    {
+    ) -> impl Iterator<Item = Result<InternalQuad<QueryTerm<'a>>, Infallible>> + use<'a> {
         let subject = match subject.map(TermRef::from) {
             Some(TermRef::NamedNode(node)) => Some(node.into()),
             Some(TermRef::BlankNode(node)) => Some(node.into()),

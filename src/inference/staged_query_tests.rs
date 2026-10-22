@@ -3,6 +3,7 @@ use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 
 use super::*;
 use crate::inference::backend::Graph;
+use crate::inference::staged::JournalGraph;
 
 fn rows(results: QueryResults<'_>) -> Vec<Vec<(String, String)>> {
     let QueryResults::Solutions(solutions) = results else {
@@ -47,7 +48,7 @@ fn borrowed_union_matches_frozen_indexes_for_uniform_and_mixed_scopes() {
                     }
                 }
             }
-            let staged = StagedDataset::new(&source, GraphName::DefaultGraph);
+            let staged = StagedDataset { source: &source };
             let frozen = crate::graph::with_union(&source);
             for mask in 0..8 {
                 let s = (mask & 1 != 0).then(|| NamedNodeRef::new_unchecked("urn:s").into());
@@ -104,7 +105,7 @@ fn borrowed_queries_preserve_contexts_exact_terms_and_invalid_bound_patterns() {
             ));
         }
     }
-    let mut staged = StagedDataset::new(&source, NamedNode::new_unchecked("urn:output").into());
+    let mut staged = JournalGraph::new(&mut source, NamedNode::new_unchecked("urn:output").into());
     // A publication already in a different context must not duplicate the logical union.
     staged.insert(Quad::new(
         subject.clone(),
@@ -119,8 +120,7 @@ fn borrowed_queries_preserve_contexts_exact_terms_and_invalid_bound_patterns() {
         GraphName::DefaultGraph,
     ));
     // bounded: a frozen union of the six synthetic source quads and two additions.
-    let mut expected = crate::graph::with_union(&source);
-    expected.extend(staged.output.iter());
+    let expected = crate::graph::with_union(&staged.transaction);
     for query in [
         "SELECT ?s ?p ?o WHERE { ?s ?p ?o }",
         "SELECT ?s ?p ?o ?g WHERE { GRAPH ?g { ?s ?p ?o } }",

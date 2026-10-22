@@ -1,8 +1,8 @@
-//! Infer over a borrowed union, retaining only output absent from its destination.
+//! Infer through the existing insertion journal and a borrowed logical union.
 
 use oxigraph::model::*;
 use oxigraph::sparql::{PreparedSparqlQuery, QueryResults};
-use pyshacl_turbo_engine::GraphRead;
+use oxrdf::dataset::InsertTransaction;
 
 use super::backend::Graph;
 use super::{InferenceOutcome, InferenceRequest, expand_configured};
@@ -15,68 +15,23 @@ mod query;
 #[path = "staged_allocation_tests.rs"]
 mod allocation_tests;
 
+/// Read-only virtual default graph over the transaction's existing dictionary.
+#[derive(Clone, Copy)]
 struct StagedDataset<'a> {
     source: &'a Dataset,
-    source_scope: Option<GraphNameRef<'a>>,
-    output: Output,
-    destination: GraphName,
-}
-
-/// Disjoint output sets distinguish new facts from existing-source publications.
-#[derive(Default)]
-pub(super) struct Output {
-    additions: Dataset,
-    publications: Dataset,
-}
-
-impl Output {
-    pub(super) fn iter(&self) -> impl Iterator<Item = QuadRef<'_>> {
-        self.additions.iter().chain(self.publications.iter())
-    }
-
-    fn contains(&self, quad: QuadRef<'_>) -> bool {
-        self.additions.contains(quad) || self.publications.contains(quad)
-    }
 }
 
 impl<'a> StagedDataset<'a> {
-    fn new(source: &'a Dataset, destination: GraphName) -> Self {
-        // bounded: one borrowed graph identifier; detect uniform scope without copying RDF.
-        let source_scope = source
-            .iter()
-            .next()
-            .map(|quad| quad.graph_name)
-            .filter(|graph| source.iter().all(|quad| quad.graph_name == *graph));
-        Self {
-            source,
-            source_scope,
-            output: Output::default(),
-            destination,
-        }
-    }
-
-    fn source_contains_triple(&self, quad: QuadRef<'_>) -> bool {
-        self.source
-            .quads_for_pattern(
-                Some(quad.subject),
-                Some(quad.predicate),
-                Some(quad.object),
-                self.source_scope,
-            )
-            .next()
-            .is_some()
-    }
-
-    fn default_refs<'b>(
-        &'b self,
+    fn default_refs(
+        &self,
         subject: Option<NamedOrBlankNodeRef<'_>>,
         predicate: Option<NamedNodeRef<'_>>,
         object: Option<TermRef<'_>>,
-    ) -> impl Iterator<Item = QuadRef<'b>> + use<'a, 'b> {
-        // bounded: one borrowed previous SPO; unscoped native indexes order graph last.
+    ) -> impl Iterator<Item = QuadRef<'a>> + use<'a> {
+        // bounded: one borrowed previous SPO; native unscoped indexes order graph last.
         let mut previous = None;
         self.source
-            .quads_for_pattern(subject, predicate, object, self.source_scope)
+            .quads_for_pattern(subject, predicate, object, None)
             .filter(move |quad| {
                 let triple = TripleRef::new(quad.subject, quad.predicate, quad.object);
                 previous.replace(triple) != Some(triple)
@@ -87,14 +42,14 @@ impl<'a> StagedDataset<'a> {
             })
     }
 
-    fn matching_refs<'b>(
-        &'b self,
+    fn matching_refs(
+        &self,
         subject: Option<NamedOrBlankNodeRef<'_>>,
         predicate: Option<NamedNodeRef<'_>>,
         object: Option<TermRef<'_>>,
         graph: Option<GraphNameRef<'_>>,
-    ) -> Box<dyn Iterator<Item = QuadRef<'b>> + 'b> {
-        let source: Box<dyn Iterator<Item = QuadRef<'b>> + 'b> = match graph {
+    ) -> Box<dyn Iterator<Item = QuadRef<'a>> + 'a> {
+        match graph {
             Some(GraphNameRef::DefaultGraph) => {
                 Box::new(self.default_refs(subject, predicate, object))
             }
@@ -111,100 +66,93 @@ impl<'a> StagedDataset<'a> {
                         .filter(|quad| !quad.graph_name.is_default_graph()),
                 ),
             ),
-        };
-        Box::new(
-            source.chain(
-                self.output
-                    .additions
-                    .quads_for_pattern(subject, predicate, object, graph),
-            ),
-        )
-    }
-
-    fn output_contains(&self, quad: &Quad) -> bool {
-        self.source.contains(QuadRef {
-            graph_name: self.destination.as_ref(),
-            ..quad.as_ref()
-        })
+        }
     }
 }
 
-impl<'source> GraphRead for StagedDataset<'source> {
-    fn matching_quads<'a>(
-        &'a self,
-        subject: Option<NamedOrBlankNodeRef<'_>>,
-        predicate: Option<NamedNodeRef<'_>>,
-        object: Option<TermRef<'_>>,
-        graph: Option<GraphNameRef<'_>>,
-    ) -> impl Iterator<Item = pyshacl_turbo_engine::Result<Quad>> + use<'a, 'source> {
-        self.matching_refs(subject, predicate, object, graph)
-            .map(|quad| Ok(quad.into_owned()))
+pub(super) struct JournalGraph<'a> {
+    transaction: InsertTransaction<'a>,
+    destination: GraphName,
+}
+
+impl<'a> JournalGraph<'a> {
+    pub(super) fn new(source: &'a mut Dataset, destination: GraphName) -> Self {
+        Self {
+            transaction: source.insert_transaction(),
+            destination,
+        }
     }
 
-    fn named_graphs(
-        &self,
-    ) -> impl Iterator<Item = pyshacl_turbo_engine::Result<NamedOrBlankNode>> + '_ {
-        self.source.named_graphs()
+    pub(super) fn inserted(&self) -> impl Iterator<Item = QuadRef<'_>> {
+        self.transaction.inserted()
     }
 
-    fn contains_named_graph(&self, graph: &NamedOrBlankNode) -> pyshacl_turbo_engine::Result<bool> {
-        self.source.contains_named_graph(graph)
+    pub(super) fn commit(self) {
+        self.transaction.commit();
     }
 }
 
-impl Graph for StagedDataset<'_> {
+impl Graph for JournalGraph<'_> {
     fn quads<'a>(
         &'a self,
         subject: Option<NamedOrBlankNodeRef<'a>>,
         predicate: Option<NamedNodeRef<'a>>,
         object: Option<TermRef<'a>>,
     ) -> impl Iterator<Item = Result<Quad>> + 'a {
-        self.matching_quads(subject, predicate, object, Some(GraphNameRef::DefaultGraph))
-            .map(|quad| quad.map_err(Into::into))
+        StagedDataset {
+            source: &self.transaction,
+        }
+        .default_refs(subject, predicate, object)
+        .map(|quad| Ok(quad.into_owned()))
     }
 
     fn query(&self, query: PreparedSparqlQuery) -> Result<QueryResults<'_>> {
-        Ok(query.on_queryable_dataset(self).execute()?)
+        Ok(query
+            .on_queryable_dataset(StagedDataset {
+                source: &self.transaction,
+            })
+            .execute()?)
     }
 
     fn contains_destination(&self, quad: &Quad) -> Result<bool> {
-        Ok(self.output_contains(quad)
-            || self.output.contains(QuadRef {
-                graph_name: GraphNameRef::DefaultGraph,
+        Ok(Dataset::contains(
+            &self.transaction,
+            QuadRef {
+                graph_name: self.destination.as_ref(),
                 ..quad.as_ref()
-            }))
+            },
+        ))
     }
 
     fn contains(&self, quad: &Quad) -> Result<bool> {
-        Ok(self.output.additions.contains(QuadRef {
-            graph_name: GraphNameRef::DefaultGraph,
+        Ok(self
+            .transaction
+            .quads_for_pattern(
+                Some(quad.subject.as_ref()),
+                Some(quad.predicate.as_ref()),
+                Some(quad.object.as_ref()),
+                None,
+            )
+            .next()
+            .is_some())
+    }
+
+    fn insert(&mut self, quad: Quad) {
+        self.transaction.insert(QuadRef {
+            graph_name: self.destination.as_ref(),
             ..quad.as_ref()
-        }) || self.source_contains_triple(quad.as_ref()))
-    }
-
-    fn insert_derived(&mut self, quad: Quad) {
-        self.output.additions.insert(&quad);
-    }
-
-    fn insert(&mut self, mut quad: Quad) {
-        if !self.output_contains(&quad) {
-            quad.graph_name = GraphName::DefaultGraph;
-            if self.source_contains_triple(quad.as_ref()) {
-                self.output.publications.insert(&quad);
-            } else {
-                self.output.additions.insert(&quad);
-            }
-        }
+        });
     }
 }
 
 pub(super) fn expand(
-    source: &Dataset,
+    source: &mut Dataset,
     mode: &str,
     destination: GraphName,
     request: InferenceRequest,
-) -> Result<(Output, InferenceOutcome)> {
-    let mut graph = StagedDataset::new(source, destination);
+) -> Result<InferenceOutcome> {
+    let mut graph = JournalGraph::new(source, destination);
     let (_, outcome) = expand_configured(&mut graph, mode, request)?;
-    Ok((graph.output, outcome))
+    graph.commit();
+    Ok(outcome)
 }

@@ -214,18 +214,7 @@ pub(crate) fn expand_into(
     destination: GraphName,
     request: InferenceRequest,
 ) -> Result<InferenceOutcome> {
-    let (additions, outcome) = staged::expand(data, mode, destination.clone(), request)?;
-    let mut destination_transaction = data.insert_transaction();
-    for quad in additions.iter() {
-        destination_transaction.insert(&Quad::new(
-            quad.subject,
-            quad.predicate,
-            quad.object,
-            destination.clone(),
-        ));
-    }
-    destination_transaction.commit();
-    Ok(outcome)
+    staged::expand(data, mode, destination, request)
 }
 
 /// One round retains only distinct statements absent from its read snapshot.
@@ -348,7 +337,7 @@ fn expand_inner(
             });
         }
         for quad in additions.0 {
-            data.insert_derived(quad);
+            data.insert(quad);
         }
     }
 }
