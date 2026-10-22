@@ -9,6 +9,10 @@ use super::StagedDataset;
 type QueryTerm<'a> = <&'a Dataset as QueryableDataset<'a>>::InternalTerm;
 type Rows<'a> = Box<dyn Iterator<Item = Result<InternalQuad<QueryTerm<'a>>, Infallible>> + 'a>;
 
+#[cfg(test)]
+#[path = "staged_query_tests.rs"]
+mod tests;
+
 impl<'a, 'source> QueryableDataset<'a> for &'a StagedDataset<'source> {
     type InternalTerm = QueryTerm<'a>;
     type Error = Infallible;
