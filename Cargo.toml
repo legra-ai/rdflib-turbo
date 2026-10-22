@@ -26,7 +26,7 @@ persistence = ["oxigraph/rocksdb"]
 [dependencies]
 datalog-structural-model = "=1.0.0"
 rdf-reasoning = "=0.1.0"
-pyshacl-turbo-engine = { git = "https://github.com/legra-ai/pyshacl-turbo", rev = "665bf494eab65501affd6e16b08b94ef8a41900c" }
+pyshacl-turbo-engine = { git = "https://github.com/legra-ai/pyshacl-turbo", rev = "86547eacf0db0a561411fcab76641bfcb37146f3" }
 serde = { version = "1", features = ["derive"] }
 oxigraph = { version = "=0.5.11", default-features = false, features = ["exact-term-storage"] }
 oxrdf = { version = "=0.3.4", features = ["rdf-10-string-identity"] }
@@ -51,7 +51,7 @@ codegen-units = 1
 [patch.crates-io]
 oxrocksdb-sys = { path = "vendor/oxrocksdb-sys-0.5.11" }
 oxigraph = { path = "vendor/oxigraph-0.5.11" }
-fancy-regex = { git = "https://github.com/legra-ai/pyshacl-turbo", rev = "665bf494eab65501affd6e16b08b94ef8a41900c" }
+fancy-regex = { git = "https://github.com/legra-ai/pyshacl-turbo", rev = "86547eacf0db0a561411fcab76641bfcb37146f3" }
 oxrdf = { path = "vendor/oxrdf-0.3.4" }
 sparopt = { path = "vendor/sparopt-0.3.7" }
 spareval = { path = "vendor/spareval-0.2.7" }

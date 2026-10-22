@@ -62,7 +62,7 @@ fail_under = 100
 show_missing = true
 
 [tool.uv.sources]
-pyshacl-turbo = { git = "https://github.com/legra-ai/pyshacl-turbo", rev = "665bf494eab65501affd6e16b08b94ef8a41900c" }
+pyshacl-turbo = { git = "https://github.com/legra-ai/pyshacl-turbo", rev = "86547eacf0db0a561411fcab76641bfcb37146f3" }
 
 [dependency-groups]
 dev = ["mypy>=1.15,<3"]
@@ -70,7 +70,7 @@ coverage = [
     "rdflib==7.6.0",
     "owlrl==7.6.2",
     "pyshacl==0.40.1",
-    "pyshacl-turbo==0.5.1",
+    "pyshacl-turbo==0.6.1",
     "pytest==9.1.1",
     "pytest-cov==7.1.0",
     "ruff==0.17.1",
