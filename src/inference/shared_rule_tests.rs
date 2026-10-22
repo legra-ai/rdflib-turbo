@@ -1,5 +1,5 @@
 use datalog_structural_model::{
-    Atom, ConstantSymbol, Literal, PredicateSymbol, Term, VariableSymbol,
+    Atom, BuiltinFilter, ConstantSymbol, Literal, PredicateSymbol, Term, VariableSymbol,
 };
 use oxigraph::model::{Dataset, GraphName, NamedNode, Quad};
 use oxigraph::sparql::QueryResults;
@@ -83,4 +83,89 @@ fn shared_adapter_validates_terms_even_in_safe_rules() {
         args: vec![],
     };
     assert!(super::shared::CompiledRule::try_new(&rule).is_err());
+}
+
+#[test]
+fn shared_inequality_compares_exact_term_identity() {
+    let variable = |name| Term::Variable(VariableSymbol::new(name));
+    let atom = Atom {
+        predicate: PredicateSymbol::new(rdf_reasoning::TRIPLE_RELATION),
+        terms: vec![variable("s"), variable("p"), variable("o")],
+    };
+    let rule = datalog_structural_model::Rule::try_new(
+        atom.clone(),
+        vec![
+            Literal::Positive(atom),
+            Literal::Filter(BuiltinFilter::Ne(
+                variable("o"),
+                Term::Constant(ConstantSymbol::new("urn:identity:equal")),
+            )),
+        ],
+    )
+    .unwrap();
+    let mut dataset = Dataset::new();
+    let subject = NamedNode::new("urn:identity:s").unwrap();
+    let predicate = NamedNode::new("urn:identity:p").unwrap();
+    for object in ["urn:identity:equal", "urn:identity:different"] {
+        dataset.insert(&Quad::new(
+            subject.clone(),
+            predicate.clone(),
+            NamedNode::new(object).unwrap(),
+            GraphName::DefaultGraph,
+        ));
+    }
+    let query = super::shared::CompiledRule::try_new(&rule).unwrap();
+    let QueryResults::Graph(mut triples) = query
+        .into_query()
+        .on_queryable_dataset(&dataset)
+        .execute()
+        .unwrap()
+    else {
+        panic!("expected graph result")
+    };
+    assert_eq!(
+        triples.next().unwrap().unwrap().object.to_string(),
+        "<urn:identity:different>"
+    );
+    assert!(triples.next().is_none());
+}
+
+#[test]
+fn shared_inequality_retains_distinct_numeric_lexical_forms() {
+    let variable = |name| Term::Variable(VariableSymbol::new(name));
+    let atom = |object| Atom {
+        predicate: PredicateSymbol::new(rdf_reasoning::TRIPLE_RELATION),
+        terms: vec![variable("s"), variable("p"), variable(object)],
+    };
+    let rule = datalog_structural_model::Rule::try_new(
+        atom("left"),
+        vec![
+            Literal::Positive(atom("left")),
+            Literal::Positive(atom("right")),
+            Literal::Filter(BuiltinFilter::Ne(variable("left"), variable("right"))),
+        ],
+    )
+    .unwrap();
+    let mut dataset = Dataset::new();
+    for lexical in ["1", "01"] {
+        dataset.insert(&Quad::new(
+            NamedNode::new("urn:numeric:s").unwrap(),
+            NamedNode::new("urn:numeric:p").unwrap(),
+            oxigraph::model::Literal::new_typed_literal(
+                lexical,
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            ),
+            GraphName::DefaultGraph,
+        ));
+    }
+    let query = super::shared::CompiledRule::try_new(&rule).unwrap();
+    let QueryResults::Graph(triples) = query
+        .into_query()
+        .on_queryable_dataset(&dataset)
+        .execute()
+        .unwrap()
+    else {
+        panic!("expected graph result")
+    };
+    assert_eq!(triples.count(), 2);
 }

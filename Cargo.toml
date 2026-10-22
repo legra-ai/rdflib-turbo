@@ -25,7 +25,7 @@ persistence = ["oxigraph/rocksdb"]
 
 [dependencies]
 datalog-structural-model = "=1.0.0"
-rdf-reasoning = "=0.1.0"
+rdf-reasoning = "=0.2.0"
 pyshacl-turbo-engine = { git = "https://github.com/legra-ai/pyshacl-turbo", rev = "726b6ef71dbcc5f99917f1c1e6da9eb8b1eef214" }
 serde = { version = "1", features = ["derive"] }
 oxigraph = { version = "=0.5.11", default-features = false, features = ["exact-term-storage"] }

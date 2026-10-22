@@ -1,6 +1,6 @@
 //! Lower portable rule definitions into backend-owned compiled queries.
 
-use datalog_structural_model::{Atom, Literal, Rule, Term};
+use datalog_structural_model::{Atom, BuiltinFilter, Literal, Rule, Term};
 use oxigraph::model::NamedNodeRef;
 use oxigraph::sparql::{PreparedSparqlQuery, SparqlEvaluator};
 use rdf_reasoning::{RuleId::*, TRIPLE_RELATION};
@@ -18,12 +18,22 @@ impl CompiledRule {
         let head = Self::atom(&rule.head)?;
         let mut body = String::new();
         for literal in &rule.body {
-            let Literal::Positive(atom) = literal else {
-                return Err(Error::Unsupported(
-                    "Shared inference adapter requires positive triple atoms".into(),
-                ));
-            };
-            body.push_str(&Self::atom(atom)?);
+            match literal {
+                Literal::Positive(atom) => body.push_str(&Self::atom(atom)?),
+                Literal::Filter(BuiltinFilter::Ne(left, right)) => {
+                    body.push_str(&format!(
+                        "FILTER(!sameTerm({}, {})) ",
+                        Self::term(left)?,
+                        Self::term(right)?
+                    ));
+                }
+                _ => {
+                    return Err(Error::Unsupported(
+                        "Shared inference adapter requires positive triples or exact inequality"
+                            .into(),
+                    ));
+                }
+            }
         }
         SparqlEvaluator::new()
             .parse_query(&format!("CONSTRUCT {{ {head} }} WHERE {{ {body} }}"))
@@ -39,24 +49,26 @@ impl CompiledRule {
         }
         let mut pattern = String::new();
         for term in &atom.terms {
-            let value = match term {
-                Term::Variable(variable) => Variable::new(variable.as_str())
-                    .map_err(|error| Error::Unsupported(format!("Invalid rule variable: {error}")))?
-                    .to_string(),
-                Term::Constant(constant) => NamedNodeRef::new(constant.as_str())
-                    .map_err(|error| Error::Unsupported(format!("Invalid rule IRI: {error}")))?
-                    .to_string(),
-                Term::TripleTerm(_) | Term::Skolem { .. } => {
-                    return Err(Error::Unsupported(
-                        "Shared inference adapter requires flat terms".into(),
-                    ));
-                }
-            };
+            let value = Self::term(term)?;
             pattern.push_str(&value);
             pattern.push(' ');
         }
         pattern.push_str(". ");
         Ok(pattern)
+    }
+
+    fn term(term: &Term) -> Result<String> {
+        match term {
+            Term::Variable(variable) => Variable::new(variable.as_str())
+                .map(|variable| variable.to_string())
+                .map_err(|error| Error::Unsupported(format!("Invalid rule variable: {error}"))),
+            Term::Constant(constant) => NamedNodeRef::new(constant.as_str())
+                .map(|node| node.to_string())
+                .map_err(|error| Error::Unsupported(format!("Invalid rule IRI: {error}"))),
+            Term::TripleTerm(_) | Term::Skolem { .. } => Err(Error::Unsupported(
+                "Shared inference adapter requires flat terms".into(),
+            )),
+        }
     }
 
     pub(super) fn into_query(self) -> PreparedSparqlQuery {
