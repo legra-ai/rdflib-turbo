@@ -138,3 +138,49 @@ fn borrowed_queries_preserve_contexts_exact_terms_and_invalid_bound_patterns() {
         assert_eq!(actual, expected, "{query}");
     }
 }
+
+#[test]
+fn bound_blank_subject_and_graph_select_existing_identifiers() {
+    let subject = BlankNode::new("subject").unwrap();
+    let graph = BlankNode::new("graph").unwrap();
+    let predicate = NamedNode::new_unchecked("urn:p");
+    let mut source = Dataset::new();
+    for quad in [
+        Quad::new(
+            subject.clone(),
+            predicate.clone(),
+            Literal::new_simple_literal("selected"),
+            graph.clone(),
+        ),
+        Quad::new(
+            NamedNode::new_unchecked("urn:outside"),
+            predicate.clone(),
+            Literal::new_simple_literal("other subject"),
+            graph.clone(),
+        ),
+        Quad::new(
+            subject.clone(),
+            predicate,
+            Literal::new_simple_literal("other graph"),
+            NamedNode::new_unchecked("urn:outside"),
+        ),
+    ] {
+        source.insert(&quad);
+    }
+    let frozen = crate::graph::with_union(&source);
+    let journal = JournalGraph::new(&mut source, GraphName::DefaultGraph);
+    let prepared = SparqlEvaluator::new()
+        .parse_query("SELECT ?s ?g ?o WHERE { GRAPH ?g { ?s <urn:p> ?o } }")
+        .unwrap()
+        .substitute_variable(Variable::new("s").unwrap(), subject)
+        .substitute_variable(Variable::new("g").unwrap(), graph);
+    let actual = rows(journal.query(prepared.clone()).unwrap());
+    let expected = rows(prepared.on_queryable_dataset(&frozen).execute().unwrap());
+    assert_eq!(actual, expected);
+    assert_eq!(actual.len(), 1);
+    assert!(
+        actual[0]
+            .iter()
+            .any(|(name, value)| name == "?o" && value == "\"selected\"")
+    );
+}
