@@ -20,6 +20,7 @@ pub(crate) mod scoped;
 mod shared;
 #[cfg(test)]
 mod shared_rule_tests;
+mod staged;
 mod traversal;
 
 pub(crate) use delta::expand_delta;
@@ -211,15 +212,9 @@ pub(crate) fn expand_into(
     destination: GraphName,
     request: InferenceRequest,
 ) -> Result<InferenceOutcome> {
-    let mut union = crate::graph::with_union(data);
-    let mut transaction = union.insert_transaction();
-    let (prepared, outcome) = expand_configured(&mut transaction, mode, request)?;
-    let publications = delta::literal_publications(data, mode, &destination);
+    let (additions, outcome) = staged::expand(data, mode, destination.clone(), request)?;
     let mut destination_transaction = data.insert_transaction();
-    for quad in publications.iter() {
-        destination_transaction.insert(quad);
-    }
-    for quad in transaction.inserted() {
+    for quad in &additions {
         destination_transaction.insert(&Quad::new(
             quad.subject,
             quad.predicate,
@@ -227,12 +222,7 @@ pub(crate) fn expand_into(
             destination.clone(),
         ));
     }
-    prepared.insert(|mut quad| {
-        quad.graph_name = destination.clone();
-        destination_transaction.insert(&quad);
-    })?;
     destination_transaction.commit();
-    transaction.commit();
     Ok(outcome)
 }
 

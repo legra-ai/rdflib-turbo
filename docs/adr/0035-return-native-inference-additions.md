@@ -13,9 +13,20 @@ Read additions from oxrdf's existing insertion journal. Default-graph inference
 does not take a before/after snapshot, clone the original dataset, or build a
 second index of original statements. Stage the returned dataset before committing
 the receiver's transaction. Invalid arguments and inference failures retain the
-existing all-or-nothing contract. Named-graph inference retains the preexisting
-union working view and destination semantics; a destination insertion journal
-identifies actual newly added quads without exporting original contexts.
+existing all-or-nothing contract. Named-graph inference borrows a union view of
+the original dataset and retains only staged additions. It must not clone the
+base or duplicate all original triples into a working default graph. An existing
+destination insertion journal identifies actual newly added quads without
+exporting original contexts.
+
+The borrowed view preserves original named contexts and exposes one exact SPO
+representative in its logical default graph. Staged output is visible to later
+rounds without double-counting triples already in that union. Direct RDFS
+literal publications and optional initialization axioms check the physical
+destination: facts present only in another context may still require output.
+Only successful inference publishes the retained additions, through the existing
+insertion transaction. An isolated allocation budget catches source-sized
+lexical copies even when the invocation produces no output.
 
 The returned dataset owns the derived output and therefore consumes memory
 proportional to that output. This is not a bounded-memory materialization claim.

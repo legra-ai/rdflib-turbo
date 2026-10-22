@@ -77,6 +77,32 @@ pub(crate) fn measure_allocated<T>(operation: impl FnOnce() -> T) -> (T, usize) 
 }
 
 #[test]
+#[ignore = "global allocation counters require isolated execution"]
+fn named_inference_does_not_clone_source_lexical_storage() {
+    let mut data = Dataset::new();
+    let quad = Quad::new(
+        NamedNode::new_unchecked("urn:s"),
+        NamedNode::new_unchecked("urn:p"),
+        Literal::new_simple_literal("x".repeat(64 * 1024)),
+        NamedNode::new_unchecked(format!("urn:graph:{}", "g".repeat(64 * 1024))),
+    );
+    data.insert(&quad);
+    let request = inference::InferenceRequest::default();
+    let destination = NamedNode::new_unchecked("urn:destination").into();
+    let ((delta, _), allocated) = measure_allocated(|| {
+        inference::expand_delta(&mut data, "none", Some(destination), request).unwrap()
+    });
+    assert!(delta.is_empty());
+    assert_eq!(data.len(), 1);
+    assert!(data.contains(&quad));
+    println!("NAMED_INFERENCE allocated_bytes={allocated}");
+    assert!(
+        allocated < 16 * 1024,
+        "Inference cloned source payloads: {allocated}"
+    );
+}
+
+#[test]
 #[ignore = "explicit release-mode profiling, run alone with a fixture and shapes file"]
 fn profile_pipeline_allocations() {
     let source = std::fs::read_to_string(std::env::var("MEMORY_DATA").unwrap()).unwrap();
