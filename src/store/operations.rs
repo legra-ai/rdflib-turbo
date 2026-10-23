@@ -60,6 +60,7 @@ pub(super) enum Operation {
     },
     Query(String, bool, Option<String>),
     Dump(RdfFormat),
+    DumpGraphNt(Option<TermTuple>),
 }
 
 pub(super) enum Reply {
@@ -100,7 +101,8 @@ impl Operation {
             | Self::Len
             | Self::Query(..)
             | Self::QueryPrepared(..)
-            | Self::Dump(_) => false,
+            | Self::Dump(_)
+            | Self::DumpGraphNt(_) => false,
         }
     }
 
@@ -345,6 +347,16 @@ impl Operation {
                 Ok(Reply::Query(kind, output))
             }
             Self::Dump(format) => dump(transaction.iter(), format).map(Reply::Text),
+            Self::DumpGraphNt(graph) => {
+                let graph = typed::graph(graph)?;
+                super::output::dump_graph_nt(transaction.quads_for_pattern(
+                    None,
+                    None,
+                    None,
+                    Some(graph.as_ref()),
+                ))
+                .map(Reply::Text)
+            }
         }
     }
 }

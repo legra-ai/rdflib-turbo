@@ -2,6 +2,8 @@
 mod bindings;
 mod fork;
 mod input_terms;
+#[cfg(test)]
+mod nt_output_tests;
 mod operations;
 pub(crate) mod output;
 mod pattern;
@@ -22,7 +24,9 @@ use std::sync::{Arc, Mutex};
 
 use oxigraph::model::GraphNameRef;
 use oxigraph::store::Store;
+use pyo3::IntoPyObjectExt;
 use pyo3::prelude::*;
+use pyo3::types::PyBytes;
 
 use crate::{error, format};
 use operations::{Operation, runtime};
@@ -33,6 +37,14 @@ pub(crate) use shacl::PreparedValidation;
 pub(crate) use transaction::NativeTransaction;
 use typed::{QuadInput, TermTuple};
 use typed_view::{Position, PreparedTerm};
+
+fn nt_python_output(py: Python<'_>, text: String, as_bytes: bool) -> PyResult<Py<PyAny>> {
+    if as_bytes {
+        Ok(PyBytes::new(py, text.as_bytes()).into_any().unbind())
+    } else {
+        text.into_py_any(py)
+    }
+}
 
 #[pyclass(frozen, module = "rdflib_turbo._native")]
 pub(crate) struct NativeStore {
@@ -317,6 +329,27 @@ impl NativeStore {
         let format = format(rdf_format)?;
         py.detach(|| output::dump(self.snapshot()?.iter(), format))
             .map_err(error)
+    }
+
+    #[pyo3(signature = (graph, as_bytes=false))]
+    fn _dump_graph_nt(
+        &self,
+        py: Python<'_>,
+        graph: Option<TermTuple>,
+        as_bytes: bool,
+    ) -> PyResult<Py<PyAny>> {
+        let text = py
+            .detach(|| {
+                let graph = typed::graph(graph)?;
+                output::dump_graph_nt(self.snapshot()?.quads_for_pattern(
+                    None,
+                    None,
+                    None,
+                    Some(graph.as_ref()),
+                ))
+            })
+            .map_err(error)?;
+        nt_python_output(py, text, as_bytes)
     }
 
     fn named_graphs(&self, py: Python<'_>) -> PyResult<String> {
