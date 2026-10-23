@@ -4,12 +4,15 @@ use std::cell::Cell;
 use oxigraph::model::*;
 use oxigraph::sparql::{PreparedSparqlQuery, QueryResults};
 
-use super::{Graph, Pending, Rows};
+use super::{Graph, Pending, Rows, SubjectRow};
 use crate::Result;
 
 struct ExistingHeads<'a> {
     data: &'a Dataset,
     probes: Cell<usize>,
+    work: Cell<usize>,
+    incoming: Cell<usize>,
+    full_scans: Cell<usize>,
 }
 
 impl Graph for ExistingHeads<'_> {
@@ -19,9 +22,19 @@ impl Graph for ExistingHeads<'_> {
         p: Option<NamedNodeRef<'a>>,
         o: Option<TermRef<'a>>,
     ) -> impl Iterator<Item = Result<Quad>> + 'a {
+        self.work.set(self.work.get() + 1);
+        if s.is_none() && o.is_none() {
+            self.full_scans.set(self.full_scans.get() + 1);
+        }
+        if s.is_none() && o.is_some() {
+            self.incoming.set(self.incoming.get() + 1);
+        }
         self.data
             .quads_for_pattern(s, p, o, Some(GraphNameRef::DefaultGraph))
-            .map(|quad| Ok(quad.into_owned()))
+            .map(|quad| {
+                self.work.set(self.work.get() + 1);
+                Ok(quad.into_owned())
+            })
     }
 
     fn contains(&self, quad: &Quad) -> Result<bool> {
@@ -66,9 +79,12 @@ fn ring_composition_never_probes_already_present_heads() {
             let reads = ExistingHeads {
                 data: &data,
                 probes: Cell::new(0),
+                work: Cell::new(0),
+                incoming: Cell::new(0),
+                full_scans: Cell::new(0),
             };
             let mut pending = Pending::default();
-            let rows = Rows::new(&reads, &predicate, &mut pending).unwrap();
+            let mut rows = Rows::new(&reads, &predicate, &mut pending).unwrap();
             reads.probes.set(0);
             rows.extend(&reads, &predicate, &mut pending).unwrap();
             assert_eq!(
@@ -87,4 +103,79 @@ fn ring_composition_never_probes_already_present_heads() {
             }
         }
     }
+}
+
+#[test]
+fn disjoint_closed_groups_do_not_repeat_incoming_row_reads() {
+    let predicate = NamedNode::new("http://www.w3.org/2002/07/owl#sameAs").unwrap();
+    const GROUPS: usize = 32;
+    for size in [1, 2, 16] {
+        let mut data = Dataset::new();
+        for group in 0..GROUPS {
+            for left in 0..size {
+                for right in 0..size {
+                    data.insert(
+                        Quad::new(
+                            node(group * size + left),
+                            predicate.clone(),
+                            node(group * size + right),
+                            GraphName::DefaultGraph,
+                        )
+                        .as_ref(),
+                    );
+                }
+            }
+        }
+        let reads = ExistingHeads {
+            data: &data,
+            probes: Cell::new(0),
+            work: Cell::new(0),
+            incoming: Cell::new(0),
+            full_scans: Cell::new(0),
+        };
+        let mut pending = Pending::default();
+        let mut rows = Rows::new(&reads, &predicate, &mut pending).unwrap();
+        assert_eq!(rows.groups.len(), GROUPS);
+        assert_eq!(
+            reads.full_scans.get(),
+            1,
+            "row preparation added a source pass"
+        );
+        reads.work.set(0);
+        reads.incoming.set(0);
+        rows.extend(&reads, &predicate, &mut pending).unwrap();
+        assert!(pending.0.is_empty());
+        // bounded: one outgoing read and one representative row per exact group.
+        let budget = GROUPS * (1 + size);
+        assert_eq!(reads.work.get(), budget, "closed group size={size}");
+        assert_eq!(reads.incoming.get(), 0, "closed group size={size}");
+        assert_eq!(reads.full_scans.get(), 1, "composition added a source pass");
+    }
+}
+
+#[test]
+fn subject_row_annotation_retains_one_machine_word_and_exact_indices() {
+    assert_eq!(
+        std::mem::size_of::<SubjectRow>(),
+        std::mem::size_of::<usize>()
+    );
+    assert_eq!(
+        std::mem::align_of::<SubjectRow>(),
+        std::mem::align_of::<usize>()
+    );
+    for index in [0, 1, 17, usize::MAX / 2] {
+        let mut row = SubjectRow::new(index);
+        assert_eq!(row.group(), index);
+        assert!(!row.has_cross_group_incoming());
+        row.mark_cross_group_incoming();
+        row.mark_cross_group_incoming();
+        assert_eq!(row.group(), index);
+        assert!(row.has_cross_group_incoming());
+    }
+}
+
+#[test]
+#[should_panic(expected = "equality row index exceeds its subject slot")]
+fn subject_row_index_overflow_fails_explicitly() {
+    SubjectRow::new(usize::MAX);
 }

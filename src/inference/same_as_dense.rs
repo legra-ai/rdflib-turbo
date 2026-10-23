@@ -52,7 +52,7 @@ impl Rows {
     pub(super) fn dense(&self, subject: &NamedOrBlankNode) -> bool {
         self.subjects
             .get(subject)
-            .is_some_and(|&id| self.components.is_dense(id))
+            .is_some_and(|row| self.components.is_dense(row.group()))
     }
 
     pub(super) fn extend_dense(
@@ -63,7 +63,7 @@ impl Rows {
         members: &[NamedOrBlankNode],
         pending: &mut Pending,
     ) -> Result<()> {
-        for target in self.components.members(self.subjects[&members[0]]) {
+        for target in self.components.members(self.subjects[&members[0]].group()) {
             if values.contains(target) {
                 continue;
             }

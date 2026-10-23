@@ -98,3 +98,24 @@ zero existing-head probes during composition for every 64- and 128-node ring
 round. This removes redundant exact storage probes, not all repeated witness
 scans; it does not establish a universal subcubic work bound. The existing fixed
 work/resource bounds and immutable-round differential oracles remain unchanged.
+
+The output-row route must not add one incoming query per isolated reflexive
+subject or closed-row member. During the existing grouped transitive pass,
+annotate each existing subject slot when the representative outgoing row proves
+an incoming edge from a different exact row group. Mark even dense source rows.
+After every group has contributed, evaluate inverse compositions in a second
+phase. Skip groups without annotated members before loading another row: every
+predecessor has exactly the current outgoing targets, so no head can be new.
+Terminal subjects retain their source-group route. Both phases read only the
+original source snapshot, never pending or destination-only edges.
+
+Use a checked, typed one-word subject slot: the row index occupies its high bits
+and the cross-group flag its low bit. A physical row-group Vec already restricts
+its indices sufficiently; overflow still fails explicitly. Subject-map values
+remain exactly one usize and row groups remain exactly one member Vec. No new
+map, relation or outgoing-row set is retained. Regressions preserve those layouts,
+require only the original preparation source scan, and bound complete
+composition of disjoint self, pair and clique groups to one representative
+outgoing read per group with zero incoming queries. Active groups load one
+current row for the inverse phase; previous-phase rows and deltas have already
+been dropped. Existing work and allocation budgets remain.
