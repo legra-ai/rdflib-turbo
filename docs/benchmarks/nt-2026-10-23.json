@@ -28,7 +28,7 @@
       "artifact": "rdflib_turbo-0.2.0a14-cp313-cp313-macosx_11_0_arm64.whl",
       "wheel_sha256": "1fb30d1befd64fb40dbb16cd4adf7cace2dfb38a82f3ff781999fd29ae5e0958",
       "identity_proof": "PyPI JSON SHA256 and every installed package file matched original wheel",
-      "profile_limit": "Published wheel compiler profile not independently reconstructed; no claim it was built from public main at7008"
+      "profile_limit": "Published wheel compiler profile not independently reconstructed; no claim it was built from public main at 7008"
     },
     "candidate": {
       "package": "rdflib-turbo 0.2.0a15 unreleased candidate",
@@ -73,7 +73,7 @@
     },
     "whole_child_group_peak_observed_bytes": 358219776,
     "rss_limit": "Process high-water includes imports/input construction/retained output and is captured before correctness parsing; not isolated serializer heap",
-    "correctness_limit": "Complete exact lexical/datatype/language/blank-ID multisets through1,003 triples; large streaming cryptographic witness is probabilistic",
+    "correctness_limit": "Complete exact lexical/datatype/language/blank-ID multisets through 1,003 triples; large streaming cryptographic witness is probabilistic",
     "public_worker_sha256": "6a26342f9c800738e9a9b30540040e66843769b93eb2d43968ce539c60379c19",
     "public_worker_behavior_matches_measured_worker": "AST equality after module docstring/import-order normalization, removing unused Graph aliases and renaming retained main dataset owner to _owner; fixture, measurement and oracle unchanged",
     "reproduction": "../../scripts/benchmark_nt.py"
