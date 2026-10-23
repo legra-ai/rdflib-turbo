@@ -88,13 +88,13 @@ impl Diagnostics {
                 iri(RDF, "type"),
                 iri(ERROR_NAMESPACE, "ErrorMessage"),
                 GraphName::DefaultGraph,
-            ));
+            ))?;
             data.insert(Quad::new(
                 subject,
                 iri(ERROR_NAMESPACE, "error"),
                 Literal::new_simple_literal(message.as_str()),
                 GraphName::DefaultGraph,
-            ));
+            ))?;
         }
         Ok(InferenceOutcome { error_messages })
     }

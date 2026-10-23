@@ -7,6 +7,7 @@ pub(crate) struct Report {
     graph: super::Batch,
     text: String,
     warnings: Vec<String>,
+    diagnostics: bool,
 }
 
 impl Report {
@@ -17,7 +18,17 @@ impl Report {
             graph,
             text: report.text,
             warnings: report.recursion_warnings,
+            diagnostics: false,
         })
+    }
+
+    pub(crate) fn with_diagnostics(mut self, diagnostics: bool) -> Self {
+        self.diagnostics = diagnostics;
+        self
+    }
+
+    pub(crate) fn has_diagnostics(&self) -> bool {
+        self.diagnostics
     }
 
     pub(crate) fn into_output(self) -> super::Output {

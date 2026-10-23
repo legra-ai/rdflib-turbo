@@ -16,6 +16,9 @@ impl SharedShapes {
         settings: &str,
         inplace: bool,
     ) -> PyResult<Output> {
+        if let Some(prepared) = self.infer_dataset(py, dataset, settings, inplace)? {
+            return prepared.finish(py, dataset, 4);
+        }
         let mut options = Settings::parse(settings)?;
         let prepared = py.detach(|| -> PyResult<Prepared<Output>> {
             if !inplace || !self.inner.has_active_rules(&options) {
@@ -66,8 +69,13 @@ impl SharedShapes {
         settings: &str,
         inplace: bool,
     ) -> PyResult<PreparedDatasetValidation> {
-        let mut options = Settings::parse(settings)?;
         let dataset = owner.bind(py).get();
+        if let Some((report, pending)) =
+            self.prepare_inferred_dataset(py, dataset, settings, inplace)?
+        {
+            return Ok(PreparedDatasetValidation::new(owner, report, pending));
+        }
+        let mut options = Settings::parse(settings)?;
         let (report, pending) = py.detach(|| {
             let data = dataset
                 .inner
@@ -94,14 +102,7 @@ impl SharedShapes {
                 Some(Pending::new(outcome.additions, data.revision)),
             ))
         })?;
-        Ok(PreparedDatasetValidation {
-            owner,
-            state: Mutex::new(State {
-                output: Some(report),
-                pending,
-                accepted: false,
-            }),
-        })
+        Ok(PreparedDatasetValidation::new(owner, report, pending))
     }
 }
 
@@ -118,9 +119,22 @@ pub(super) struct PreparedDatasetValidation {
     state: Mutex<State>,
 }
 
+impl PreparedDatasetValidation {
+    fn new(owner: Py<NativeDataset>, report: Output, pending: Option<Pending>) -> Self {
+        Self {
+            owner,
+            state: Mutex::new(State {
+                output: Some(report),
+                pending,
+                accepted: false,
+            }),
+        }
+    }
+}
+
 #[pymethods]
 impl PreparedDatasetValidation {
-    fn output(&self) -> PyResult<Output> {
+    pub(super) fn output(&self) -> PyResult<Output> {
         self.state
             .lock()
             .map_err(|_| PyRuntimeError::new_err("Validation state lock poisoned"))?
@@ -129,7 +143,7 @@ impl PreparedDatasetValidation {
             .ok_or_else(|| PyRuntimeError::new_err("Validation output was already consumed"))
     }
 
-    fn accept(&self, py: Python<'_>) -> PyResult<()> {
+    pub(super) fn accept(&self, py: Python<'_>) -> PyResult<()> {
         let pending = {
             let mut state = self
                 .state

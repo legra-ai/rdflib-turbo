@@ -128,7 +128,7 @@ impl Graph for Storage<'_, '_> {
     fn query(&self, _: PreparedSparqlQuery) -> Result<QueryResults<'_>> {
         panic!("indexed kernels must not evaluate queries")
     }
-    fn insert(&mut self, _: Quad) {
+    fn insert(&mut self, _: Quad) -> Result<()> {
         panic!("a kernel published a fact before its round completed")
     }
 }

@@ -38,8 +38,9 @@ impl Graph for Fault<'_, '_> {
         Ok(query.on_queryable_dataset(&**self.journal).execute()?)
     }
 
-    fn insert(&mut self, quad: Quad) {
+    fn insert(&mut self, quad: Quad) -> Result<()> {
         self.journal.insert(&quad);
+        Ok(())
     }
 }
 

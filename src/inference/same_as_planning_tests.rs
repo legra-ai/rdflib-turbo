@@ -36,7 +36,7 @@ impl Graph for Reads<'_> {
     fn query(&self, _: PreparedSparqlQuery) -> Result<QueryResults<'_>> {
         panic!("planner must use indexed reads")
     }
-    fn insert(&mut self, _: Quad) {
+    fn insert(&mut self, _: Quad) -> Result<()> {
         panic!("planner must not publish facts")
     }
 }

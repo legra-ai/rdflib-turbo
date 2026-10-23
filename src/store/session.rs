@@ -201,7 +201,12 @@ fn run(mut transaction: Transaction<'_>, receiver: mpsc::Receiver<Command>) {
         match command {
             Command::Execute(operation, reply) => {
                 let result = (|| {
-                    if pending.is_some() && matches!(operation, Operation::Validate { .. }) {
+                    if pending.is_some()
+                        && matches!(
+                            operation,
+                            Operation::Validate { .. } | Operation::ValidateInferred { .. }
+                        )
+                    {
                         return Err(Error::Runtime(
                             "Transaction already has pending validation".into(),
                         ));

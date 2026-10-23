@@ -11,6 +11,7 @@ mod read_input;
 mod registration;
 mod session;
 mod shacl;
+mod shacl_inference;
 mod shacl_read;
 mod term_output;
 mod transaction;

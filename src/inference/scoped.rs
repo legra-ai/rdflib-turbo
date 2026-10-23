@@ -70,9 +70,10 @@ impl Graph for ScopedGraph<'_, '_> {
             .map_err(|error| Error::Runtime(error.to_string()))
     }
 
-    fn insert(&mut self, mut quad: Quad) {
+    fn insert(&mut self, mut quad: Quad) -> Result<()> {
         quad.graph_name = self.destination.clone();
         self.transaction.insert(&quad);
+        Ok(())
     }
 }
 

@@ -137,11 +137,12 @@ impl Graph for JournalGraph<'_> {
             .is_some())
     }
 
-    fn insert(&mut self, quad: Quad) {
+    fn insert(&mut self, quad: Quad) -> Result<()> {
         self.transaction.insert(QuadRef {
             graph_name: self.destination.as_ref(),
             ..quad.as_ref()
         });
+        Ok(())
     }
 }
 
