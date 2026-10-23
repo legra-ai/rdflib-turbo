@@ -107,18 +107,22 @@ fn borrowed_queries_preserve_contexts_exact_terms_and_invalid_bound_patterns() {
     }
     let mut staged = JournalGraph::new(&mut source, NamedNode::new_unchecked("urn:output").into());
     // A publication already in a different context must not duplicate the logical union.
-    staged.insert(Quad::new(
-        subject.clone(),
-        predicate.clone(),
-        Literal::new_simple_literal("word"),
-        GraphName::DefaultGraph,
-    ));
-    staged.insert(Quad::new(
-        subject,
-        predicate,
-        Literal::new_simple_literal("derived"),
-        GraphName::DefaultGraph,
-    ));
+    staged
+        .insert(Quad::new(
+            subject.clone(),
+            predicate.clone(),
+            Literal::new_simple_literal("word"),
+            GraphName::DefaultGraph,
+        ))
+        .expect("staging the existing logical-union quad succeeds");
+    staged
+        .insert(Quad::new(
+            subject,
+            predicate,
+            Literal::new_simple_literal("derived"),
+            GraphName::DefaultGraph,
+        ))
+        .expect("staging the derived quad succeeds");
     // bounded: a frozen union of the six synthetic source quads and two additions.
     let expected = crate::graph::with_union(&staged.transaction);
     for query in [
