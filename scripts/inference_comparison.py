@@ -76,6 +76,18 @@ def command(runtime, script, *arguments):
     ]
 
 
+def stop_child(child):
+    try:
+        os.killpg(child.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass  # Owned child can exit between the poll and signal.
+    try:
+        child.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        os.killpg(child.pid, signal.SIGKILL)
+        child.wait()
+
+
 def guarded(command_line, output, index):
     log = output / f"worker-{index:03d}.log"
     start = time.monotonic()
@@ -90,37 +102,31 @@ def guarded(command_line, output, index):
             stderr=subprocess.STDOUT,
             start_new_session=True,
         )
-        while child.poll() is None:
-            table = subprocess.check_output(["ps", "-axo", "pid=,ppid=,rss="], text=True)
-            entries = [tuple(map(int, line.split())) for line in table.splitlines()]
-            ids = {child.pid}
-            # The owned process tree is shallow (uv -> Python); fixed-point
-            # discovery also includes an unexpected deeper owned descendant.
-            while True:
-                before = len(ids)
-                ids.update(pid for pid, parent, _ in entries if parent in ids)
-                if before == len(ids):
+        try:
+            while child.poll() is None:
+                table = subprocess.check_output(["ps", "-axo", "pid=,ppid=,rss="], text=True)
+                entries = [tuple(map(int, line.split())) for line in table.splitlines()]
+                ids = {child.pid}
+                # Fixed-point discovery includes all owned descendants.
+                while True:
+                    before = len(ids)
+                    ids.update(pid for pid, parent, _ in entries if parent in ids)
+                    if before == len(ids):
+                        break
+                rss = sum(kib * 1024 for pid, _, kib in entries if pid in ids)
+                peak = max(peak, rss)
+                elapsed = time.monotonic() - start
+                samples.append([elapsed, rss])
+                if rss > 1280 * 1024 * 1024:
+                    reason = "1280MiB owned-child RSS guard"
+                elif elapsed > 90:
+                    reason = "90second wall guard"
+                if reason:
                     break
-            rss = sum(kib * 1024 for pid, _, kib in entries if pid in ids)
-            peak = max(peak, rss)
-            elapsed = time.monotonic() - start
-            samples.append([elapsed, rss])
-            if rss > 1280 * 1024 * 1024:
-                reason = "1280MiB owned-child RSS guard"
-            elif elapsed > 90:
-                reason = "90second wall guard"
-            if reason:
-                try:
-                    os.killpg(child.pid, signal.SIGTERM)
-                except ProcessLookupError:
-                    pass  # Owned child can exit between the poll and signal.
-                try:
-                    child.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    os.killpg(child.pid, signal.SIGKILL)
-                    child.wait()
-                break
-            time.sleep(0.25)
+                time.sleep(0.25)
+        finally:
+            if child.poll() is None:
+                stop_child(child)
         exit_code = child.wait()
     records = [json.loads(line) for line in log.read_text().splitlines() if line.startswith("{")]
     if exit_code and not reason:
