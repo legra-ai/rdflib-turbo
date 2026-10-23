@@ -18,6 +18,10 @@ on:
         description: Exact public candidate commit
         type: string
         default: '27241774424becd319debb1072cf69f7d4b10849'
+      comparison-replay-run:
+        description: Original successful public comparison run to replay; blank builds both inputs
+        type: string
+        default: ''
   schedule:
     - cron: '23 4 * * *'
 
@@ -344,6 +348,7 @@ jobs:
     timeout-minutes: 120
     permissions:
       contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -355,13 +360,22 @@ jobs:
         with:
           toolchain: 1.99.1
       - name: Compare original public source archives on one runner
+        if: inputs['comparison-replay-run'] == ''
         env:
           GH_TOKEN: ${{ github.token }}
           COMPARE_BASE: ${{ inputs['comparison-base'] }}
           COMPARE_HEAD: ${{ inputs['comparison-head'] }}
         run: uv run --no-project --python 3.13.16 python scripts/inference_comparison.py --base "$COMPARE_BASE" --head "$COMPARE_HEAD" --output "$RUNNER_TEMP/performance-comparison"
+      - name: Replay original public comparison inputs without rebuilding
+        if: inputs['comparison-replay-run'] != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMPARE_BASE: ${{ inputs['comparison-base'] }}
+          COMPARE_HEAD: ${{ inputs['comparison-head'] }}
+          COMPARE_REPLAY_RUN: ${{ inputs['comparison-replay-run'] }}
+        run: uv run --no-project --python 3.13.16 python scripts/comparison_replay.py --input-run "$COMPARE_REPLAY_RUN" --base "$COMPARE_BASE" --head "$COMPARE_HEAD" --output "$RUNNER_TEMP/performance-replay"
       - name: Retain original public inputs and comparison evidence
-        if: always()
+        if: always() && inputs['comparison-replay-run'] == ''
         uses: actions/upload-artifact@v7
         with:
           name: performance-comparison-inputs
@@ -387,3 +401,17 @@ jobs:
             ${{ runner.temp }}/performance-comparison/*-runtime/uv.lock
             ${{ runner.temp }}/performance-comparison/oracles/fixtures.json
             ${{ runner.temp }}/performance-comparison/oracles/*.nt
+      - name: Retain bounded replay evidence and the unchanged original input ZIP
+        if: always() && inputs['comparison-replay-run'] != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: performance-comparison-replay
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            ${{ runner.temp }}/performance-replay/input-original.zip
+            ${{ runner.temp }}/performance-replay/*.json
+            ${{ runner.temp }}/performance-replay/*.log
+            ${{ runner.temp }}/performance-replay/*-oracles/*.log
+            ${{ runner.temp }}/performance-replay/*-runtime/pyproject.toml
+            ${{ runner.temp }}/performance-replay/*-runtime/uv.lock
