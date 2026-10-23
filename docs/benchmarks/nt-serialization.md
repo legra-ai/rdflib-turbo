@@ -2,16 +2,17 @@
 
 The [recorded results](nt-2026-10-23.json) compare RDFLib 7.6.0, the published
 rdflib-turbo 0.2.0a14 wheel and unreleased candidate source
-`6e86c9c9a9eaea57da6d78897a8d2831568a2c3f`. The candidate was built with
+`c1966915fb9c50a902eab729bb7bfd694c513490`. The candidate was built with
 `uv build` from its original independently audited source distribution, using
 CPython 3.13.16 and Maturin's locked release profile. The documentation commit
 containing this report is not the measured native build source.
 
-This is a **historical initial measurement**. The initial implementation was
-subsequently corrected at `faa0b268cd5433f18134568a64ae7dbc24d1268c` to preserve
-RDFLib's invalid-URI exceptions without aborting a caught pending transaction.
-The corrected validator has not yet been remeasured; the recorded numbers must
-not be used as performance evidence for that later code.
+This snapshot includes the URI correction at
+`faa0b268cd5433f18134568a64ae7dbc24d1268c`: it preserves RDFLib's invalid-URI
+exceptions without aborting a caught pending transaction. All 99 NT contracts and
+169 neighboring checks passed against the actual optimized wheel before timing.
+The [initial measurement](nt-2026-10-23-initial.json), which predates that correction,
+is retained as historical evidence and does not describe the corrected code.
 
 The fixture cycles through plain strings, explicit `xsd:string`, Unicode French
 language strings, noncanonical integer spellings and IRI objects. Three controls

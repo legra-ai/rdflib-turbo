@@ -10,17 +10,16 @@
 
 ## Performance
 
-**N-Triples serialization — historical initial measurement.**
-The initial unreleased candidate at [`6e86c9c`](https://github.com/legra-ai/rdflib-turbo/commit/6e86c9c9a9eaea57da6d78897a8d2831568a2c3f)
-was 5.4–5.7× faster than RDFLib on 100,000 synthetic triples. It was subsequently
-corrected to preserve RDFLib's invalid-URI exceptions and transaction behavior.
-**The corrected code has not yet been remeasured; these numbers are historical,
-not performance evidence for the current validator.**
+**N-Triples serialization: 4.4–4.9× faster than RDFLib on 100,000 synthetic triples.**
+The unreleased candidate at [`c196691`](https://github.com/legra-ai/rdflib-turbo/commit/c1966915fb9c50a902eab729bb7bfd694c513490)
+serializes directly from the selected native graph and returns UTF-8 bytes without
+a Python Unicode copy. It preserves RDFLib's URI rejection and caught-transaction
+behavior; the corrected implementation is measured below.
 
-| Output | RDFLib 7.6.0 (ms) | Published turbo 0.2.0a14 (ms) | Initial 6e86c9c (ms) | RDFLib peak (MB) | Published peak (MB) | Initial peak (MB) |
+| Output | RDFLib 7.6.0 (ms) | Published turbo 0.2.0a14 (ms) | Candidate c196691 (ms) | RDFLib peak (MB) | Published peak (MB) | Candidate peak (MB) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `str` | 232.71 | 272.59 | **42.92** | 336.95 | 294.76 | **290.34** |
-| UTF-8 `bytes` | 225.48 | 270.07 | **39.31** | 299.03 | 260.99 | **255.23** |
+| `str` | 484.21 | 651.83 | **110.14** | 339.09 | 294.45 | **290.59** |
+| UTF-8 `bytes` | 505.74 | 680.75 | **104.21** | 301.22 | 262.56 | **257.28** |
 
 Measured on macOS ARM64 with CPython 3.13.16 on 23 October 2026: medians of six
 rotated cold processes per case, using the published baseline wheel and an
@@ -33,6 +32,8 @@ probabilistic rather than a complete row comparison. A separate 1,024-triple
 Unicode test reduced Python-traced UTF-8 peak allocations from **252,940 to
 48,173 bytes**; that excludes native allocations. These are synthetic NT-only
 measurements, not end-to-end or universal speedup claims.
+The shared host's one-minute load ranged from 16.05 to 25.26 and large-case CPU
+variation from 1.3% to 12.6%; absolute timings reflect that load.
 See [results and provenance](docs/benchmarks/nt-2026-10-23.json) and
 [reproduction instructions](docs/benchmarks/nt-serialization.md).
 
