@@ -65,7 +65,10 @@ show_missing = true
 pyshacl-turbo = { git = "https://github.com/legra-ai/pyshacl-turbo", rev = "86547eacf0db0a561411fcab76641bfcb37146f3" }
 
 [dependency-groups]
-dev = ["mypy>=1.15,<3"]
+dev = [
+    "mypy>=1.15,<3",
+    "ruff>=0.12",
+]
 coverage = [
     "rdflib==7.6.0",
     "owlrl==7.6.2",
