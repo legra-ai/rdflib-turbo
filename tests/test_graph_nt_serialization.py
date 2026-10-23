@@ -210,3 +210,79 @@ print(json.dumps({'output_bytes': len(payload), 'python_heap_peak': peak}))
     counts = json.loads(result.stdout)
     # bounded: two output-sized Python byte buffers plus64KiB call scaffolding.
     assert counts["python_heap_peak"] <= 2 * counts["output_bytes"] + 65536, counts
+
+
+@pytest.mark.parametrize("character", list('<>" {}|\\^`'))
+@pytest.mark.parametrize("position", [0, 1, 2])
+@pytest.mark.parametrize("encoding", [None, "utf-8"])
+def test_native_nt_rejects_invalid_uri_like_reference_without_python_reads(
+    monkeypatch, character, position, encoding
+):
+    row = [URIRef("urn:s"), URIRef("urn:p"), URIRef("urn:o")]
+    row[position] = URIRef(f"urn:bad{character}value")
+    row = tuple(row)
+    reference = ReferenceGraph()
+    reference.add(row)
+    with pytest.raises(Exception) as expected:
+        reference.serialize(format="nt", encoding=encoding)
+    assert type(expected.value) is Exception
+    graph = Graph()
+    graph.add(row)
+    monkeypatch.setattr(Graph, "triples", lambda *args: pytest.fail("Python term traversal"))
+    with pytest.raises(type(expected.value)) as actual:
+        graph.serialize(format="nt", encoding=encoding)
+    assert type(actual.value) is type(expected.value)
+    assert str(actual.value) == str(expected.value)
+
+
+@pytest.mark.parametrize("encoding", [None, "utf-8"])
+def test_caught_nt_uri_rejection_keeps_pending_transaction_usable(monkeypatch, encoding):
+    invalid = (URIRef("urn:s"), URIRef("urn:p"), URIRef("urn:bad space"))
+    valid = (URIRef("urn:good"), URIRef("urn:p"), URIRef("urn:o"))
+    reference = ReferenceGraph()
+    reference.add(invalid)
+    with pytest.raises(Exception) as expected:
+        reference.serialize(format="nt", encoding=encoding)
+    reference.remove(invalid)
+    reference.add(valid)
+    document = reference.serialize(format="nt", encoding=encoding)
+    graph = Graph()
+    monkeypatch.setattr(Graph, "triples", lambda *args: pytest.fail("Python term traversal"))
+    with graph.transaction() as pending:
+        pending.add(invalid)
+        with pytest.raises(type(expected.value)) as actual:
+            pending.serialize(format="nt", encoding=encoding)
+        assert type(actual.value) is type(expected.value)
+        assert str(actual.value) == str(expected.value)
+        assert len(graph) == 0
+        assert len(pending) == 1
+        pending.remove(invalid)
+        pending.add(valid)
+        assert pending.serialize(format="nt", encoding=encoding) == document
+    assert graph.serialize(format="nt", encoding=encoding) == document
+
+
+@pytest.mark.parametrize("value", ["relative", "urn:with\nnewline"])
+@pytest.mark.parametrize("encoding", [None, "utf-8"])
+def test_nt_uri_validation_does_not_add_stricter_rfc_policy(monkeypatch, value, encoding):
+    row = (URIRef("urn:s"), URIRef("urn:p"), URIRef(value))
+    reference = ReferenceGraph()
+    reference.add(row)
+    document = reference.serialize(format="nt", encoding=encoding)
+    graph = Graph()
+    graph.add(row)
+    monkeypatch.setattr(Graph, "triples", lambda *args: pytest.fail("Python term traversal"))
+    assert graph.serialize(format="nt", encoding=encoding) == document
+
+
+@pytest.mark.parametrize("encoding", [None, "utf-8"])
+def test_nt_graph_scope_and_literal_datatype_keep_reference_policy(monkeypatch, encoding):
+    row = (URIRef("urn:s"), URIRef("urn:p"), Literal("text", datatype=URIRef("urn:bad space")))
+    reference = ReferenceGraph()
+    reference.add(row)
+    document = reference.serialize(format="nt", encoding=encoding)
+    dataset = StoreDataset()
+    graph = dataset.graph(URIRef("urn:graph with space"))
+    graph.add(row)
+    monkeypatch.setattr(Graph, "triples", lambda *args: pytest.fail("Python term traversal"))
+    assert graph.serialize(format="nt", encoding=encoding) == document

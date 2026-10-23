@@ -25,6 +25,7 @@ use std::sync::{Arc, Mutex};
 use oxigraph::model::GraphNameRef;
 use oxigraph::store::Store;
 use pyo3::IntoPyObjectExt;
+use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 
@@ -38,7 +39,19 @@ pub(crate) use transaction::NativeTransaction;
 use typed::{QuadInput, TermTuple};
 use typed_view::{Position, PreparedTerm};
 
-fn nt_python_output(py: Python<'_>, text: String, as_bytes: bool) -> PyResult<Py<PyAny>> {
+fn nt_python_output(
+    py: Python<'_>,
+    output: output::GraphNtOutput,
+    as_bytes: bool,
+) -> PyResult<Py<PyAny>> {
+    let text = match output {
+        output::GraphNtOutput::Document(text) => text,
+        output::GraphNtOutput::InvalidUri(uri) => {
+            return Err(PyException::new_err(format!(
+                "\"{uri}\" does not look like a valid URI, I cannot serialize this as N3/Turtle. Perhaps you wanted to urlencode it?"
+            )));
+        }
+    };
     if as_bytes {
         Ok(PyBytes::new(py, text.as_bytes()).into_any().unbind())
     } else {

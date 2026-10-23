@@ -72,6 +72,7 @@ pub(super) enum Reply {
     Bool(bool),
     Count(usize),
     Text(String),
+    GraphNt(super::output::GraphNtOutput),
     Query(String, String),
     Inference(crate::inference::InferenceOutcome),
 }
@@ -355,7 +356,7 @@ impl Operation {
                     None,
                     Some(graph.as_ref()),
                 ))
-                .map(Reply::Text)
+                .map(Reply::GraphNt)
             }
         }
     }

@@ -316,7 +316,7 @@ impl NativeTransaction {
         let text = py
             .detach(
                 || match self.session.execute(Operation::DumpGraphNt(graph))? {
-                    Reply::Text(text) => Ok(text),
+                    Reply::GraphNt(output) => Ok(output),
                     _ => unreachable!("native transaction graph output reply type"),
                 },
             )
