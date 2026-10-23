@@ -1,5 +1,9 @@
 {
   "measurement": "Graph.serialize N-Triples only; existing ordinary RDFLib boundary",
+  "status": "Historical initial measurement; superseded by URI-validation correction",
+  "superseded_by_source": "faa0b268cd5433f18134568a64ae7dbc24d1268c",
+  "current_code_performance_claim": false,
+  "historical_limit": "Initial candidate omitted RDFLib invalid-URI rejection; corrected validator must be remeasured before any new headline claim",
   "date": "2026-10-23",
   "host": {
     "os": "macOS 27.0.1",

@@ -10,12 +10,14 @@
 
 ## Performance
 
-**N-Triples serialization: 5.4–5.7× faster than RDFLib on 100,000 synthetic triples.**
-The unreleased candidate at [`6e86c9c`](https://github.com/legra-ai/rdflib-turbo/commit/6e86c9c9a9eaea57da6d78897a8d2831568a2c3f)
-serializes directly from the selected native graph, preserving exact terms and
-returning UTF-8 bytes without constructing a Python Unicode copy.
+**N-Triples serialization — historical initial measurement.**
+The initial unreleased candidate at [`6e86c9c`](https://github.com/legra-ai/rdflib-turbo/commit/6e86c9c9a9eaea57da6d78897a8d2831568a2c3f)
+was 5.4–5.7× faster than RDFLib on 100,000 synthetic triples. It was subsequently
+corrected to preserve RDFLib's invalid-URI exceptions and transaction behavior.
+**The corrected code has not yet been remeasured; these numbers are historical,
+not performance evidence for the current validator.**
 
-| Output | RDFLib 7.6.0 (ms) | Published turbo 0.2.0a14 (ms) | Candidate 6e86c9c (ms) | RDFLib peak (MB) | Published peak (MB) | Candidate peak (MB) |
+| Output | RDFLib 7.6.0 (ms) | Published turbo 0.2.0a14 (ms) | Initial 6e86c9c (ms) | RDFLib peak (MB) | Published peak (MB) | Initial peak (MB) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | `str` | 232.71 | 272.59 | **42.92** | 336.95 | 294.76 | **290.34** |
 | UTF-8 `bytes` | 225.48 | 270.07 | **39.31** | 299.03 | 260.99 | **255.23** |

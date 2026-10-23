@@ -7,6 +7,12 @@ rdflib-turbo 0.2.0a14 wheel and unreleased candidate source
 CPython 3.13.16 and Maturin's locked release profile. The documentation commit
 containing this report is not the measured native build source.
 
+This is a **historical initial measurement**. The initial implementation was
+subsequently corrected at `faa0b268cd5433f18134568a64ae7dbc24d1268c` to preserve
+RDFLib's invalid-URI exceptions without aborting a caught pending transaction.
+The corrected validator has not yet been remeasured; the recorded numbers must
+not be used as performance evidence for that later code.
+
 The fixture cycles through plain strings, explicit `xsd:string`, Unicode French
 language strings, noncanonical integer spellings and IRI objects. Three controls
 exercise blank-node IDs, escaping and datatype identity; another named graph must
