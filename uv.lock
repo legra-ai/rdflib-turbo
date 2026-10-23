@@ -556,7 +556,7 @@ html = [
 
 [[package]]
 name = "rdflib-turbo"
-version = "0.2.0a11"
+version = "0.2.0a12"
 source = { editable = "." }
 dependencies = [
     { name = "rdflib" },
