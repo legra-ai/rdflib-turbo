@@ -88,9 +88,9 @@ jobs:
   wheels:
     needs: [prepare, sdist]
     runs-on: ${{ matrix.os }}
-    # Cold Intel builds can use an hour before installed verification starts.
-    # Keep all five interpreter builds and their verification inside one bounded job.
-    timeout-minutes: 90
+    # Cold Intel builds plus five installed-wheel suites exceed 90 minutes.
+    # Preserve every interpreter and verification within a bounded job.
+    timeout-minutes: ${{ matrix.os == 'macos-15-intel' && 120 || 90 }}
     strategy:
       fail-fast: false
       matrix:
