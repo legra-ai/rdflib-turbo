@@ -23,9 +23,9 @@ _:predicate rdfs:subPropertyOf <urn:s> .
 """
 
 
-@pytest.mark.parametrize("api", ["dataset", "store", "transaction"])
+@pytest.mark.parametrize("api", ["dataset", "store", "transaction", "persistent"])
 @pytest.mark.parametrize("document", [DOCUMENT, BLANK_PREDICATE_DOCUMENT])
-def test_generalized_intermediates_preserve_ordinary_consequences(api, document):
+def test_generalized_intermediates_preserve_ordinary_consequences(api, document, tmp_path):
     reference = Graph().parse(data=document, format="turtle")
     DeductiveClosure(OWLRL_Semantics).expand(reference)
     consequence = (URIRef("urn:a"), URIRef("urn:s"), Literal("value"))
@@ -45,12 +45,15 @@ def test_generalized_intermediates_preserve_ordinary_consequences(api, document)
     if api == "dataset":
         check(Dataset())
     else:
-        with Store() as store:
+        with Store(tmp_path / "store" if api == "persistent" else None) as store:
             if api == "transaction":
                 with store.transaction() as transaction:
                     check(transaction)
             else:
                 check(store)
+        if api == "persistent":
+            with Store(tmp_path / "store") as reopened:
+                assert reopened.query('ASK { <urn:a> <urn:s> "value" }').askAnswer
 
 
 def test_generalized_inference_respects_transaction_rollback_and_call_lifetime():
