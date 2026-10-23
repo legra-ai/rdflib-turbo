@@ -101,14 +101,23 @@ def test_wheel_job_budget_covers_five_interpreters_and_verification():
 
     workflow = (ROOT / ".github/workflows/ci.yml").read_text()
     wheels = workflow.split("\n  wheels:\n", 1)[1].split("\n  native-coverage:\n", 1)[0]
-    timeout = re.search(r"^    timeout-minutes: (\d+)$", wheels, re.MULTILINE)
+    timeout = re.search(
+        r"^    timeout-minutes: \$\{\{ matrix\.os == 'macos-15-intel' "
+        r"&& (?P<intel>\d+) \|\| (?P<default>\d+) \}\}$",
+        wheels,
+        re.MULTILINE,
+    )
     assert timeout is not None
     # Intel run 39636861664 built all five wheels in ~58 minutes and hit the
     # hour limit before verification. Budget a cold build, four ABI rebuilds,
     # installed tests for every wheel, and runner setup without dropping stages.
     required_minutes = 35 + 7 * (len(ABIS) - 1) + 2 * len(ABIS) + 2
-    assert required_minutes <= int(timeout.group(1)) <= 120, (
-        "The bounded wheel job must cover cold compilation and every interpreter verification"
+    assert required_minutes <= int(timeout.group("default")) <= 90
+    # Intel run 39890667335 needed 24 minutes for the cold build, 10-12
+    # per ABI rebuild and 5-6 per installed suite, exceeding the old 90 minutes.
+    intel_required_minutes = 35 + 12 * (len(ABIS) - 1) + 6 * len(ABIS) + 2
+    assert intel_required_minutes <= int(timeout.group("intel")) <= 120, (
+        "The bounded Intel job must cover every build and installed verification"
     )
     versions = " ".join(f"{abi[2]}.{abi.split('-')[0][3:]}" for abi in ABIS)
     assert f"for python in {versions}; do" in wheels
