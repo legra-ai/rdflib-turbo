@@ -51,3 +51,34 @@ def test_generalized_intermediates_preserve_ordinary_consequences(api, document)
                     check(transaction)
             else:
                 check(store)
+
+
+def test_generalized_inference_respects_transaction_rollback_and_call_lifetime():
+    with Store() as store:
+        store.parse(data=DOCUMENT)
+        before = store.serialize(format="ntriples")
+        with pytest.raises(RuntimeError, match="abort"):
+            with store.transaction() as transaction:
+                transaction.infer(inference="owlrl")
+                assert transaction.query('ASK { <urn:a> <urn:s> "value" }').askAnswer
+                raise RuntimeError("abort")
+        assert store.serialize(format="ntriples") == before
+        # A new invocation owns a fresh intermediate relation after rollback.
+        store.infer(inference="owlrl")
+        assert store.query('ASK { <urn:a> <urn:s> "value" }').askAnswer
+
+
+def test_generalized_inference_does_not_join_schema_from_another_source_graph():
+    from rdflib_turbo import Graph as NativeGraph
+
+    with Store() as store:
+        left = NativeGraph(store, URIRef("urn:left"), bind_namespaces="none")
+        right = NativeGraph(store, URIRef("urn:right"), bind_namespaces="none")
+        left.parse(data=DOCUMENT.rsplit("<urn:r>", 1)[0], format="turtle")
+        right.parse(
+            data="<urn:r> <http://www.w3.org/2002/07/owl#inverseOf> <urn:s> .",
+            format="turtle",
+        )
+        left.infer(inference="owlrl")
+        assert (URIRef("urn:a"), URIRef("urn:s"), Literal("value")) not in left
+        assert len(right) == 1
