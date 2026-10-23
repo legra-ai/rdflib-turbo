@@ -1,4 +1,5 @@
-use std::collections::HashSet;
+use std::collections::{HashSet, hash_map::RandomState};
+use std::hash::BuildHasher;
 
 use oxigraph::model::*;
 use oxigraph::sparql::{PreparedSparqlQuery, QueryResults, SparqlEvaluator};
@@ -18,6 +19,8 @@ mod intersections;
 mod literal_values;
 mod options;
 mod outcome;
+#[cfg(test)]
+mod pending_query_tests;
 mod request;
 mod same_as;
 pub(crate) mod scoped;
@@ -105,12 +108,27 @@ pub(crate) fn expand_into(
 
 /// One round retains only distinct statements absent from its read snapshot.
 /// Existing facts and duplicate rule results never enter the retained buffer.
-#[derive(Default)]
-struct Pending(HashSet<Quad>);
+struct Pending<H = RandomState>(HashSet<Quad, H>);
 
-impl Pending {
+impl Default for Pending {
+    fn default() -> Self {
+        Self(HashSet::new())
+    }
+}
+
+impl<H: BuildHasher> Pending<H> {
+    // Equality kernels can emit the same missing head through many witnesses.
     fn push(&mut self, data: &impl Graph, quad: Quad) -> Result<()> {
         if !self.0.contains(&quad) && !data.contains(&quad)? {
+            self.0.insert(quad);
+        }
+        Ok(())
+    }
+
+    fn push_query_head(&mut self, data: &impl Graph, quad: Quad) -> Result<()> {
+        // The CONSTRUCT iterator already deduplicates this query's output.
+        // Existing heads need no hash lookup in the unrelated missing-fact set.
+        if !data.contains(&quad)? {
             self.0.insert(quad);
         }
         Ok(())
@@ -126,13 +144,21 @@ fn apply_rules(
     if owl {
         same_as::apply(data, additions)?;
     }
+    apply_queries(data, queries, additions)
+}
+
+fn apply_queries<H: BuildHasher>(
+    data: &impl Graph,
+    queries: &[PreparedSparqlQuery],
+    additions: &mut Pending<H>,
+) -> Result<()> {
     for query in queries {
         let QueryResults::Graph(triples) = data.query(query.clone())? else {
             unreachable!("Inference rules are CONSTRUCT queries")
         };
         for triple in triples {
             let triple = triple?;
-            additions.push(
+            additions.push_query_head(
                 data,
                 Quad::new(
                     triple.subject,
