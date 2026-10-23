@@ -102,8 +102,8 @@ jobs:
   wheels:
     needs: [prepare, sdist]
     runs-on: ${{ matrix.os }}
-    # Cold Intel builds plus five installed-wheel suites exceed 90 minutes.
-    # Preserve every interpreter and verification within a bounded job.
+    # Intel's five builds and installed suites exceed even the two-hour budget.
+    # Two disjoint cohorts retain every interpreter within the same bounded limit.
     timeout-minutes: ${{ matrix.os == 'macos-15-intel' && 120 || 90 }}
     strategy:
       fail-fast: false
@@ -111,16 +111,30 @@ jobs:
         include:
           - os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
+            python-versions: '3.11 3.12 3.13 3.14 3.15'
+            artifact: release-wheel-x86_64-unknown-linux-gnu
             container: quay.io/pypa/manylinux_2_28_x86_64:latest
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
+            python-versions: '3.11 3.12 3.13 3.14 3.15'
+            artifact: release-wheel-aarch64-unknown-linux-gnu
             container: quay.io/pypa/manylinux_2_28_aarch64:latest
           - os: macos-15-intel
             target: x86_64-apple-darwin
+            python-versions: '3.11 3.12 3.13'
+            artifact: release-wheel-x86_64-apple-darwin-cp311-cp313
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            python-versions: '3.14 3.15'
+            artifact: release-wheel-x86_64-apple-darwin-cp314-cp315
           - os: macos-15
             target: aarch64-apple-darwin
+            python-versions: '3.11 3.12 3.13 3.14 3.15'
+            artifact: release-wheel-aarch64-apple-darwin
           - os: windows-latest
             target: x86_64-pc-windows-msvc
+            python-versions: '3.11 3.12 3.13 3.14 3.15'
+            artifact: release-wheel-x86_64-pc-windows-msvc
     steps:
       - uses: actions/checkout@v7
         with:
@@ -155,16 +169,16 @@ jobs:
           # The stable source-build path and target retain vendor compilation across interpreters.
           CARGO_TARGET_DIR: ${{ github.workspace }}/target
         run: |
-          uv python install 3.11 3.12 3.13 3.14 3.15 || exit 1
-          for python in 3.11 3.12 3.13 3.14 3.15; do
+          uv python install ${{ matrix.python-versions }} || exit 1
+          for python in ${{ matrix.python-versions }}; do
             uv build --wheel --python "$python" --out-dir dist -C 'maturin.build-args=--locked --target ${{ matrix.target }} --compatibility pypi' source-build || exit 1
           done
       - run: uv tool run --from twine==6.2.0 twine check --strict dist/*
       - name: Test the installed wheel without source-tree imports
-        run: uv run --no-project python scripts/test_wheel.py
+        run: uv run --no-project python scripts/test_wheel.py --python-versions ${{ matrix.python-versions }}
       - uses: actions/upload-artifact@v7
         with:
-          name: release-wheel-${{ matrix.target }}
+          name: ${{ matrix.artifact }}
           path: dist/*.whl
           if-no-files-found: error
 

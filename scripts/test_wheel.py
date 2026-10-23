@@ -54,10 +54,20 @@ def supported_python_versions():
     return CPYTHON_VERSIONS
 
 
-def select_wheels(directory, version):
+def selected_versions(versions=None):
+    supported = supported_python_versions()
+    if versions is None:
+        return supported
+    versions = tuple(versions)
+    if not versions or versions != tuple(version for version in supported if version in versions):
+        raise ValueError("Expected distinct supported CPython versions in policy order")
+    return versions
+
+
+def select_wheels(directory, version, *, versions=None):
     wheels = sorted(directory.glob("*.whl"))
     selected = {}
-    for python in supported_python_versions():
+    for python in selected_versions(versions):
         tag = "cp" + python.replace(".", "")
         matches = [
             path for path in wheels if path.name.startswith(f"rdflib_turbo-{version}-{tag}-{tag}-")
@@ -67,7 +77,7 @@ def select_wheels(directory, version):
         selected[python] = matches[0]
     platforms = {path.name.rsplit("-", 1)[1] for path in wheels}
     if len(platforms) != 1 or set(wheels) != set(selected.values()):
-        raise ValueError("Expected five matching CPython wheels for one native platform")
+        raise ValueError("Expected matching cohort wheels for one native platform")
     if any(not path.is_file() for path in wheels):
         raise ValueError("Every wheel must be a regular file")
     return selected
@@ -219,19 +229,28 @@ def test_installed_wheel(wheel, version):
             subprocess.run(command, cwd=directory, check=True)
 
 
-def test_matrix(wheels):
-    for version in supported_python_versions():
+def test_matrix(wheels, *, versions=None):
+    versions = selected_versions(versions)
+    if set(wheels) != set(versions):
+        raise ValueError("Wheel inventory must exactly match the requested interpreter cohort")
+    for version in versions:
         test_installed_wheel(wheels[version], version)
 
 
 def main():
+    versions = None
     if len(sys.argv) > 1:
-        if len(sys.argv) != 5 or sys.argv[1] != "--verify-loaded":
-            raise ValueError("Expected --verify-loaded WHEEL PYTHON ENVIRONMENT")
-        verify_loaded_package(Path(sys.argv[2]), sys.argv[3], Path(sys.argv[4]))
-        return
+        if sys.argv[1] == "--verify-loaded":
+            if len(sys.argv) != 5:
+                raise ValueError("Expected --verify-loaded WHEEL PYTHON ENVIRONMENT")
+            verify_loaded_package(Path(sys.argv[2]), sys.argv[3], Path(sys.argv[4]))
+            return
+        if sys.argv[1] != "--python-versions":
+            raise ValueError("Expected --python-versions VERSION [VERSION ...]")
+        versions = selected_versions(sys.argv[2:])
     project = tomllib.loads((ROOT / "pyproject.toml").read_text())
-    test_matrix(select_wheels(ROOT / "dist", project["project"]["version"]))
+    wheels = select_wheels(ROOT / "dist", project["project"]["version"], versions=versions)
+    test_matrix(wheels, versions=versions)
 
 
 if __name__ == "__main__":
