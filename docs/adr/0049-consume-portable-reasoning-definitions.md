@@ -29,3 +29,33 @@ than converting whole graphs or adding unused dependencies to imply adoption.
 Tests execute the real shared domain clause against backend terms and reject
 unsupported or invalid rule forms. Existing native and installed-wheel suites
 continue to guard the externally observable closure and transaction behavior.
+
+## Extended relational adoption
+
+The runtime now consumes rdf-reasoning 0.2.0 for functional properties,
+value restrictions, equivalent-class membership and flat schema rules. The
+versioned Owlrl762RuleId clauses preserve the pinned reference's guarded
+schema consequences separately from standard RuleId definitions. Lower their
+BuiltinFilter::Ne to !sameTerm, never SPARQL value inequality. Other operators
+still fail before execution.
+
+The indexed equality kernels and list/cardinality execution remain native.
+The retained local equality queries guard their existing one-round performance
+contract. This extension changes the source of rule definitions, not transaction
+ownership or the standard RDF output boundary. Generalized terms, datatype
+semantics, lists, diagnostics, extension rules and custom Python hooks remain
+separate compatibility work; full-profile names remain unsupported as presets.
+
+## Positive list adoption
+
+With rdf-reasoning 0.3.0, use ListRuleId for cls-int2, cls-uni, cls-oo, scm-int
+and scm-uni. The adapter implements the declared binary list-member body relation
+through native rdf:rest*/rdf:first traversal. This supplies exactly the two
+auxiliary clauses' reachable-member relation without storing membership facts
+in the caller's graph. Reject auxiliary heads and wrong arities explicitly.
+
+Cycles, branches and dangling structures have the same reachability semantics
+as the displaced local property paths. This does not validate list structure or
+change the separate indexed intersection-recognition kernel. The five local
+list templates are removed. Cardinality and the equality kernel boundary remain
+native; this still does not certify full OWL-RL or Python owlrl compatibility.

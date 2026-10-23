@@ -66,54 +66,6 @@ const OWL_RULES: &[(&str, &str)] = &[
     ("?s ?q ?o", "?p owl:sameAs ?q . ?s ?p ?o"),
     (
         "?y owl:sameAs ?z",
-        "?p a owl:FunctionalProperty . ?x ?p ?y, ?z",
-    ),
-    (
-        "?x owl:sameAs ?y",
-        "?p a owl:InverseFunctionalProperty . ?x ?p ?z . ?y ?p ?z",
-    ),
-    (
-        "?p rdfs:subPropertyOf ?q . ?q rdfs:subPropertyOf ?p",
-        "?p owl:equivalentProperty ?q FILTER(!sameTerm(?p, ?q))",
-    ),
-    (
-        "?c rdfs:subClassOf ?d . ?d rdfs:subClassOf ?c",
-        "?c owl:equivalentClass ?d FILTER(!sameTerm(?c, ?d))",
-    ),
-    (
-        "?x a ?member",
-        "?c owl:intersectionOf ?list . ?list rdf:rest*/rdf:first ?member . ?x a ?c",
-    ),
-    (
-        "?x a ?c",
-        "?c owl:unionOf ?list . ?list rdf:rest*/rdf:first ?member . ?x a ?member",
-    ),
-    (
-        "?x a ?c",
-        "?c owl:oneOf ?list . ?list rdf:rest*/rdf:first ?x",
-    ),
-    (
-        "?x a ?r",
-        "?r owl:onProperty ?p ; owl:someValuesFrom ?c . ?x ?p ?y . ?y a ?c",
-    ),
-    (
-        "?x a ?r",
-        "?r owl:onProperty ?p ; owl:someValuesFrom owl:Thing . ?x ?p ?y",
-    ),
-    (
-        "?y a ?c",
-        "?r owl:onProperty ?p ; owl:allValuesFrom ?c . ?x a ?r ; ?p ?y",
-    ),
-    (
-        "?x ?p ?v",
-        "?r owl:onProperty ?p ; owl:hasValue ?v . ?x a ?r",
-    ),
-    (
-        "?x a ?r",
-        "?r owl:onProperty ?p ; owl:hasValue ?v . ?x ?p ?v",
-    ),
-    (
-        "?y owl:sameAs ?z",
         "?r owl:onProperty ?p ; owl:maxCardinality ?n . FILTER(?n = 1) ?x a ?r ; ?p ?y, ?z",
     ),
     (
@@ -123,76 +75,6 @@ const OWL_RULES: &[(&str, &str)] = &[
     (
         "?y owl:sameAs ?z",
         "?r owl:onProperty ?p ; owl:maxQualifiedCardinality ?n ; owl:onClass owl:Thing . FILTER(?n = 1) ?x a ?r ; ?p ?y, ?z",
-    ),
-    (
-        "?c rdfs:subClassOf ?c, owl:Thing ; owl:equivalentClass ?c . owl:Nothing rdfs:subClassOf ?c",
-        "?c a owl:Class",
-    ),
-    // The pinned reference emits reflexive schema entailments through class /
-    // property declarations, not through cycles involving undeclared terms.
-    (
-        "?a rdfs:subClassOf ?c",
-        "?a rdfs:subClassOf ?b . ?b rdfs:subClassOf ?c FILTER(!sameTerm(?a, ?c))",
-    ),
-    (
-        "?a owl:equivalentClass ?b",
-        "?a rdfs:subClassOf ?b . ?b rdfs:subClassOf ?a",
-    ),
-    (
-        "?p rdfs:subPropertyOf ?p ; owl:equivalentProperty ?p",
-        "{ ?p a owl:ObjectProperty } UNION { ?p a owl:DatatypeProperty } UNION { ?p a rdf:Property }",
-    ),
-    (
-        "?a rdfs:subPropertyOf ?c",
-        "?a rdfs:subPropertyOf ?b . ?b rdfs:subPropertyOf ?c FILTER(!sameTerm(?a, ?c))",
-    ),
-    (
-        "?a owl:equivalentProperty ?b",
-        "?a rdfs:subPropertyOf ?b . ?b rdfs:subPropertyOf ?a FILTER(!sameTerm(?a, ?b))",
-    ),
-    (
-        "?p rdfs:domain ?d",
-        "?p rdfs:domain ?c . ?c rdfs:subClassOf ?d",
-    ),
-    (
-        "?p rdfs:domain ?c",
-        "?p rdfs:subPropertyOf ?q . ?q rdfs:domain ?c",
-    ),
-    (
-        "?p rdfs:range ?d",
-        "?p rdfs:range ?c . ?c rdfs:subClassOf ?d",
-    ),
-    (
-        "?p rdfs:range ?c",
-        "?p rdfs:subPropertyOf ?q . ?q rdfs:range ?c",
-    ),
-    (
-        "?r rdfs:subClassOf ?s",
-        "?r owl:hasValue ?v ; owl:onProperty ?p . ?s owl:hasValue ?v ; owl:onProperty ?q . ?p rdfs:subPropertyOf ?q",
-    ),
-    (
-        "?r rdfs:subClassOf ?s",
-        "?r owl:someValuesFrom ?c ; owl:onProperty ?p . ?s owl:someValuesFrom ?d ; owl:onProperty ?p . ?c rdfs:subClassOf ?d",
-    ),
-    (
-        "?r rdfs:subClassOf ?s",
-        "?r owl:someValuesFrom ?c ; owl:onProperty ?p . ?s owl:someValuesFrom ?c ; owl:onProperty ?q . ?p rdfs:subPropertyOf ?q",
-    ),
-    (
-        "?r rdfs:subClassOf ?s",
-        "?r owl:allValuesFrom ?c ; owl:onProperty ?p . ?s owl:allValuesFrom ?d ; owl:onProperty ?p . ?c rdfs:subClassOf ?d",
-    ),
-    (
-        "?r rdfs:subClassOf ?s",
-        "?r owl:allValuesFrom ?c ; owl:onProperty ?p . ?s owl:allValuesFrom ?c ; owl:onProperty ?q . ?q rdfs:subPropertyOf ?p",
-    ),
-    (
-        "?c rdfs:subClassOf ?member",
-        "?c owl:intersectionOf ?list . ?list rdf:rest*/rdf:first ?member",
-    ),
-    (
-        "?member rdfs:subClassOf ?c",
-        "?c owl:unionOf ?list . ?list rdf:rest*/rdf:first ?member",
     ),
 ];
 
