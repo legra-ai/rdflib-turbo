@@ -16,7 +16,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from comparison_companion import OWL_REVISION, owl_input
+from comparison_companion import OWL_REVISION, owl_input, verify_originals
 from comparison_inputs import (
     audit_tree as audit_tree,
 )
@@ -350,6 +350,7 @@ def run_comparison(args):
             if sha(Path(receipts[arm][key])) != receipts[arm][key + "_sha256"]:
                 raise ValueError("Original comparison archive changed")
         json_file(output / arm / "end-attestation.json", data)
+    verify_originals(output)
     summary = summarize_results(results, [case for case, _ in groups])
     json_file(
         output / "summary.json",

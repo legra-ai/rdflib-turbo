@@ -4,12 +4,22 @@ import hashlib
 import json
 import subprocess
 import tarfile
+from pathlib import Path
 from zipfile import ZipFile
 
 from audit_sdist import audit
 from comparison_inputs import PYTHON, freeze, json_file, run, sha
 
 OWL_REVISION = "839d4877102e9c0e7b8b46eb6262a8996cd734cf"
+
+
+def verify_originals(output):
+    receipt = json.loads((output / "owl/receipt.json").read_text())
+    for key in ("archive", "wheel"):
+        if sha(Path(receipt[key])) != receipt[key + "_sha256"]:
+            raise ValueError(f"Original public companion {key} changed")
+    if freeze(output / "owl-source") != receipt["git_source"]:
+        raise ValueError("Original public companion source changed")
 
 
 def verify_payload(source, wheel):
