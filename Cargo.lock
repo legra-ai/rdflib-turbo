@@ -524,7 +524,7 @@ dependencies = [
  "sparesults",
  "spareval",
  "spargebra",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -552,7 +552,7 @@ dependencies = [
  "oxiri",
  "oxrdf",
  "ryu-js",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -565,7 +565,7 @@ dependencies = [
  "oxsdatatypes",
  "rand 0.9.5",
  "sha2",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -578,7 +578,7 @@ dependencies = [
  "oxrdf",
  "oxrdfxml",
  "oxttl",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -591,7 +591,7 @@ dependencies = [
  "oxiri",
  "oxrdf",
  "quick-xml",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -607,7 +607,7 @@ name = "oxsdatatypes"
 version = "0.2.3"
 dependencies = [
  "sha2",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -620,7 +620,7 @@ dependencies = [
  "oxilangtag",
  "oxiri",
  "oxrdf",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -1216,7 +1216,7 @@ dependencies = [
  "memchr",
  "oxrdf",
  "quick-xml",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -1237,7 +1237,7 @@ dependencies = [
  "sparesults",
  "spargebra",
  "sparopt",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -1250,7 +1250,7 @@ dependencies = [
  "peg",
  "rand 0.9.5",
  "sha2",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -1265,18 +1265,18 @@ dependencies = [
 
 [[package]]
 name = "static-automata"
-version = "1.0.3"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "258c3bf84c4c532fb3df39050d9bf9b4c66b9d09d8970b699b7d11eda1224530"
+checksum = "ee5c486951167e860ee5c58f6ea5eb2539b25462e4f3e93e710f2f9519211477"
 dependencies = [
  "static-automata-macros",
 ]
 
 [[package]]
 name = "static-automata-macros"
-version = "1.0.3"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0da89a2de63623bfa54b140c21c2519d55f21019bdb18884e56408281d751114"
+checksum = "0b7777c1c80c6e706e66043b9475739afef00a8a3cadbe703f8fc4ae3c4e091a"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",
