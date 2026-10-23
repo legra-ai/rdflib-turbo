@@ -12,7 +12,6 @@ import json
 import os
 import re
 import signal
-import statistics
 import subprocess
 import time
 from pathlib import Path
@@ -33,26 +32,24 @@ from comparison_inputs import (
 from comparison_inputs import (
     normalized_manifest as normalized_manifest,
 )
+from comparison_results import summarize_results
+from comparison_results import timing_summary as timing_summary
 
 ARMS = ("base", "head", "head", "base", "head", "base", "base", "head")
 HERE = Path(__file__).resolve().parent
+PAIRED_INPUTS = (
+    "Cargo.lock",
+    "uv.lock",
+    "Cargo.toml",
+    "pyproject.toml",
+    "rust-toolchain.toml",
+    ".cargo/config.toml",
+)
 
 
 def validate_refs(base, head):
     if base == head or any(re.fullmatch(r"[0-9a-f]{40}", value) is None for value in (base, head)):
         raise ValueError("Supply two distinct immutable lowercase full Git commit SHAs")
-
-
-def timing_summary(values):
-    result = {"n": len(values), "values": values, "status": "inconclusive"}
-    if not values:
-        return result
-    result["median"] = statistics.median(values)
-    if len(values) > 1:
-        result["sample_cv_percent"] = 100 * statistics.stdev(values) / statistics.mean(values)
-    if len(values) == 4 and result.get("sample_cv_percent", 100) <= 5:
-        result["status"] = "complete"
-    return result
 
 
 def require_equal_witnesses(values):
@@ -84,7 +81,10 @@ def stop_child(child):
     try:
         child.wait(timeout=5)
     except subprocess.TimeoutExpired:
-        os.killpg(child.pid, signal.SIGKILL)
+        try:
+            os.killpg(child.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass  # Child can exit after wait times out but before SIGKILL.
         child.wait()
 
 
@@ -205,6 +205,12 @@ def run_comparison(args):
     for arm, revision in [("base", args.base), ("head", args.head)]:
         source = output / (arm + "-source")
         checkout(repository, revision, source, output / (arm + "-fetch.log"))
+    # Reject mismatched locks/profiles before spending either native build.
+    for name in PAIRED_INPUTS:
+        if sha(output / "base-source" / name) != sha(output / "head-source" / name):
+            raise ValueError(f"Paired build settings/dependencies differ: {name}")
+    for arm, revision in [("base", args.base), ("head", args.head)]:
+        source = output / (arm + "-source")
         receipt = build(source, output / arm, revision)
         receipt.update(owlrl_wheel=str(owl), owlrl_wheel_sha256=sha(owl))
         json_file(output / arm / "receipt.json", receipt)
@@ -213,18 +219,6 @@ def run_comparison(args):
         runtime = output / (arm + "-runtime")
         project(runtime, output, [Path(receipt["wheel"]), owl])
         runtimes[arm] = runtime
-    # Lockfiles, compiler profile and native build configuration must match;
-    # different algorithms are the comparison, different build settings are not.
-    for name in (
-        "Cargo.lock",
-        "uv.lock",
-        "Cargo.toml",
-        "pyproject.toml",
-        "rust-toolchain.toml",
-        ".cargo/config.toml",
-    ):
-        if sha(output / "base-source" / name) != sha(output / "head-source" / name):
-            raise ValueError(f"Paired build settings/dependencies differ: {name}")
     reference = output / "oracle-runtime"
     project(reference, output, reference=True)
     run(
@@ -332,23 +326,7 @@ def run_comparison(args):
             if sha(Path(receipts[arm][key])) != receipts[arm][key + "_sha256"]:
                 raise ValueError("Original comparison archive changed")
         json_file(output / arm / "end-attestation.json", data)
-    summary = {}
-    for case, _ in groups:
-        arms = {}
-        for arm in ("base", "head"):
-            selected = [x for x in results if x["case"] == case and x["arm"] == arm]
-            times = [
-                next(r for r in x["records"] if r["stage"] == "inferred")["inference_cpu_ns"] / 1e9
-                for x in selected
-                if not x["guard"]
-            ]
-            arms[arm] = timing_summary(times)
-        complete = all(value["status"] == "complete" for value in arms.values())
-        summary[case] = {"arms": arms, "status": "complete" if complete else "inconclusive"}
-        if complete:
-            summary[case]["head_over_base_cpu_median"] = (
-                arms["head"]["median"] / arms["base"]["median"]
-            )
+    summary = summarize_results(results, [case for case, _ in groups])
     json_file(
         output / "summary.json",
         {

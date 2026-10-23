@@ -5,6 +5,8 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -13,9 +15,24 @@ SPEC = importlib.util.spec_from_file_location(
 )
 comparison = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(comparison)
+identity = __import__("comparison_identity")
 
 
 class ComparisonTests(unittest.TestCase):
+    def test_path_engine_source_has_a_clear_unsupported_error(self):
+        metadata = {
+            "resolve": {"nodes": []},
+            "packages": [
+                {
+                    "name": "pyshacl-turbo-engine",
+                    "manifest_path": "/unused/Cargo.toml",
+                    "source": None,
+                }
+            ],
+        }
+        with self.assertRaisesRegex(ValueError, "immutable Git"):
+            identity.derive(Path("/unused"), metadata)
+
     def test_requires_distinct_full_public_commits(self):
         comparison.validate_refs("a" * 40, "b" * 40)
         for base, head in [("main", "b" * 40), ("a" * 40, "a" * 40), ("A" * 40, "b" * 40)]:
@@ -81,6 +98,55 @@ class ComparisonTests(unittest.TestCase):
         condition = "github.event_name != 'workflow_dispatch' || !inputs['inference-comparison']"
         self.assertIn("  prepare:\n    if: " + condition, workflow)
         self.assertIn("if: always() && (" + condition + ")", workflow)
+
+    def test_mismatched_pair_fails_before_any_native_build(self):
+        with tempfile.TemporaryDirectory() as directory:
+
+            def checkout(repository, revision, destination, log):
+                destination.mkdir()
+                for name in comparison.PAIRED_INPUTS:
+                    target = destination / name
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_text(revision if name == "Cargo.lock" else "identical")
+
+            with (
+                patch.object(comparison, "preflight"),
+                patch.object(comparison, "owl_input", return_value=Path(directory) / "owl.whl"),
+                patch.object(comparison, "checkout", side_effect=checkout),
+                patch.object(comparison, "build") as build,
+            ):
+                with self.assertRaisesRegex(ValueError, "Cargo.lock"):
+                    comparison.run_comparison(
+                        SimpleNamespace(
+                            base="a" * 40, head="b" * 40, output=Path(directory) / "output"
+                        )
+                    )
+                build.assert_not_called()
+
+    def test_summary_retains_wall_and_memory_without_noisy_cpu_ratio(self):
+        results = []
+        for arm in ("base", "head"):
+            for index, cpu in enumerate((1, 1, 1, 2)):
+                results.append(
+                    {
+                        "case": "ring",
+                        "arm": arm,
+                        "guard": None,
+                        "records": [
+                            {
+                                "stage": "inferred",
+                                "inference_cpu_ns": cpu * 10**9,
+                                "inference_wall_ns": (index + 1) * 10**9,
+                                "peak_before_export_bytes": 1024 * (index + 1),
+                            }
+                        ],
+                    }
+                )
+        summary = comparison.summarize_results(results, ["ring"])["ring"]
+        self.assertEqual(summary["status"], "inconclusive")
+        self.assertNotIn("head_over_base_cpu_median", summary)
+        self.assertEqual(summary["arms"]["base"]["wall_seconds"]["median"], 2.5)
+        self.assertEqual(summary["arms"]["head"]["peak_before_export_bytes"]["median"], 2560)
 
 
 if __name__ == "__main__":

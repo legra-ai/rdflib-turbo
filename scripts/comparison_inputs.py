@@ -148,6 +148,8 @@ def build(source, output, commit):
                 "--locked",
                 "--format-version",
                 "1",
+                "--filter-platform",
+                "x86_64-unknown-linux-gnu",
                 "--features",
                 ",".join(features),
             ],

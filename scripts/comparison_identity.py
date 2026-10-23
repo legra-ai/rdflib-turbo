@@ -14,6 +14,8 @@ def canonical(data):
 def derive(source, metadata):
     nodes = {node["id"]: node for node in metadata["resolve"]["nodes"]}
     (engine,) = [p for p in metadata["packages"] if p["name"] == "pyshacl-turbo-engine"]
+    if not isinstance(engine["source"], str) or not engine["source"].startswith("git+"):
+        raise ValueError("Comparison requires an immutable Git engine source, not a path engine")
     root = Path(engine["manifest_path"]).parent
     revision = engine["source"].split("#")[-1]
     declared = tomllib.loads((source / "Cargo.toml").read_text())["dependencies"][
