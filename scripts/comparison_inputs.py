@@ -1,0 +1,228 @@
+"""Build and retain original public source archives and native comparison wheels."""
+
+import copy
+import hashlib
+import json
+import os
+import subprocess
+import tarfile
+import tomllib
+import urllib.request
+
+from audit_sdist import audit
+from comparison_identity import derive
+from test_wheel import verify_metadata
+
+PYTHON = "3.13.16"
+OWL_SHA = "c9c445fd9037788bfcf2b15f28508eaef40634ea10ab59ded78ced7df9cbce49"
+
+
+def sha(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def run(command, cwd, log, env=None):
+    with log.open("w") as stream:
+        subprocess.run(
+            list(map(str, command)),
+            cwd=cwd,
+            env=env,
+            stdout=stream,
+            stderr=subprocess.STDOUT,
+            check=True,
+        )
+
+
+def json_file(path, value):
+    path.write_text(json.dumps(value, indent=2) + "\n")
+
+
+def freeze(source):
+    dirty = subprocess.check_output(["git", "-C", str(source), "status", "--porcelain"])
+    if dirty:
+        raise ValueError("Source checkout is not clean")
+    names = (
+        subprocess.check_output(["git", "-C", str(source), "ls-files", "-z"]).decode().split("\0")
+    )
+    return {name: sha(source / name) for name in names if name}
+
+
+def normalized_manifest(original, archived):
+    expected = copy.deepcopy(original)
+    if "readme" not in expected["package"] and archived["package"].get("readme") == "README.md":
+        expected["package"]["readme"] = "README.md"
+    if expected != archived:
+        raise ValueError("Unexpected Cargo manifest normalization")
+
+
+def audit_tree(source, extracted, names):
+    included = {}
+    for name in names:
+        path = extracted / name
+        required = name.startswith(
+            ("src/", "python/", "vendor/", "build_support/", "tests/", "scripts/", ".github/")
+        )
+        required |= name in (
+            "Cargo.toml",
+            "Cargo.lock",
+            "pyproject.toml",
+            "uv.lock",
+            "rust-toolchain.toml",
+            ".cargo/config.toml",
+        )
+        if not path.is_file():
+            if required:
+                raise ValueError(f"Missing source archive input: {name}")
+            continue
+        if name == "Cargo.toml":
+            normalized_manifest(
+                tomllib.loads((source / name).read_text()), tomllib.loads(path.read_text())
+            )
+        elif sha(path) != sha(source / name):
+            raise ValueError(f"Changed source archive input: {name}")
+        included[name] = sha(path)
+    return included
+
+
+def checkout(repository, commit, destination, log):
+    # GitHub's public repository API must recognize the exact immutable input.
+    result = subprocess.check_output(["gh", "api", f"repos/legra-ai/rdflib-turbo/commits/{commit}"])
+    if json.loads(result)["sha"] != commit:
+        raise ValueError("Commit is not recognized by the public repository")
+    run(["git", "-C", repository, "fetch", "--no-tags", "origin", commit], repository, log)
+    subprocess.run(
+        ["git", "-C", str(repository), "worktree", "add", "--detach", str(destination), commit],
+        check=True,
+    )
+    if (
+        subprocess.check_output(
+            ["git", "-C", str(destination), "rev-parse", "HEAD"], text=True
+        ).strip()
+        != commit
+    ):
+        raise ValueError("Checkout revision changed")
+
+
+def build(source, output, commit):
+    output.mkdir()
+    start = freeze(source)
+    json_file(output / "git-source.json", {"commit": commit, "files": start})
+    run(
+        [
+            "uv",
+            "build",
+            "--sdist",
+            "--out-dir",
+            output / "sdist",
+            "-C",
+            "maturin.build-args=--locked",
+        ],
+        source,
+        output / "sdist.log",
+    )
+    (archive,) = (output / "sdist").glob("*.tar.gz")
+    archive_sha = sha(archive)
+    audit(archive)
+    unpack = output / "extracted"
+    unpack.mkdir()
+    with tarfile.open(archive) as bundle:
+        bundle.extractall(unpack, filter="data")
+    (extracted,) = unpack.iterdir()
+    included = audit_tree(source, extracted, start)
+    json_file(
+        output / "source-acceptance.json",
+        {"commit": commit, "archive_sha256": archive_sha, "included": included},
+    )
+    project = tomllib.loads((extracted / "pyproject.toml").read_text())
+    if (
+        project["tool"]["maturin"]["profile"] != "release"
+        or not project["tool"]["maturin"]["locked"]
+    ):
+        raise ValueError("Comparison requires the original locked release profile")
+    features = project["tool"]["maturin"]["features"]
+    with (output / "cargo-metadata.json").open("w") as stream:
+        subprocess.run(
+            [
+                "cargo",
+                "metadata",
+                "--locked",
+                "--format-version",
+                "1",
+                "--features",
+                ",".join(features),
+            ],
+            cwd=extracted,
+            stdout=stream,
+            check=True,
+        )
+    identity = derive(extracted, json.loads((output / "cargo-metadata.json").read_text()))
+    json_file(output / "expected-identity.json", identity)
+    env = {**os.environ, "CARGO_BUILD_JOBS": "2", "CARGO_TARGET_DIR": str(output / "target")}
+    # These native Linux inputs are comparison artifacts, never release inventory.
+    run(
+        [
+            "uv",
+            "build",
+            archive,
+            "--wheel",
+            "--python",
+            PYTHON,
+            "--out-dir",
+            output / "wheels",
+            "-C",
+            "maturin.build-args=--locked --compatibility linux",
+        ],
+        output,
+        output / "wheel.log",
+        env,
+    )
+    (wheel,) = (output / "wheels").glob("*.whl")
+    verify_metadata(wheel)
+    if freeze(source) != start or sha(archive) != archive_sha:
+        raise ValueError("Build mutated original source or archive")
+    return {
+        "commit": commit,
+        "wheel": str(wheel),
+        "wheel_sha256": sha(wheel),
+        "archive": str(archive),
+        "archive_sha256": archive_sha,
+        "expected_identity": identity,
+        "source_files": start,
+    }
+
+
+def owl_input(output):
+    with urllib.request.urlopen(
+        "https://pypi.org/pypi/owlrl-turbo/0.1.0a3/json", timeout=60
+    ) as response:
+        metadata = json.load(response)
+    (match,) = [entry for entry in metadata["urls"] if entry["digests"]["sha256"] == OWL_SHA]
+    path = output / match["filename"]
+    with urllib.request.urlopen(match["url"], timeout=60) as response:
+        path.write_bytes(response.read())
+    if sha(path) != OWL_SHA:
+        raise ValueError("Pinned original companion wheel changed")
+    json_file(output / "owl-registry.json", metadata)
+    return path
+
+
+def project(path, output, wheels=(), reference=False):
+    run(
+        ["uv", "init", "--bare", "--no-workspace", "--vcs", "none", "--python", PYTHON, path],
+        output,
+        output / (path.name + "-init.log"),
+    )
+    run(
+        ["uv", "python", "pin", "--project", path, PYTHON],
+        output,
+        output / (path.name + "-pin.log"),
+    )
+    requirements = ["rdflib==7.6.0", *map(str, wheels)]
+    if reference:
+        requirements.append("owlrl==7.6.2")
+    run(
+        ["uv", "add", "--project", path, "--no-sync", *requirements],
+        output,
+        output / (path.name + "-add.log"),
+    )
+    run(["uv", "sync", "--project", path, "--locked"], output, output / (path.name + "-sync.log"))

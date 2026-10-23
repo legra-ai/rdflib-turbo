@@ -5,6 +5,19 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      inference-comparison:
+        description: Comparison only; skip release graph, informational timing
+        type: boolean
+        default: false
+      comparison-base:
+        description: Exact public baseline commit
+        type: string
+        default: '7008ca50501db8d09491955b49940a7031a4e253'
+      comparison-head:
+        description: Exact public candidate commit
+        type: string
+        default: '27241774424becd319debb1072cf69f7d4b10849'
   schedule:
     - cron: '23 4 * * *'
 
@@ -19,6 +32,7 @@ defaults:
 
 jobs:
   prepare:
+    if: github.event_name != 'workflow_dispatch' || !inputs['inference-comparison']
     name: prepare
     runs-on: ubuntu-latest
     outputs:
@@ -199,7 +213,7 @@ jobs:
   test:
     name: test
     needs: [prepare, verify, sdist, wheels, native-coverage]
-    if: always()
+    if: always() && (github.event_name != 'workflow_dispatch' || !inputs['inference-comparison'])
     runs-on: ubuntu-latest
     steps:
       - uses: astral-sh/setup-uv@v10.3.0
@@ -309,3 +323,49 @@ jobs:
           path: coverage-site
       - uses: actions/deploy-pages@v5
         id: deployment
+
+  inference-comparison:
+    if: github.event_name == 'workflow_dispatch' && inputs['inference-comparison']
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          version: "0.13.1"
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          toolchain: 1.99.1
+      - name: Compare original public source archives on one runner
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMPARE_BASE: ${{ inputs['comparison-base'] }}
+          COMPARE_HEAD: ${{ inputs['comparison-head'] }}
+        run: uv run --no-project --python 3.13.16 python scripts/inference_comparison.py --base "$COMPARE_BASE" --head "$COMPARE_HEAD" --output "$RUNNER_TEMP/performance-comparison"
+      - name: Retain original public inputs and comparison evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: performance-comparison-inputs
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            ${{ runner.temp }}/performance-comparison/base/sdist/*.tar.gz
+            ${{ runner.temp }}/performance-comparison/head/sdist/*.tar.gz
+            ${{ runner.temp }}/performance-comparison/base/wheels/*.whl
+            ${{ runner.temp }}/performance-comparison/head/wheels/*.whl
+            ${{ runner.temp }}/performance-comparison/*.whl
+            ${{ runner.temp }}/performance-comparison/*.json
+            ${{ runner.temp }}/performance-comparison/base/*.json
+            ${{ runner.temp }}/performance-comparison/head/*.json
+            ${{ runner.temp }}/performance-comparison/*.log
+            ${{ runner.temp }}/performance-comparison/base/*.log
+            ${{ runner.temp }}/performance-comparison/head/*.log
+            ${{ runner.temp }}/performance-comparison/*-runtime/pyproject.toml
+            ${{ runner.temp }}/performance-comparison/*-runtime/uv.lock
+            ${{ runner.temp }}/performance-comparison/oracles/fixtures.json
+            ${{ runner.temp }}/performance-comparison/oracles/*.nt
