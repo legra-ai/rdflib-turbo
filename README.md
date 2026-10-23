@@ -10,6 +10,30 @@
 
 ## Performance
 
+**N-Triples serialization: 5.4–5.7× faster than RDFLib on 100,000 synthetic triples.**
+The unreleased candidate at [`6e86c9c`](https://github.com/legra-ai/rdflib-turbo/commit/6e86c9c9a9eaea57da6d78897a8d2831568a2c3f)
+serializes directly from the selected native graph, preserving exact terms and
+returning UTF-8 bytes without constructing a Python Unicode copy.
+
+| Output | RDFLib 7.6.0 (ms) | Published turbo 0.2.0a14 (ms) | Candidate 6e86c9c (ms) | RDFLib peak (MB) | Published peak (MB) | Candidate peak (MB) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `str` | 232.71 | 272.59 | **42.92** | 336.95 | 294.76 | **290.34** |
+| UTF-8 `bytes` | 225.48 | 270.07 | **39.31** | 299.03 | 260.99 | **255.23** |
+
+Measured on macOS ARM64 with CPython 3.13.16 on 23 October 2026: medians of six
+rotated cold processes per case, using the published baseline wheel and an
+independently audited release build of the candidate. Timings cover serialization
+only; whole-process peak RSS includes imports, input construction and retained
+output, measured before correctness parsing (decimal MB). Complete exact-term
+and blank-node-ID comparisons cover small/default/named/blank-graph controls;
+the 100,000-triple cases use a matching streaming count/hash witness, which is
+probabilistic rather than a complete row comparison. A separate 1,024-triple
+Unicode test reduced Python-traced UTF-8 peak allocations from **252,940 to
+48,173 bytes**; that excludes native allocations. These are synthetic NT-only
+measurements, not end-to-end or universal speedup claims.
+See [results and provenance](docs/benchmarks/nt-2026-10-23.json) and
+[reproduction instructions](docs/benchmarks/nt-serialization.md).
+
 Compare **RDFLib + OWL-RL + pySHACL** with
 [rdflib-turbo](https://github.com/legra-ai/rdflib-turbo),
 [owlrl-turbo](https://github.com/legra-ai/owlrl-turbo) and
