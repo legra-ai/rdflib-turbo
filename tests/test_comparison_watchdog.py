@@ -1,11 +1,11 @@
 """Owned-child guards must fail safely independently of benchmark outcomes."""
 
 import importlib
-import signal
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
@@ -27,23 +27,34 @@ class Child:
 
 
 class WatchdogTests(unittest.TestCase):
+    def test_fixture_models_posix_boundary_when_host_has_no_process_groups(self):
+        with (
+            patch.object(comparison, "os", SimpleNamespace()),
+            patch.object(comparison, "signal", SimpleNamespace()),
+        ):
+            result = self.invoke("12345 1 1\n", [0, 91, 92])
+        self.assertEqual(result["guard"], "90second wall guard")
+
     def invoke(self, table, times, child=None, error=None):
         with tempfile.TemporaryDirectory() as directory:
+            kill = Mock()
+            signals = SimpleNamespace(SIGTERM=15, SIGKILL=9)
             with (
                 patch.object(comparison.subprocess, "Popen", return_value=child or Child()),
                 patch.object(
                     comparison.subprocess, "check_output", return_value=table, side_effect=error
                 ),
                 patch.object(comparison.time, "monotonic", side_effect=times),
-                patch.object(comparison.os, "killpg") as kill,
+                patch.object(comparison, "os", SimpleNamespace(killpg=kill)),
+                patch.object(comparison, "signal", signals),
             ):
                 if error:
                     with self.assertRaises(RuntimeError):
                         comparison.guarded(["worker"], Path(directory), 0)
-                    kill.assert_called_once_with(12345, signal.SIGTERM)
+                    kill.assert_called_once_with(12345, signals.SIGTERM)
                     return None
                 result = comparison.guarded(["worker"], Path(directory), 0)
-                kill.assert_called_once_with(12345, signal.SIGTERM)
+                kill.assert_called_once_with(12345, signals.SIGTERM)
                 return result
 
     def test_wall_deadline_stops_only_owned_process_group(self):
@@ -61,7 +72,14 @@ class WatchdogTests(unittest.TestCase):
     def test_child_exit_between_term_timeout_and_kill_is_reaped(self):
         child = Mock(pid=12345)
         child.wait.side_effect = [comparison.subprocess.TimeoutExpired("worker", 5), 0]
-        with patch.object(comparison.os, "killpg", side_effect=[None, ProcessLookupError()]):
+        with (
+            patch.object(
+                comparison,
+                "os",
+                SimpleNamespace(killpg=Mock(side_effect=[None, ProcessLookupError()])),
+            ),
+            patch.object(comparison, "signal", SimpleNamespace(SIGTERM=15, SIGKILL=9)),
+        ):
             comparison.stop_child(child)
         self.assertEqual(child.wait.call_count, 2)
 
