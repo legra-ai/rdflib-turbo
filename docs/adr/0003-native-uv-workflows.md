@@ -7,6 +7,12 @@ and source-distribution builds, and publication. The pip interface, including
 uv pip, and tox are not used. Python tools run through uv; development tool
 versions are resolved in the committed uv.lock. Dependabot maintains uv locks.
 
+The development group includes Ruff. Commit hooks run its checks with
+`uv run --locked --only-group dev`, so checking Python source does not install
+or build the native project. Rust formatting and Clippy remain separate required
+hook checks. Native wheel builds, installed-artifact tests and complete coverage
+remain required in CI; a successful source lint is not native artifact validation.
+
 Normal setup uses uv sync --locked with the test extra. Ruff and pytest use
 uv run --locked; mypy is available in the development group. This migration does
 not silently introduce a passing type-check baseline or suppress typing errors.
