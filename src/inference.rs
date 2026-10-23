@@ -193,7 +193,7 @@ fn expand_inner(
         }
     }
     // bounded: one prepared query per built-in rule.
-    let shared_queries = shared::CompiledRule::bindings_for_mode(mode)?;
+    let shared_queries = shared::CompiledRule::for_mode(mode)?;
     let queries = rules
         .iter()
         .map(|(template, pattern)| {
