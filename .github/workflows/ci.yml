@@ -372,13 +372,17 @@ jobs:
             ${{ runner.temp }}/performance-comparison/head/sdist/*.tar.gz
             ${{ runner.temp }}/performance-comparison/base/wheels/*.whl
             ${{ runner.temp }}/performance-comparison/head/wheels/*.whl
+            ${{ runner.temp }}/performance-comparison/owl/sdist/*.tar.gz
+            ${{ runner.temp }}/performance-comparison/owl/wheels/*.whl
             ${{ runner.temp }}/performance-comparison/*.whl
             ${{ runner.temp }}/performance-comparison/*.json
             ${{ runner.temp }}/performance-comparison/base/*.json
             ${{ runner.temp }}/performance-comparison/head/*.json
+            ${{ runner.temp }}/performance-comparison/owl/*.json
             ${{ runner.temp }}/performance-comparison/*.log
             ${{ runner.temp }}/performance-comparison/base/*.log
             ${{ runner.temp }}/performance-comparison/head/*.log
+            ${{ runner.temp }}/performance-comparison/owl/*.log
             ${{ runner.temp }}/performance-comparison/*-runtime/pyproject.toml
             ${{ runner.temp }}/performance-comparison/*-runtime/uv.lock
             ${{ runner.temp }}/performance-comparison/oracles/fixtures.json

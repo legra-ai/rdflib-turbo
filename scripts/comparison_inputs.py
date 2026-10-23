@@ -7,14 +7,12 @@ import os
 import subprocess
 import tarfile
 import tomllib
-import urllib.request
 
 from audit_sdist import audit
 from comparison_identity import derive
 from test_wheel import verify_metadata
 
 PYTHON = "3.13.16"
-OWL_SHA = "c9c445fd9037788bfcf2b15f28508eaef40634ea10ab59ded78ced7df9cbce49"
 
 
 def sha(path):
@@ -191,21 +189,6 @@ def build(source, output, commit):
         "expected_identity": identity,
         "source_files": start,
     }
-
-
-def owl_input(output):
-    with urllib.request.urlopen(
-        "https://pypi.org/pypi/owlrl-turbo/0.1.0a3/json", timeout=60
-    ) as response:
-        metadata = json.load(response)
-    (match,) = [entry for entry in metadata["urls"] if entry["digests"]["sha256"] == OWL_SHA]
-    path = output / match["filename"]
-    with urllib.request.urlopen(match["url"], timeout=60) as response:
-        path.write_bytes(response.read())
-    if sha(path) != OWL_SHA:
-        raise ValueError("Pinned original companion wheel changed")
-    json_file(output / "owl-registry.json", metadata)
-    return path
 
 
 def project(path, output, wheels=(), reference=False):

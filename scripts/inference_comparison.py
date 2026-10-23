@@ -16,6 +16,7 @@ import subprocess
 import time
 from pathlib import Path
 
+from comparison_companion import OWL_REVISION, owl_input
 from comparison_inputs import (
     audit_tree as audit_tree,
 )
@@ -24,7 +25,6 @@ from comparison_inputs import (
     checkout,
     freeze,
     json_file,
-    owl_input,
     project,
     run,
     sha,
@@ -208,6 +208,7 @@ def run_comparison(args):
             "python": "3.13.16",
             "wall_guard_seconds": 90,
             "rss_guard_mib": 1280,
+            "owlrl_public_source": OWL_REVISION,
             "harness_sha256": {
                 path.name: sha(path) for path in [Path(__file__), *HERE.glob("comparison_*.py")]
             },
@@ -230,6 +231,7 @@ def run_comparison(args):
         source = output / (arm + "-source")
         receipt = build(source, output / arm, revision)
         receipt.update(owlrl_wheel=str(owl), owlrl_wheel_sha256=sha(owl))
+        receipt["owlrl_public_source"] = OWL_REVISION
         json_file(output / arm / "receipt.json", receipt)
         receipts[arm] = receipt
         source_freezes[arm] = freeze(source)
@@ -258,6 +260,11 @@ def run_comparison(args):
         )
         attestations[arm] = json.loads(data)
         json_file(output / arm / "start-attestation.json", attestations[arm])
+        run(
+            command(runtime, "comparison_capability.py"),
+            output,
+            output / arm / "native-companion-capability.log",
+        )
         for index, entry in enumerate(entries):
             result = guarded(
                 command(
