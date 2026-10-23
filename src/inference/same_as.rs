@@ -128,9 +128,9 @@ impl Rows {
                 if self.subjects.get(&intermediate) == Some(&id) {
                     continue;
                 }
-                // R^-1 R: subject replacement on an equality predicate. The inverse
-                // edge itself is pending and must not become visible to this pass.
-                if !self.dense(&intermediate) {
+                // A terminal subject has no outgoing row to subtract. Its
+                // common-predecessor consequences remain grouped by this row.
+                if !self.subjects.contains_key(&intermediate) {
                     for target in &values {
                         pending.push(
                             data,
@@ -157,6 +157,47 @@ impl Rows {
                 }
             }
             for member in &group.members {
+                for target in &missing {
+                    pending.push(
+                        data,
+                        Quad::new(
+                            member.clone(),
+                            predicate.clone(),
+                            target.clone(),
+                            GraphName::DefaultGraph,
+                        ),
+                    )?;
+                }
+            }
+            if dense {
+                continue;
+            }
+            // Reuse the one missing-target delta after publishing the grouped
+            // RR candidates. R^-1R is evaluated per output row, so its existing
+            // heads are rejected by values before any storage membership probe.
+            for member in &group.members {
+                missing.clear();
+                for predecessor in
+                    data.quads(None, Some(predicate.as_ref()), Some(member.as_ref().into()))
+                {
+                    let predecessor = predecessor?.subject;
+                    let predecessor_group = self.subjects[&predecessor];
+                    if predecessor_group == id
+                        || predecessor != self.groups[predecessor_group].members[0]
+                    {
+                        continue;
+                    }
+                    // Identical predecessor rows all contain this member; their
+                    // representative is therefore an actual source witness too.
+                    for target in
+                        data.quads(Some(predecessor.as_ref()), Some(predicate.as_ref()), None)
+                    {
+                        let target = target?.object;
+                        if !values.contains(&target) {
+                            missing.insert(target);
+                        }
+                    }
+                }
                 for target in &missing {
                     pending.push(
                         data,
@@ -221,3 +262,7 @@ pub(super) fn apply(data: &impl Graph, pending: &mut Pending) -> Result<()> {
     rows.extend(data, &predicate, pending)?;
     replacements(data, &predicate, pending)
 }
+
+#[cfg(test)]
+#[path = "same_as_difference_tests.rs"]
+mod difference_tests;

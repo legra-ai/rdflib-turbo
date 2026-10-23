@@ -110,7 +110,7 @@ struct Pending(HashSet<Quad>);
 
 impl Pending {
     fn push(&mut self, data: &impl Graph, quad: Quad) -> Result<()> {
-        if !data.contains(&quad)? {
+        if !self.0.contains(&quad) && !data.contains(&quad)? {
             self.0.insert(quad);
         }
         Ok(())

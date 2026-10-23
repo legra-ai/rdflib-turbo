@@ -356,3 +356,6 @@ fn full_closure_matches_frozen_ordinary_rule_engine() {
 
 #[path = "same_as_dense_tests.rs"]
 mod dense;
+
+#[path = "same_as_pending_tests.rs"]
+mod pending;

@@ -81,3 +81,20 @@ closed cliques and disjoint closed pairs. Mixed inputs retain only the small
 nearly closed component. A degree-two seed in a large incoming star must stop
 before scanning the full component. These contracts complement the work bounds
 and exact one-round differential tests.
+
+Sparse inverse compositions now stream common predecessors per output row.
+The current outgoing term set rejects already-present targets; the same
+missing-target delta is reused after grouped transitive candidates have been
+emitted. Identical predecessor rows contribute through their actual incoming
+representative once. Terminal named or blank subjects without outgoing rows
+retain the source-group witness route; literal targets remain objects only.
+Only source scans establish witnesses. Final pending publication still checks
+source plus destination membership, retaining separate-destination suppression.
+No second outgoing set, additional connectivity index or edge copy is retained.
+
+Actual 128-node ring composition reached 94,208 existing-head storage probes in
+one sparse round, including 90,112 repeated existing heads. A regression requires
+zero existing-head probes during composition for every 64- and 128-node ring
+round. This removes redundant exact storage probes, not all repeated witness
+scans; it does not establish a universal subcubic work bound. The existing fixed
+work/resource bounds and immutable-round differential oracles remain unchanged.
