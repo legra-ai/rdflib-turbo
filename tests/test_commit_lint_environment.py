@@ -37,14 +37,15 @@ def test_commit_lint_runs_when_project_build_backend_is_unavailable(tmp_path):
         environment.pop(name, None)
     environment["PATH"] = str(tmp_path / "bin") + os.pathsep + environment["PATH"]
     environment["UV_PYTHON"] = sys.executable
-    subprocess.run(
-        ["uv", "lock", "--offline"],
+    locked = subprocess.run(
+        ["uv", "lock"],
         cwd=tmp_path,
         env=environment,
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
     )
+    assert locked.returncode == 0, locked.stdout + locked.stderr
     result = subprocess.run(
         ["sh", str(hook)],
         cwd=tmp_path,
