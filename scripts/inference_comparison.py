@@ -52,6 +52,13 @@ def validate_refs(base, head):
         raise ValueError("Supply two distinct immutable lowercase full Git commit SHAs")
 
 
+def validate_flags(overrides):
+    # Preserve only the existing action's dev-only setting and warning denial.
+    accepted = {"CARGO_PROFILE_DEV_DEBUG": "0", "RUSTFLAGS": "-D warnings"}
+    if any(accepted.get(key) != value for key, value in overrides.items()):
+        raise ValueError(f"Unexpected build-profile overrides: {sorted(overrides)}")
+
+
 def require_equal_witnesses(values):
     if values and any(value != values[0] for value in values):
         raise ValueError("Complete output witness mismatch")
@@ -176,10 +183,6 @@ def preflight(output):
         for k, v in os.environ.items()
         if k.startswith(("CARGO_PROFILE_", "RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS"))
     }
-    # Preserve the existing setup-rust-toolchain action's warning-denial flag.
-    allowed = {"RUSTFLAGS": "-D warnings"} if overrides.get("RUSTFLAGS") == "-D warnings" else {}
-    if overrides != allowed:
-        raise ValueError(f"Unexpected build-profile overrides: {sorted(overrides)}")
     json_file(
         output / "toolchain.json",
         {
@@ -190,12 +193,26 @@ def preflight(output):
             "cargo_jobs": 2,
         },
     )
+    validate_flags(overrides)
 
 
 def run_comparison(args):
     validate_refs(args.base, args.head)
     output = args.output.resolve()
     output.mkdir(exist_ok=False)
+    json_file(
+        output / "request.json",
+        {
+            "base": args.base,
+            "head": args.head,
+            "python": "3.13.16",
+            "wall_guard_seconds": 90,
+            "rss_guard_mib": 1280,
+            "harness_sha256": {
+                path.name: sha(path) for path in [Path(__file__), *HERE.glob("comparison_*.py")]
+            },
+        },
+    )
     preflight(output)
     repository = HERE.parent
     receipts = {}

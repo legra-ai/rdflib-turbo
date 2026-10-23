@@ -19,6 +19,29 @@ identity = __import__("comparison_identity")
 
 
 class ComparisonTests(unittest.TestCase):
+    def test_existing_action_dev_only_flags_do_not_change_release_profile(self):
+        comparison.validate_flags({"CARGO_PROFILE_DEV_DEBUG": "0"})
+        comparison.validate_flags({"CARGO_PROFILE_DEV_DEBUG": "0", "RUSTFLAGS": "-D warnings"})
+        for value in [
+            {"CARGO_PROFILE_RELEASE_DEBUG": "0"},
+            {"CARGO_PROFILE_DEV_DEBUG": "1"},
+            {"RUSTFLAGS": "-C opt-level=0"},
+        ]:
+            with self.assertRaises(ValueError):
+                comparison.validate_flags(value)
+
+    def test_preflight_failure_still_retains_exact_requested_inputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "output"
+            with patch.object(comparison, "preflight", side_effect=ValueError("preflight failed")):
+                with self.assertRaisesRegex(ValueError, "preflight failed"):
+                    comparison.run_comparison(
+                        SimpleNamespace(base="a" * 40, head="b" * 40, output=output)
+                    )
+            self.assertEqual(
+                __import__("json").loads((output / "request.json").read_text())["base"], "a" * 40
+            )
+
     def test_path_engine_source_has_a_clear_unsupported_error(self):
         metadata = {
             "resolve": {"nodes": []},
