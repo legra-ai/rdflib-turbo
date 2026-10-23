@@ -12,7 +12,6 @@ from rdflib import Dataset as RDFLibDataset
 from rdflib import Graph as RDFLibGraph
 from rdflib.graph import DATASET_DEFAULT_GRAPH_ID
 from rdflib.parser import create_input_source
-from rdflib.plugins.sparql.sparql import Query
 from rdflib.query import Result
 from rdflib.store import Store as ReferenceStore
 from rdflib.util import from_n3, guess_format
@@ -147,7 +146,12 @@ class RDFLibStore(ReferenceStore):
 
     def query(self, query, initNs, initBindings, queryGraph, *, _dataset_context=False, **kwargs):
         try:
-            if isinstance(query, Query):
+            prepared = False
+            if type(query) is not str:
+                from rdflib.plugins.sparql.sparql import Query
+
+                prepared = isinstance(query, Query)
+            if prepared:
                 from ._prepared import snapshot
 
                 if kwargs:
@@ -162,7 +166,7 @@ class RDFLibStore(ReferenceStore):
             if isinstance(self.backend, Transaction):
                 self.backend._native.rollback()
             raise
-        if isinstance(query, Query):
+        if prepared:
             union = queryGraph == "__UNION__"
             graph = None if union else "" if queryGraph is None else self._graph(queryGraph)
             kind, payload = self.backend._native.query_prepared(source, graph, union, bindings)
