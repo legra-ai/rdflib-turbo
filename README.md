@@ -111,7 +111,8 @@ and StoreDataset APIs add RDFLib facades over that native Store. Arbitrary RDFLi
 storage plugins, initial query bindings, custom functions and remote SERVICE
 execution are not provided. RDFLib conversions
 copy data and explicitly preserve caller blank-node identifiers. Query results are
-eagerly materialized. No performance or complete-conformance claim is made.
+eagerly materialized. Performance measurements apply to the documented workloads;
+complete conformance is not claimed.
 
 ## RDFLib Graph and dataset facades
 
