@@ -29,8 +29,9 @@ output, measured before correctness parsing (decimal MB). Complete exact-term
 and blank-node-ID comparisons cover small/default/named/blank-graph controls;
 the 100,000-triple cases use a matching streaming count/hash witness, which is
 probabilistic rather than a complete row comparison. A separate 1,024-triple
-Unicode test reduced Python-traced UTF-8 peak allocations from **252,940 to
-48,173 bytes**; that excludes native allocations. These are synthetic NT-only
+Unicode test reduced Python-traced UTF-8 peak allocations from **177,730 to
+48,461 bytes**, using the same cold child in both projects; that excludes native
+allocations. These are synthetic NT-only
 measurements, not end-to-end or universal speedup claims.
 The shared host's one-minute load ranged from 16.05 to 25.26 and large-case CPU
 variation from 1.3% to 12.6%; absolute timings reflect that load.

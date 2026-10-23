@@ -655,8 +655,12 @@
   "utf8_python_traced_heap": {
     "fixture_triples": 1024,
     "output_bytes": 47956,
-    "published_a14_peak_bytes": 252940,
-    "candidate_peak_bytes": 48173,
+    "published_a14_peak_bytes": 177730,
+    "candidate_peak_bytes": 48461,
+    "protocol": "Identical original regression child in one fresh CPython process per arm; actual registry a14 and corrected optimized 12fd payloads attested before and after",
+    "child_sha256": "cf42c3688c7b618b623a40d053974af2cf52747a2d2aea4d6a64ad0e809c4b55",
+    "published_wheel_sha256": "1fb30d1befd64fb40dbb16cd4adf7cace2dfb38a82f3ff781999fd29ae5e0958",
+    "candidate_wheel_sha256": "12fd0f1b882fb4a2cba4c140ede91a9092594c1d3a73d8512e69420aa7f23027",
     "native_buffers_and_rss_excluded": true
   },
   "validation": {
