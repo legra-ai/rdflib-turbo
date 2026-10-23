@@ -42,13 +42,13 @@ impl Node {
     }
 }
 
-impl Graph for Measured<'_> {
+impl<'data> Graph for Measured<'data> {
     fn quads<'a>(
         &'a self,
-        s: Option<NamedOrBlankNodeRef<'a>>,
-        p: Option<NamedNodeRef<'a>>,
-        o: Option<TermRef<'a>>,
-    ) -> impl Iterator<Item = Result<Quad>> + 'a {
+        s: Option<NamedOrBlankNodeRef<'_>>,
+        p: Option<NamedNodeRef<'_>>,
+        o: Option<TermRef<'_>>,
+    ) -> impl Iterator<Item = Result<Quad>> + use<'a, 'data> {
         self.work.set(self.work.get() + 1);
         self.data
             .quads_for_pattern(s, p, o, Some(GraphNameRef::DefaultGraph))

@@ -84,13 +84,13 @@ impl<'a, 'data> Storage<'a, 'data> {
     }
 }
 
-impl Graph for Storage<'_, '_> {
+impl<'graph, 'data> Graph for Storage<'graph, 'data> {
     fn quads<'a>(
         &'a self,
-        s: Option<NamedOrBlankNodeRef<'a>>,
-        p: Option<NamedNodeRef<'a>>,
-        o: Option<TermRef<'a>>,
-    ) -> impl Iterator<Item = Result<Quad>> + 'a {
+        s: Option<NamedOrBlankNodeRef<'_>>,
+        p: Option<NamedNodeRef<'_>>,
+        o: Option<TermRef<'_>>,
+    ) -> impl Iterator<Item = Result<Quad>> + use<'a, 'graph, 'data> {
         let scan = Scan::selectors(s, p, o);
         let equality = scan == Scan::new(None, Some("sameAs"), None);
         if scan == Scan::new(None, None, None) {

@@ -13,7 +13,16 @@ use crate::{Error, Result};
 pub(super) struct CompiledRule(PreparedSparqlQuery);
 
 impl CompiledRule {
+    #[cfg(test)]
     pub(super) fn try_new(rule: &Rule) -> Result<Self> {
+        Self::compile(rule, false)
+    }
+
+    fn bindings(rule: &Rule) -> Result<Self> {
+        Self::compile(rule, true)
+    }
+
+    fn compile(rule: &Rule, bindings: bool) -> Result<Self> {
         if !rule.is_safe() {
             return Err(Error::Unsupported("Unsafe shared inference rule".into()));
         }
@@ -37,8 +46,20 @@ impl CompiledRule {
                 }
             }
         }
+        let text = if bindings {
+            let columns = rule
+                .head
+                .terms
+                .iter()
+                .zip(["__head_s", "__head_p", "__head_o"])
+                .map(|(term, name)| Self::term(term).map(|term| format!("({term} AS ?{name})")))
+                .collect::<Result<Vec<_>>>()?; // bounded: the three head columns.
+            format!("SELECT {} WHERE {{ {body} }}", columns.join(" "))
+        } else {
+            format!("CONSTRUCT {{ {head} }} WHERE {{ {body} }}")
+        };
         SparqlEvaluator::new()
-            .parse_query(&format!("CONSTRUCT {{ {head} }} WHERE {{ {body} }}"))
+            .parse_query(&text)
             .map(Self)
             .map_err(|error| Error::Runtime(format!("Invalid shared inference rule: {error}")))
     }
@@ -95,7 +116,19 @@ impl CompiledRule {
 }
 
 impl CompiledRule {
+    #[cfg(test)]
     pub(super) fn for_mode(mode: &str) -> Result<Vec<PreparedSparqlQuery>> {
+        Self::compile_mode(mode, Self::try_new)
+    }
+
+    pub(super) fn bindings_for_mode(mode: &str) -> Result<Vec<PreparedSparqlQuery>> {
+        Self::compile_mode(mode, Self::bindings)
+    }
+
+    fn compile_mode(
+        mode: &str,
+        compile: fn(&Rule) -> Result<Self>,
+    ) -> Result<Vec<PreparedSparqlQuery>> {
         // bounded: the fixed published RDFS and OWL relational clause inventory.
         let mut selected = Vec::new();
         if mode != "owlrl" {
@@ -148,11 +181,11 @@ impl CompiledRule {
         // bounded: one prepared query per fixed catalogue clause.
         let mut queries = selected
             .into_iter()
-            .map(|id| Self::try_new(&id.definition()).map(Self::into_query))
+            .map(|id| compile(&id.definition()).map(Self::into_query))
             .collect::<Result<Vec<_>>>()?;
         if mode != "rdfs" {
             for id in Owlrl762RuleId::ALL {
-                queries.push(Self::try_new(&id.definition())?.into_query());
+                queries.push(compile(&id.definition())?.into_query());
             }
             for id in ListRuleId::ALL {
                 // The native property path supplies the exact auxiliary relation;
@@ -160,7 +193,7 @@ impl CompiledRule {
                 if matches!(id, ListRuleId::MemberFirst | ListRuleId::MemberRest) {
                     continue;
                 }
-                queries.push(Self::try_new(&id.definition())?.into_query());
+                queries.push(compile(&id.definition())?.into_query());
             }
         }
         Ok(queries)
