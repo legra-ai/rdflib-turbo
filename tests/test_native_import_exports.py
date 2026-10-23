@@ -31,6 +31,7 @@ assert 'rdflib_turbo.store' not in sys.modules
 
 
 def test_public_exports_keep_actual_class_identity_and_star_import():
+    assert set(rdflib_turbo.__all__).issubset(dir(rdflib_turbo))
     expected = {
         "Dataset": rdflib_turbo.Dataset,
         "Graph": Graph,
