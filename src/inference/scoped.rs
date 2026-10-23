@@ -1,6 +1,6 @@
 //! Read one graph while journaling consequences into an independent destination.
 
-use oxigraph::model::{GraphName, NamedNodeRef, NamedOrBlankNodeRef, Quad, TermRef};
+use oxigraph::model::{GraphName, NamedNodeRef, NamedOrBlankNodeRef, Quad, QuadRef, TermRef};
 use oxigraph::sparql::{PreparedSparqlQuery, QueryResults};
 use oxigraph::store::Transaction;
 
@@ -16,12 +16,10 @@ struct ScopedGraph<'a, 'store> {
 impl<'graph, 'store> Graph for ScopedGraph<'graph, 'store> {
     fn contains_destination(&self, quad: &Quad) -> Result<bool> {
         self.transaction
-            .contains(&Quad::new(
-                quad.subject.clone(),
-                quad.predicate.clone(),
-                quad.object.clone(),
-                self.destination.clone(),
-            ))
+            .contains(QuadRef {
+                graph_name: self.destination.as_ref(),
+                ..quad.as_ref()
+            })
             .map_err(|error| Error::Runtime(error.to_string()))
     }
 
@@ -46,28 +44,16 @@ impl<'graph, 'store> Graph for ScopedGraph<'graph, 'store> {
 
     fn contains(&self, quad: &Quad) -> Result<bool> {
         if self
-            .quads(
-                Some(quad.subject.as_ref()),
-                Some(quad.predicate.as_ref()),
-                Some(quad.object.as_ref()),
-            )
-            .next()
-            .transpose()?
-            .is_some()
+            .transaction
+            .contains(QuadRef {
+                graph_name: self.source.as_ref(),
+                ..quad.as_ref()
+            })
+            .map_err(|error| Error::Runtime(error.to_string()))?
         {
             return Ok(true);
         }
-        self.transaction
-            .quads_for_pattern(
-                Some(quad.subject.as_ref()),
-                Some(quad.predicate.as_ref()),
-                Some(quad.object.as_ref()),
-                Some(self.destination.as_ref()),
-            )
-            .next()
-            .transpose()
-            .map(|quad| quad.is_some())
-            .map_err(|error| Error::Runtime(error.to_string()))
+        self.contains_destination(quad)
     }
 
     fn insert(&mut self, mut quad: Quad) -> Result<()> {
@@ -107,3 +93,7 @@ mod tests;
 #[cfg(test)]
 #[path = "scoped_difference_tests.rs"]
 mod difference_tests;
+
+#[cfg(test)]
+#[path = "scoped_boolean_tests.rs"]
+mod boolean_tests;

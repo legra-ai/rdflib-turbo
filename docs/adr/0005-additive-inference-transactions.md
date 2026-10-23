@@ -48,3 +48,24 @@ Rust heap bytes, not Python memory, allocator arena overhead or process RSS. CI
 enforces a deterministic inference peak budget relative to retained heap; the
 original implementation fails that budget. Installed-wheel pipeline benchmarks
 remain the source for timings, whole-process peak RSS and full output parity.
+
+## Boolean inference membership
+
+Boolean probes borrow bound terms through `QuadRef` instead of cloning a quad or
+materializing a matching row. Default Dataset membership still checks only the
+default graph. Scoped transaction suppression still checks source A or existing
+destination B, while direct destination publication checks only B. Union reads
+retain their existing any-context behavior; an exact default-graph membership
+check cannot replace a union probe.
+
+A borrowed inference overlay probes its scoped source first and propagates read
+errors before consulting its derived-only Dataset. Every overlay fact belongs
+to the configured destination, so its existence can use a borrowed exact lookup
+without reconstructing a logical-union representative. This does not remove the
+owned source row required by the current GraphRead interface.
+
+Scope, term-kind, exact literal, pending transaction and rollback controls remain
+required. Isolated allocation tests use existing test-only counters and long
+lexical values; they measure requested bytes for one boolean probe, not process
+RSS or end-to-end speed. No storage, dictionary, public API or publication change
+is introduced.

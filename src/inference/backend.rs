@@ -34,6 +34,16 @@ pub(super) trait Graph {
 }
 
 impl<'data> Graph for InsertTransaction<'data> {
+    fn contains(&self, quad: &Quad) -> Result<bool> {
+        Ok(Dataset::contains(
+            self,
+            QuadRef {
+                graph_name: GraphNameRef::DefaultGraph,
+                ..quad.as_ref()
+            },
+        ))
+    }
+
     fn quads<'a>(
         &'a self,
         subject: Option<NamedOrBlankNodeRef<'_>>,
@@ -62,12 +72,10 @@ pub(crate) struct TransactionGraph<'a, 'store> {
 impl<'graph, 'store> Graph for TransactionGraph<'graph, 'store> {
     fn contains_destination(&self, quad: &Quad) -> Result<bool> {
         self.transaction
-            .contains(&Quad::new(
-                quad.subject.clone(),
-                quad.predicate.clone(),
-                quad.object.clone(),
-                self.destination.clone(),
-            ))
+            .contains(QuadRef {
+                graph_name: self.destination.as_ref(),
+                ..quad.as_ref()
+            })
             .map_err(|error| Error::Runtime(error.to_string()))
     }
 
@@ -93,3 +101,7 @@ impl<'graph, 'store> Graph for TransactionGraph<'graph, 'store> {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "backend_boolean_tests.rs"]
+mod boolean_tests;

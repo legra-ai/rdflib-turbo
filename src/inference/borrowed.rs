@@ -109,17 +109,49 @@ impl<'source, G: GraphRead + ?Sized> Graph for BorrowedInference<'source, G> {
             .execute()?)
     }
 
+    fn contains(&self, quad: &Quad) -> Result<bool> {
+        // Probe the source first so an overlay hit cannot hide its read error.
+        if self
+            .source
+            .matching_quads(
+                Some(quad.subject.as_ref()),
+                Some(quad.predicate.as_ref()),
+                Some(quad.object.as_ref()),
+                None,
+            )
+            .next()
+            .transpose()?
+            .is_some()
+        {
+            return Ok(true);
+        }
+        // Every overlay insertion uses exactly self.destination. A boolean
+        // needs no owned row or representative from the logical union.
+        Ok(self.additions.contains(QuadRef {
+            graph_name: self.destination.as_ref(),
+            ..quad.as_ref()
+        }))
+    }
+
     fn contains_destination(&self, quad: &Quad) -> Result<bool> {
-        self.physical_matches(
-            Some(quad.subject.as_ref()),
-            Some(quad.predicate.as_ref()),
-            Some(quad.object.as_ref()),
-            Some(self.destination.as_ref()),
-        )
-        .next()
-        .transpose()
-        .map(|quad| quad.is_some())
-        .map_err(Into::into)
+        if self
+            .source
+            .matching_quads(
+                Some(quad.subject.as_ref()),
+                Some(quad.predicate.as_ref()),
+                Some(quad.object.as_ref()),
+                Some(self.destination.as_ref()),
+            )
+            .next()
+            .transpose()?
+            .is_some()
+        {
+            return Ok(true);
+        }
+        Ok(self.additions.contains(QuadRef {
+            graph_name: self.destination.as_ref(),
+            ..quad.as_ref()
+        }))
     }
 
     fn insert(&mut self, mut quad: Quad) -> Result<()> {
@@ -192,3 +224,7 @@ impl<'source, G: GraphRead + ?Sized> GraphRead for BorrowedInference<'source, G>
         )
     }
 }
+
+#[cfg(test)]
+#[path = "borrowed_boolean_tests.rs"]
+mod boolean_tests;
