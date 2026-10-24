@@ -38,7 +38,10 @@ indexed relation and reconstruct the logical triple on reads. Preserve both
 bound-slot indexes, exact lexical identity and ordinary/generalized output
 classification. Other type shapes retain the general representation. This
 removes redundant generated row identities and column indexes; it does not
-remove facts or relax the existing inference heap budget.
+remove facts or relax the existing inference heap budget. At round publication,
+adopt the pending relation directly when the current relation is empty; otherwise
+release each pending record's indexes before inserting it into the current
+relation. Do not retain both complete index sets during transfer.
 
 ## Scope
 

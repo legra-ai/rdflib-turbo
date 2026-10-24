@@ -180,12 +180,21 @@ impl Generalized {
         ]);
     }
 
-    pub(super) fn extend(&mut self, pending: Self) -> bool {
-        let changed = !pending.rows.is_empty();
-        for quad in &pending.rows {
-            self.rows.insert(quad);
+    pub(super) fn extend(&mut self, mut pending: Self) -> bool {
+        if pending.rows.is_empty() {
+            return false;
         }
-        changed
+        if self.rows.is_empty() {
+            self.rows = pending.rows;
+            return true;
+        }
+        // Transfer one physical record at a time, releasing its pending indexes
+        // before inserting it. Retaining both full index sets inflates the peak.
+        while let Some(quad) = pending.rows.iter().next().map(QuadRef::into_owned) {
+            assert!(pending.rows.remove(&quad));
+            self.rows.insert(&quad);
+        }
+        true
     }
 
     pub(super) fn apply(
