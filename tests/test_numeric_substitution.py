@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 import rdflib
-from owlrl import DeductiveClosure, RDFS_Semantics
+from owlrl import DatatypeHandling, DeductiveClosure, RDFS_Semantics
 from rdflib import Graph as ReferenceGraph
 from rdflib import Literal, URIRef
 from rdflib_turbo import Dataset, Graph, Store
@@ -20,6 +20,10 @@ PREDICATE = URIRef("urn:numeric:value")
 def preserve_lexical_terms(monkeypatch):
     # Compare the same exact lexical graph, without reference parser normalization.
     monkeypatch.setattr(rdflib, "NORMALIZE_LITERALS", False)
+    # Other reference tests select AltXSD converters. This oracle explicitly
+    # tests the default RDFLib value profile and restores every mapping afterward.
+    for datatype, converter in DatatypeHandling.XSDToPython.items():
+        monkeypatch.setitem(rdflib.term._toPythonMapping, datatype, converter)
 
 
 def document():
