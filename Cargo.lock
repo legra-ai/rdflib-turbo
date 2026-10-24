@@ -973,7 +973,7 @@ dependencies = [
 
 [[package]]
 name = "rdflib-turbo-native"
-version = "0.2.0-alpha.18"
+version = "0.2.0-alpha.19"
 dependencies = [
  "datalog-structural-model",
  "oxigraph",
