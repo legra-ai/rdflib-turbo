@@ -265,7 +265,7 @@ fn new_symmetry_is_not_visible_to_other_rules_in_the_same_round() {
     )));
 }
 
-fn frozen_closure(data: &mut Dataset) {
+fn unrestricted_shared_closure(data: &mut Dataset) {
     let mut transaction = data.insert_transaction();
     super::axioms::owl(
         &mut transaction,
@@ -287,18 +287,27 @@ fn frozen_closure(data: &mut Dataset) {
     let prepared = queries(&rules);
     // Compare independent equality implementations against the same non-equality
     // semantics; the shared catalogue replaced the former local schema clauses.
-    let shared = super::shared::CompiledRule::for_mode("owlrl").unwrap();
-    let generalized = super::generalized::Generalized::default();
+    let mut shared = super::shared::CompiledRule::for_mode("owlrl").unwrap();
+    for id in super::generalized::EqualityRules::RULES {
+        shared.push(
+            super::shared::CompiledRule::try_new(&id.definition())
+                .unwrap()
+                .into_query(),
+        );
+    }
+    let mut generalized = super::generalized::Generalized::default();
     loop {
         let mut pending = Pending::default();
         apply_rules(&transaction, &prepared, &mut pending, false).unwrap();
-        // This frozen reference deliberately discards non-RDF heads each round.
-        generalized
+        // Unrestricted shared clauses form the reference for the optimized
+        // ordinary kernel plus its generalized-premise/head execution partition.
+        let generalized_pending = generalized
             .apply(&transaction, &shared, &mut pending)
             .unwrap();
         super::traversal::chains(&transaction, &mut pending).unwrap();
         super::traversal::keys(&transaction, &mut pending).unwrap();
-        if pending.0.is_empty() {
+        let generalized_changed = generalized.extend(generalized_pending);
+        if pending.0.is_empty() && !generalized_changed {
             break;
         }
         for quad in pending.0 {
@@ -309,7 +318,7 @@ fn frozen_closure(data: &mut Dataset) {
 }
 
 #[test]
-fn full_closure_matches_frozen_ordinary_rule_engine() {
+fn full_closure_matches_unrestricted_shared_equality() {
     for case in 0..4 {
         let mut data = Dataset::new();
         for (s, o) in [("a", "b"), ("a", "c"), ("c", "d")] {
@@ -339,7 +348,7 @@ fn full_closure_matches_frozen_ordinary_rule_engine() {
             );
         }
         let mut reference = data.clone();
-        frozen_closure(&mut reference);
+        unrestricted_shared_closure(&mut reference);
         super::expand(&mut data, "owlrl", Default::default()).unwrap();
         for quad in data
             .iter()

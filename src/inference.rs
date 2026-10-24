@@ -220,6 +220,9 @@ fn expand_inner(
     }
     // bounded: one prepared query per built-in rule.
     let shared_queries = shared::CompiledRule::for_mode(mode)?;
+    let equality = (mode != "rdfs")
+        .then(generalized::EqualityRules::try_new)
+        .transpose()?;
     let queries = rules
         .iter()
         .map(|(template, pattern)| {
@@ -236,7 +239,15 @@ fn expand_inner(
             diagnostics.round(data)?;
         }
         let mut additions = std::mem::take(&mut initial_resources);
-        let generalized_additions = generalized.apply(data, &shared_queries, &mut additions)?;
+        let mut generalized_additions = generalized.apply(data, &shared_queries, &mut additions)?;
+        if let Some(equality) = &equality {
+            equality.apply(
+                &generalized,
+                data,
+                &mut additions,
+                &mut generalized_additions,
+            )?;
+        }
         apply_rules(data, &queries, &mut additions, mode != "rdfs")?;
         if mode != "rdfs" {
             // Lists can themselves be inferred, so discover them each round.

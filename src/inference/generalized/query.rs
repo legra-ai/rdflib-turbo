@@ -3,7 +3,7 @@
 use oxigraph::model::*;
 use spareval::{InternalQuad, QueryableDataset};
 
-use super::Generalized;
+use super::{GENERALIZED_GRAPH, Generalized};
 use crate::inference::backend::Graph;
 use crate::{Error, Result};
 
@@ -24,6 +24,7 @@ impl<'a, G: Graph + 'a> QueryableDataset<'a> for View<'a, G> {
         graph_name: Option<Option<&Term>>,
     ) -> impl Iterator<Item = Result<InternalQuad<Term>>> + use<'a, G> {
         let default_graph = graph_name == Some(None);
+        let generalized_graph = matches!(graph_name, Some(Some(Term::NamedNode(node))) if node.as_ref() == GENERALIZED_GRAPH);
         let data = self.data;
         let extra = self.extra;
         let pattern = [subject, predicate, object].map(|term| term.map(Term::as_ref));
@@ -59,13 +60,13 @@ impl<'a, G: Graph + 'a> QueryableDataset<'a> for View<'a, G> {
         });
         let generalized = extra
             .matching(pattern)
-            .filter(move |_| default_graph)
-            .map(|row| {
+            .filter(move |_| default_graph || generalized_graph)
+            .map(move |row| {
                 Ok(InternalQuad {
                     subject: row[0].into_owned(),
                     predicate: row[1].into_owned(),
                     object: row[2].into_owned(),
-                    graph_name: None,
+                    graph_name: generalized_graph.then(|| GENERALIZED_GRAPH.into_owned().into()),
                 })
             });
         Box::new(ordinary.chain(generalized))

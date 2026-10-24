@@ -10,18 +10,46 @@ use spargebra::term::Variable;
 
 use crate::{Error, Result};
 
+pub(super) enum RulePartition {
+    All,
+    GeneralizedHead,
+    GeneralizedPremise(usize),
+}
+
 pub(super) struct CompiledRule(PreparedSparqlQuery);
 
 impl CompiledRule {
     pub(super) fn try_new(rule: &Rule) -> Result<Self> {
+        Self::partition(rule, RulePartition::All)
+    }
+
+    pub(super) fn partition(rule: &Rule, partition: RulePartition) -> Result<Self> {
         if !rule.is_safe() {
             return Err(Error::Unsupported("Unsafe shared inference rule".into()));
         }
         Self::atom(&rule.head)?;
+        if let RulePartition::GeneralizedPremise(index) = partition
+            && !matches!(rule.body.get(index), Some(Literal::Positive(_)))
+        {
+            return Err(Error::Unsupported(
+                "Generalized premise must select a positive atom".into(),
+            ));
+        }
         let mut body = String::new();
-        for literal in &rule.body {
+        for (index, literal) in rule.body.iter().enumerate() {
             match literal {
-                Literal::Positive(atom) => body.push_str(&Self::body_atom(atom)?),
+                Literal::Positive(atom) => {
+                    let pattern = Self::body_atom(atom)?;
+                    if matches!(partition, RulePartition::GeneralizedPremise(selected) if index == selected)
+                    {
+                        body.push_str(&format!(
+                            "GRAPH {} {{ {pattern} }} ",
+                            super::generalized::GENERALIZED_GRAPH
+                        ));
+                    } else {
+                        body.push_str(&pattern);
+                    }
+                }
                 Literal::Filter(BuiltinFilter::Ne(left, right)) => {
                     body.push_str(&format!(
                         "FILTER(!sameTerm({}, {})) ",
@@ -37,6 +65,24 @@ impl CompiledRule {
                 }
             }
         }
+        if matches!(partition, RulePartition::GeneralizedHead) {
+            let subject = Self::term(&rule.head.terms[0])?;
+            let predicate = Self::term(&rule.head.terms[1])?;
+            // These queries read RDF-only premises. Remove head-kind conditions
+            // already guaranteed by those positions so filters can precede joins.
+            let subject_is_rdf = Self::guaranteed_iri(rule, &rule.head.terms[0])
+                || Self::bound_at(rule, &rule.head.terms[0], 0);
+            let predicate_is_iri = Self::guaranteed_iri(rule, &rule.head.terms[1]);
+            let filter = match (subject_is_rdf, predicate_is_iri) {
+                (true, true) => "false".to_owned(),
+                (false, true) => format!("!(isIRI({subject}) || isBlank({subject}))"),
+                (true, false) => format!("!isIRI({predicate})"),
+                (false, false) => {
+                    format!("!(isIRI({subject}) || isBlank({subject})) || !isIRI({predicate})")
+                }
+            };
+            body.push_str(&format!("FILTER ({filter}) "));
+        }
         // bounded: exactly three head columns, preserving every RDF term kind.
         let columns = rule
             .head
@@ -50,6 +96,18 @@ impl CompiledRule {
             .parse_query(&text)
             .map(Self)
             .map_err(|error| Error::Runtime(format!("Invalid shared inference rule: {error}")))
+    }
+
+    fn guaranteed_iri(rule: &Rule, term: &Term) -> bool {
+        matches!(term, Term::Constant(_)) || Self::bound_at(rule, term, 1)
+    }
+
+    fn bound_at(rule: &Rule, term: &Term, position: usize) -> bool {
+        rule.body.iter().any(|literal| {
+            matches!(literal,
+            Literal::Positive(atom) if atom.predicate.as_str() == TRIPLE_RELATION
+                && atom.terms.get(position) == Some(term))
+        })
     }
 
     fn body_atom(atom: &Atom) -> Result<String> {
