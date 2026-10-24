@@ -8,6 +8,7 @@ use oxigraph::model::Term;
 use super::objects;
 use crate::graph::{RDF, iri};
 use crate::inference::backend::Graph;
+use crate::inference::generalized::Tuples;
 use crate::{Error, Result};
 
 #[derive(Clone, Default)]
@@ -24,7 +25,7 @@ pub(super) struct ListWitnesses {
 }
 
 impl ListWitnesses {
-    fn read(&self, data: &impl Graph, node: &Term) -> Result<SelectedEdges> {
+    fn read(&self, data: &Tuples<'_, impl Graph>, node: &Term) -> Result<SelectedEdges> {
         let mut selected = self.edges.borrow().get(node).cloned().unwrap_or_default();
         if selected.first.is_some() && selected.rest.is_some() {
             return Ok(selected);
@@ -45,15 +46,19 @@ impl ListWitnesses {
     }
 }
 
-pub(super) struct RdfList<'a, G> {
-    data: &'a G,
+pub(super) struct RdfList<'a, 'graph, G> {
+    data: &'a Tuples<'graph, G>,
     witnesses: &'a ListWitnesses,
     head: Term,
     pub len: usize,
 }
 
-impl<'a, G: Graph> RdfList<'a, G> {
-    pub fn new(data: &'a G, witnesses: &'a ListWitnesses, head: Term) -> Result<Self> {
+impl<'a, 'graph, G: Graph> RdfList<'a, 'graph, G> {
+    pub fn new(
+        data: &'a Tuples<'graph, G>,
+        witnesses: &'a ListWitnesses,
+        head: Term,
+    ) -> Result<Self> {
         let mut cursor = Cursor {
             data,
             witnesses,
@@ -78,7 +83,7 @@ impl<'a, G: Graph> RdfList<'a, G> {
         })
     }
 
-    pub fn cursor(&self) -> Cursor<'a, G> {
+    pub fn cursor(&self) -> Cursor<'a, 'graph, G> {
         // The immutable round was validated above; replay the same witnesses.
         Cursor {
             data: self.data,
@@ -89,14 +94,14 @@ impl<'a, G: Graph> RdfList<'a, G> {
     }
 }
 
-pub(super) struct Cursor<'a, G> {
-    data: &'a G,
+pub(super) struct Cursor<'a, 'graph, G> {
+    data: &'a Tuples<'graph, G>,
     witnesses: &'a ListWitnesses,
     current: Option<Term>,
     guard: Option<CycleGuard>,
 }
 
-impl<'a, G: Graph> Cursor<'a, G> {
+impl<'a, 'graph, G: Graph> Cursor<'a, 'graph, G> {
     pub fn tail(&self) -> Self {
         Self {
             data: self.data,
@@ -110,7 +115,7 @@ impl<'a, G: Graph> Cursor<'a, G> {
         while let Some(node) = self.current.take() {
             // RDFLib uses Python node truthiness, not a special rdf:nil branch.
             // Literal subjects cannot occur in this native RDF model.
-            if super::subject(&node).is_none() || super::text(&node).is_empty() {
+            if node.is_literal() || super::text(&node).is_empty() {
                 return Ok(None);
             }
             let selected = self.witnesses.read(self.data, &node)?;

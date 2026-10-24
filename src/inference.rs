@@ -206,6 +206,7 @@ fn expand_inner(
     let mut diagnostics = diagnostics::Diagnostics::new(request.prior_error_messages);
     // bounded: the fixed RDFS/OWL rule tables above.
     let mut rules = Vec::new();
+    let mut generalized = generalized::Generalized::default();
     if mode != "rdfs" {
         rules.extend_from_slice(OWL_RULES);
         axioms::owl(
@@ -213,6 +214,7 @@ fn expand_inner(
             mode == "both",
             &mut diagnostics,
             &request.lexical_context,
+            &mut generalized,
         )?;
     }
     let mut initial_resources = Pending::default();
@@ -243,10 +245,9 @@ fn expand_inner(
                 .map_err(|e| Error::Runtime(format!("Invalid inference rule: {e}")))
         })
         .collect::<Result<Vec<_>>>()?;
-    let mut generalized = generalized::Generalized::default();
     loop {
         if mode != "rdfs" {
-            diagnostics.round(data)?;
+            diagnostics.round(data, &generalized)?;
         }
         let mut additions = std::mem::take(&mut initial_resources);
         let mut generalized_additions = generalized.apply(data, &shared_queries, &mut additions)?;
@@ -271,7 +272,7 @@ fn expand_inner(
         }
         let generalized_changed = generalized.extend(generalized_additions);
         if additions.0.is_empty() && !generalized_changed {
-            return diagnostics.finish(data, mode != "rdfs", |term| {
+            return diagnostics.finish(data, &generalized, mode != "rdfs", |term| {
                 diagnostics::cardinality_zero(term, &request.lexical_context)
             });
         }

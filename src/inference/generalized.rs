@@ -13,6 +13,8 @@ mod tuples;
 pub(super) use equality::EqualityRules;
 pub(super) use tuples::Tuples;
 #[cfg(test)]
+mod diagnostic_tests;
+#[cfg(test)]
 mod equality_tests;
 #[cfg(test)]
 mod equality_work_tests;
@@ -128,6 +130,14 @@ impl Generalized {
                 GraphName::DefaultGraph,
             ));
         }
+    }
+
+    pub(super) fn literal_type(&mut self, literal: &Literal, datatype: NamedNode) {
+        self.insert([
+            literal.clone().into(),
+            crate::graph::iri(crate::graph::RDF, "type").into(),
+            datatype.into(),
+        ]);
     }
 
     pub(super) fn extend(&mut self, pending: Self) -> bool {

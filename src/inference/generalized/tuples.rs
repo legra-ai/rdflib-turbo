@@ -12,6 +12,12 @@ pub(in crate::inference) struct Tuples<'a, G> {
     pub(in crate::inference) extra: &'a Generalized,
 }
 
+/// A logical inference tuple; subject and predicate need not be RDF-representable.
+pub(in crate::inference) struct Tuple {
+    pub(in crate::inference) subject: Term,
+    pub(in crate::inference) object: Term,
+}
+
 impl<G: Graph> Tuples<'_, G> {
     fn subject(term: TermRef<'_>) -> Option<NamedOrBlankNodeRef<'_>> {
         match term {
@@ -52,6 +58,19 @@ impl<G: Graph> Tuples<'_, G> {
                 .matching(pattern)
                 .map(|row| Ok(row.map(TermRef::into_owned))),
         )
+    }
+
+    pub(in crate::inference) fn quads<'a>(
+        &'a self,
+        subject: Option<TermRef<'_>>,
+        predicate: Option<NamedNodeRef<'_>>,
+        object: Option<TermRef<'_>>,
+    ) -> impl Iterator<Item = Result<Tuple>> + use<'a, G> {
+        self.matching([subject, predicate.map(TermRef::from), object])
+            .map(|row| {
+                let [subject, _, object] = row?;
+                Ok(Tuple { subject, object })
+            })
     }
 
     pub(in crate::inference) fn contains(&self, row: &[Term; 3]) -> Result<bool> {
