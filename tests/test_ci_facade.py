@@ -47,8 +47,11 @@ def test_evidence_bundle_retains_archives_and_receipts_without_clones(tmp_path):
         "candidate_wheel": "candidate-artifacts/candidate.whl",
     }
     record = {**names, "declaration": {"archive": names["base_archive"]}}
+    owl = {"archive": "owl/source.tar.gz", "wheel": "owl/companion.whl"}
     retained = [
         *names.values(),
+        *owl.values(),
+        "owlrl-inputs.json",
         "candidate-inputs.json",
         "dependency-binding.patch",
         "declaration-requirements.lock",
@@ -61,7 +64,7 @@ def test_evidence_bundle_retains_archives_and_receipts_without_clones(tmp_path):
         path = source / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(name)
-    module.retain_evidence(source, output, record)
+    module.retain_evidence(source, output, record, owl)
     assert {
         path.relative_to(output).as_posix() for path in output.rglob("*") if path.is_file()
     } == set(retained)
@@ -75,6 +78,7 @@ def test_evidence_bundle_rejects_a_path_outside_its_namespace(tmp_path):
         "candidate-inputs.json",
         "dependency-binding.patch",
         "declaration-requirements.lock",
+        "owlrl-inputs.json",
     ):
         (source / name).write_text("fixture")
     record = dict.fromkeys(
@@ -82,7 +86,12 @@ def test_evidence_bundle_rejects_a_path_outside_its_namespace(tmp_path):
     )
     record["declaration"] = {"archive": "../private"}
     with pytest.raises(ValueError):
-        helper().retain_evidence(source, tmp_path / "candidate-facade-evidence", record)
+        helper().retain_evidence(
+            source,
+            tmp_path / "candidate-facade-evidence",
+            record,
+            {"archive": "../private", "wheel": "../private"},
+        )
 
 
 def test_consumer_checks_real_provider_inventory_before_extracting_or_exporting(
@@ -189,7 +198,96 @@ def test_prepare_rechecks_both_immutable_peers_after_pure_artifact_construction(
         module, "checkout", lambda peer, destination: calls.append(("checkout", peer["revision"]))
     )
     monkeypatch.setattr(module, "retain_evidence", lambda *args: None)
-    monkeypatch.setattr(module, "load", lambda name: SimpleNamespace(build=build, freeze=freeze))
+    monkeypatch.setattr(
+        module,
+        "load",
+        lambda name: SimpleNamespace(build=build, freeze=freeze, prepare=lambda *args: {}),
+    )
     with pytest.raises(ValueError, match="peer source"):
         module.prepare(tmp_path / "candidate-facade-evidence")
     assert calls.index(("freeze", "owlrl-turbo")) < calls.index(("build", REVISION))
+
+
+def test_single_portable_bundle_includes_original_owl_archive_wheel_and_receipt(tmp_path):
+    module = helper()
+    source, output = tmp_path / "candidate-facade-build", tmp_path / "candidate-facade-evidence"
+    source.mkdir()
+    record = {
+        name: name + ".original"
+        for name in ("base_archive", "base_wheel", "candidate_archive", "candidate_wheel")
+    }
+    record["declaration"] = {"archive": record["base_archive"]}
+    owl = {"archive": "owl-originals/source.tar.gz", "wheel": "owl-originals/owl.whl"}
+    retained = {
+        *(
+            record[name]
+            for name in ("base_archive", "base_wheel", "candidate_archive", "candidate_wheel")
+        ),
+        owl["archive"],
+        owl["wheel"],
+        "candidate-inputs.json",
+        "dependency-binding.patch",
+        "declaration-requirements.lock",
+        "owlrl-inputs.json",
+    }
+    for name in retained:
+        path = source / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(name)
+    module.retain_evidence(source, output, record, owl)
+    assert {
+        path.relative_to(output).as_posix() for path in output.rglob("*") if path.is_file()
+    } == retained
+
+
+def test_every_consumer_receives_the_same_original_owl_without_fetching_or_building(
+    tmp_path, monkeypatch
+):
+    module = helper()
+    bundle = tmp_path / "candidate-facade-evidence"
+    bundle.mkdir()
+    owner = {"revision": "b" * 40, "files": {"source": "actual"}}
+    record = {
+        "provider_input": owner,
+        "candidate_archive_sha256": "d" * 64,
+        "declaration": {"archive": "base.tar.gz", "archive_sha256": "e" * 64},
+    }
+    artifacts = {
+        "candidate_archive": bundle / "candidate.tar.gz",
+        "candidate_wheel": bundle / "candidate.whl",
+    }
+    owl = {
+        "source": bundle / "owlrl-source",
+        "wheel": bundle / "owl.whl",
+        "archive": bundle / "owl.tar.gz",
+        "record": {"archive_sha256": "f" * 64},
+    }
+    dependencies = {
+        "facade_candidate": SimpleNamespace(
+            verify_artifacts=lambda *args: {"record": record, "artifacts": artifacts},
+            artifact_file=lambda root, name: root / name,
+        ),
+        "native_coverage": SimpleNamespace(facade_payload=object()),
+        "build_facade_candidate": SimpleNamespace(freeze=lambda *args: owner),
+        "owl_companion_inputs": SimpleNamespace(
+            verify=lambda *args: owl, locked_version=lambda root: "0.1.0a3"
+        ),
+    }
+    monkeypatch.setattr(module, "load", lambda name: dependencies[name])
+    monkeypatch.setattr(module, "owner_input", lambda: owner)
+    monkeypatch.setattr(module, "owner_manifest", lambda: {"project": {"version": "0.2.0a18"}})
+    monkeypatch.setattr(
+        module,
+        "policy",
+        lambda: {"facade": {"revision": REVISION}, "owlrl": {"revision": "c" * 40}},
+    )
+    monkeypatch.setattr(module, "extract_original", lambda *args: None)
+    monkeypatch.setattr(module, "declaration_peer", lambda manifest: tmp_path / "peer")
+    monkeypatch.setattr(
+        module, "checkout", lambda *args: pytest.fail("consumer fetched an OWL source fallback")
+    )
+    environment = module.consume(bundle)
+    assert environment["OWLRL_WHEEL"] == str(owl["wheel"])
+    assert environment["OWLRL_SOURCE"] == str(owl["source"])
+    assert environment["OWLRL_ARCHIVE"] == str(owl["archive"])
+    assert environment["OWLRL_SHA256"] == "f" * 64

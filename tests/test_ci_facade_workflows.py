@@ -39,7 +39,7 @@ def test_coverage_reuses_main_artifact_and_has_an_explicit_standalone_preparatio
     assert "if: inputs['facade-artifact'] != ''" in native
     assert native.count("scripts/ci_facade.py prepare") == 1
     consume = next(line for line in native.splitlines() if "scripts/ci_facade.py consume" in line)
-    assert "--owlrl" in consume
+    assert "--owlrl" not in consume
     collector = next(line for line in native.splitlines() if "scripts/native_coverage.py" in line)
     for argument in (
         '--shacl-source "$SHACL_SOURCE"',
@@ -47,6 +47,8 @@ def test_coverage_reuses_main_artifact_and_has_an_explicit_standalone_preparatio
         '--shacl-candidate-receipt "$SHACL_CANDIDATE_RECEIPT"',
         '--shacl-base-revision "$SHACL_BASE_REVISION"',
         '--owlrl-source "$OWLRL_SOURCE"',
+        '--owlrl-archive "$OWLRL_ARCHIVE"',
+        '--owlrl-sha256 "$OWLRL_SHA256"',
     ):
         assert argument in collector
     assert "path: coverage-companion-owlrl" not in native

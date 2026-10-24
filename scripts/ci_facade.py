@@ -71,7 +71,7 @@ def checkout(selected, destination):
         raise ValueError("Immutable peer checkout differs from its source authority")
 
 
-def retain_evidence(source, output, record):
+def retain_evidence(source, output, record, owlrl):
     rules = load("facade_candidate")
     # bounded: four original archives/wheels, declaration authority and three receipts.
     names = {
@@ -83,6 +83,9 @@ def retain_evidence(source, output, record):
         "candidate-inputs.json",
         "dependency-binding.patch",
         "declaration-requirements.lock",
+        "owlrl-inputs.json",
+        owlrl["archive"],
+        owlrl["wheel"],
     }
     originals = {name: rules.artifact_file(source, name) for name in names}
     output.mkdir(parents=True, exist_ok=False)
@@ -119,12 +122,15 @@ def prepare(output):
         python=sys.executable,
     )
     record = builder.build(arguments)
+    owlrl_record = load("owl_companion_inputs").prepare(
+        owlrl, selected["owlrl"], frozen["owlrl"], build_output, sys.executable, run
+    )
     if owner_input() != owner:
         raise ValueError("Native provider source changed during candidate preparation")
     for name, project, source in peers:
         if builder.freeze(source, selected[name]["revision"], project, run) != frozen[name]:
             raise ValueError("Immutable peer source changed during candidate preparation")
-    retain_evidence(build_output, output, record)
+    retain_evidence(build_output, output, record, owlrl_record)
     return output
 
 
@@ -141,7 +147,7 @@ def declaration_peer(manifest):
     return ROOT.parent / "pyshacl-turbo"
 
 
-def consume(bundle, *, owlrl=False):
+def consume(bundle):
     bundle = bundle.resolve(strict=True)
     selected, owner, manifest = policy(), owner_input(), owner_manifest()
     verified = load("facade_candidate").verify_artifacts(
@@ -165,16 +171,18 @@ def consume(bundle, *, owlrl=False):
     declaration = record["declaration"]
     original = load("facade_candidate").artifact_file(bundle, declaration["archive"])
     extract_original(original, peer, declaration["archive_sha256"])
+    owl_inputs = load("owl_companion_inputs")
+    owl = owl_inputs.verify(bundle, selected["owlrl"], owl_inputs.locked_version(ROOT))
     environment = {
         "SHACL_WHEEL": str(artifacts["candidate_wheel"]),
         "SHACL_SOURCE": str(facade_source),
         "SHACL_CANDIDATE_RECEIPT": str(bundle / "candidate-inputs.json"),
         "SHACL_BASE_REVISION": selected["facade"]["revision"],
+        "OWLRL_WHEEL": str(owl["wheel"]),
+        "OWLRL_SOURCE": str(owl["source"]),
+        "OWLRL_ARCHIVE": str(owl["archive"]),
+        "OWLRL_SHA256": owl["record"]["archive_sha256"],
     }
-    if owlrl:
-        source = bundle.parent / "coverage-companion-owlrl"
-        checkout(selected["owlrl"], source)
-        environment["OWLRL_SOURCE"] = str(source)
     if builder.freeze(ROOT, owner["revision"], "rdflib-turbo", run) != owner:
         raise ValueError("Native provider source changed while arranging CI acceptance")
     return environment
@@ -198,12 +206,11 @@ def main():
     consume_parser = commands.add_parser("consume")
     consume_parser.add_argument("--input", type=Path, required=True)
     consume_parser.add_argument("--environment-file", type=Path, required=True)
-    consume_parser.add_argument("--owlrl", action="store_true")
     args = parser.parse_args()
     if args.command == "prepare":
         print(prepare(args.output))
     else:
-        write_environment(args.environment_file, consume(args.input, owlrl=args.owlrl))
+        write_environment(args.environment_file, consume(args.input))
 
 
 if __name__ == "__main__":
