@@ -2,6 +2,7 @@
 use pyo3::prelude::*;
 use std::sync::Arc;
 
+use super::nt_python_output;
 use super::operations::{Operation, Reply};
 use super::session::Session;
 use super::typed::{QuadInput, TermTuple};
@@ -303,6 +304,24 @@ impl NativeTransaction {
             _ => unreachable!("native transaction reply type"),
         })
         .map_err(error)
+    }
+
+    #[pyo3(signature = (graph, as_bytes=false))]
+    fn _dump_graph_nt(
+        &self,
+        py: Python<'_>,
+        graph: Option<TermTuple>,
+        as_bytes: bool,
+    ) -> PyResult<Py<PyAny>> {
+        let text = py
+            .detach(
+                || match self.session.execute(Operation::DumpGraphNt(graph))? {
+                    Reply::GraphNt(output) => Ok(output),
+                    _ => unreachable!("native transaction graph output reply type"),
+                },
+            )
+            .map_err(error)?;
+        nt_python_output(py, text, as_bytes)
     }
 
     fn remove_pattern(&self, py: Python<'_>, source: String) -> PyResult<()> {

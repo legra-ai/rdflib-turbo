@@ -10,6 +10,34 @@
 
 ## Performance
 
+**N-Triples serialization: 4.4–4.9× faster than RDFLib on 100,000 synthetic triples.**
+The unreleased candidate at [`c196691`](https://github.com/legra-ai/rdflib-turbo/commit/c1966915fb9c50a902eab729bb7bfd694c513490)
+serializes directly from the selected native graph and returns UTF-8 bytes without
+a Python Unicode copy. It preserves RDFLib's URI rejection and caught-transaction
+behavior; the corrected implementation is measured below.
+
+| Output | RDFLib 7.6.0 (ms) | Published turbo 0.2.0a14 (ms) | Candidate c196691 (ms) | RDFLib peak (MB) | Published peak (MB) | Candidate peak (MB) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `str` | 484.21 | 651.83 | **110.14** | 339.09 | 294.45 | **290.59** |
+| UTF-8 `bytes` | 505.74 | 680.75 | **104.21** | 301.22 | 262.56 | **257.28** |
+
+Measured on macOS ARM64 with CPython 3.13.16 on 23 October 2026: medians of six
+rotated cold processes per case, using the published baseline wheel and an
+independently audited release build of the candidate. Timings cover serialization
+only; whole-process peak RSS includes imports, input construction and retained
+output, measured before correctness parsing (decimal MB). Complete exact-term
+and blank-node-ID comparisons cover small/default/named/blank-graph controls;
+the 100,000-triple cases use a matching streaming count/hash witness, which is
+probabilistic rather than a complete row comparison. A separate 1,024-triple
+Unicode test reduced Python-traced UTF-8 peak allocations from **177,730 to
+48,461 bytes**, using the same cold child in both projects; that excludes native
+allocations. These are synthetic NT-only
+measurements, not end-to-end or universal speedup claims.
+The shared host's one-minute load ranged from 16.05 to 25.26 and large-case CPU
+variation from 1.3% to 12.6%; absolute timings reflect that load.
+See [results and provenance](docs/benchmarks/nt-2026-10-23.json) and
+[reproduction instructions](docs/benchmarks/nt-serialization.md).
+
 Compare **RDFLib + OWL-RL + pySHACL** with
 [rdflib-turbo](https://github.com/legra-ai/rdflib-turbo),
 [owlrl-turbo](https://github.com/legra-ai/owlrl-turbo) and
@@ -87,7 +115,8 @@ and StoreDataset APIs add RDFLib facades over that native Store. Arbitrary RDFLi
 storage plugins, initial query bindings, custom functions and remote SERVICE
 execution are not provided. RDFLib conversions
 copy data and explicitly preserve caller blank-node identifiers. Query results are
-eagerly materialized. No performance or complete-conformance claim is made.
+eagerly materialized. Performance measurements apply to the documented workloads;
+complete conformance is not claimed.
 
 ## RDFLib Graph and dataset facades
 
