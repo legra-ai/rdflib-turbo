@@ -78,6 +78,13 @@ jobs:
         env:
           PREPARED_VERSION: ${{ steps.release.outputs.version }}
         run: uv run --no-project python scripts/release_version.py
+      - name: Prepare one immutable test-only pure facade cohort
+        run: uv run --no-project --python 3.13 python -B scripts/ci_facade.py prepare --output "$RUNNER_TEMP/candidate-facade-evidence"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: candidate-facade-evidence
+          path: ${{ runner.temp }}/candidate-facade-evidence
+          if-no-files-found: error
 
   sdist:
     needs: prepare
@@ -163,6 +170,12 @@ jobs:
         with:
           name: release-sdist
           path: source-dist
+      - uses: actions/download-artifact@v8
+        with:
+          name: candidate-facade-evidence
+          path: ${{ runner.temp }}/candidate-facade-evidence
+      - name: Verify the facade cohort and arrange the original locked peer
+        run: uv run --no-project --python 3.13 python -B scripts/ci_facade.py consume --input "$RUNNER_TEMP/candidate-facade-evidence" --environment-file "$GITHUB_ENV"
       - name: Unpack the tested source distribution once for every interpreter
         run: |
           mkdir source-build || exit 1
@@ -184,7 +197,7 @@ jobs:
           done
       - run: uv tool run --from twine==6.2.0 twine check --strict dist/*
       - name: Test the installed wheel without source-tree imports
-        run: uv run --no-project python scripts/test_wheel.py --python-versions ${{ matrix.python-versions }}
+        run: uv run --no-project python scripts/test_wheel.py --python-versions ${{ matrix.python-versions }} --shacl-wheel "$SHACL_WHEEL"
       - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
@@ -196,6 +209,7 @@ jobs:
     uses: ./.github/workflows/native-coverage.yml
     with:
       revision: ${{ needs.prepare.outputs.revision }}
+      facade-artifact: candidate-facade-evidence
 
   verify:
     needs: prepare
@@ -216,6 +230,12 @@ jobs:
         with:
           toolchain: nightly-2026-10-16
           components: rustfmt
+      - uses: actions/download-artifact@v8
+        with:
+          name: candidate-facade-evidence
+          path: ${{ runner.temp }}/candidate-facade-evidence
+      - name: Verify the facade cohort and arrange the original locked peer
+        run: uv run --no-project --python 3.13 python -B scripts/ci_facade.py consume --input "$RUNNER_TEMP/candidate-facade-evidence" --environment-file "$GITHUB_ENV"
       - run: cargo +nightly-2026-10-16 fmt --check
       - run: cargo clippy --locked -- -D warnings
       - name: Immutable native engine source metadata
@@ -232,8 +252,8 @@ jobs:
         run: make test-store-contract
       - name: Native allocation regression budgets
         run: uv run --no-project --python 3.13 python -m scripts.allocation_budgets
-      - run: uv run --locked --extra test ruff check python tests scripts
-      - run: uv run --locked --extra test ruff format --check python tests scripts
+      - run: uv run --locked --only-group dev ruff check python tests scripts
+      - run: uv run --locked --only-group dev ruff format --check python tests scripts
 
   test:
     name: test
