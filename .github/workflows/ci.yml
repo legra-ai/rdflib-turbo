@@ -107,7 +107,8 @@ jobs:
     needs: [prepare, sdist]
     runs-on: ${{ matrix.os }}
     # Intel's five builds and installed suites exceed even the two-hour budget.
-    # Two disjoint cohorts retain every interpreter within the same bounded limit.
+    # Windows also needs two cohorts to finish acceptance within its 90-minute limit.
+    # Disjoint cohorts retain every interpreter without increasing either limit.
     timeout-minutes: ${{ matrix.os == 'macos-15-intel' && 120 || 90 }}
     strategy:
       fail-fast: false
@@ -137,8 +138,12 @@ jobs:
             artifact: release-wheel-aarch64-apple-darwin
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            python-versions: '3.11 3.12 3.13 3.14 3.15'
-            artifact: release-wheel-x86_64-pc-windows-msvc
+            python-versions: '3.11 3.12 3.13'
+            artifact: release-wheel-x86_64-pc-windows-msvc-cp311-cp313
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            python-versions: '3.14 3.15'
+            artifact: release-wheel-x86_64-pc-windows-msvc-cp314-cp315
     steps:
       - uses: actions/checkout@v7
         with:

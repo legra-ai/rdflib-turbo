@@ -40,10 +40,16 @@ def test_cohorts_cover_every_platform_interpreter_pair_exactly_once():
         for version in row["python-versions"].strip("'\"").split()
     )
     assert actual == Counter((target, version) for target in TARGETS for version in VERSIONS)
-    intel = [row for row in rows if row["target"] == "x86_64-apple-darwin"]
-    assert len(intel) == 2
-    assert sorted(len(row["python-versions"].strip("'\"").split()) for row in intel) == [2, 3]
-    for target in TARGETS - {"x86_64-apple-darwin"}:
+    split = {"x86_64-apple-darwin", "x86_64-pc-windows-msvc"}
+    for target in split:
+        partition = [row for row in rows if row["target"] == target]
+        assert len(partition) == 2
+        assert {row["python-versions"].strip("'\"") for row in partition} == {
+            "3.11 3.12 3.13",
+            "3.14 3.15",
+        }
+    assert len(rows) == 7
+    for target in TARGETS - split:
         assert sum(row["target"] == target for row in rows) == 1
     artifacts = [row["artifact"] for row in rows]
     assert len(artifacts) == len(set(artifacts))
@@ -53,6 +59,7 @@ def test_cohorts_cover_every_platform_interpreter_pair_exactly_once():
     assert "for python in ${{ matrix.python-versions }}; do" in job
     assert "scripts/test_wheel.py --python-versions ${{ matrix.python-versions }}" in job
     assert "name: ${{ matrix.artifact }}" in job
+    assert "timeout-minutes: ${{ matrix.os == 'macos-15-intel' && 120 || 90 }}" in job
 
 
 def test_aggregate_requires_every_cohort_and_exact_complete_release_inventory():

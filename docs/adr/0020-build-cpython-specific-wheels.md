@@ -13,7 +13,7 @@ The installed PyO3 version supports CPython through 3.15 without a forward
 compatibility flag. Free-threaded, debug and development interpreter ABIs are
 outside this matrix.
 
-Keep one job per platform except Intel macOS, which uses two disjoint interpreter
+Keep one job per platform except Intel macOS and Windows, which use two disjoint interpreter
 cohorts (3.11–3.13 and 3.14–3.15). Extract the verified source archive once per
 job, then build its interpreter wheels from that stable directory with `uv build --python`.
 Reuse the same Cargo target and vendor paths. Manylinux builds run all five
@@ -41,3 +41,9 @@ repeated, unordered, missing or additional interpreter archives. Default driver
 invocation still requires all five wheels. Cohort artifact names are unique;
 the aggregate requires every matrix job and independently verifies the complete
 25-wheel plus source-archive inventory before the single existing publisher.
+
+Windows job 120733025533 built all five wheels in 75 minutes 18 seconds, then
+exceeded its existing 90-minute limit during CPython 3.15 installed acceptance.
+CPython 3.11 through 3.14 acceptance had passed. Apply the same disjoint 3+2
+interpreter partition to Windows while retaining its 90-minute limit, all five
+installed suites and the independent complete release inventory check.
