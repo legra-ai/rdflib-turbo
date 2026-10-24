@@ -73,3 +73,57 @@ fn default_numeric_keys_match_actual_rdflib_value_pairs() {
         }
     }
 }
+
+#[test]
+fn shared_value_query_matches_the_full_untrapped_numeric_oracle() {
+    use oxigraph::model::{Dataset, GraphName, Quad};
+    let terms: Vec<TermFixture> =
+        serde_json::from_str(include_str!("../numeric-reference-terms.json")).unwrap();
+    // bounded: the fixed 26-term oracle graph, retaining exact lexical terms.
+    let literals: Vec<_> = terms
+        .iter()
+        .map(|term| {
+            Literal::new_typed_literal(
+                term.lexical.clone(),
+                NamedNode::new(term.datatype.clone()).unwrap(),
+            )
+        })
+        .collect();
+    let mut data = Dataset::from_iter(literals.iter().enumerate().map(|(index, literal)| {
+        Quad::new(
+            NamedNode::new(format!("urn:oracle:s{index}")).unwrap(),
+            NamedNode::new("urn:oracle:p").unwrap(),
+            literal.clone(),
+            GraphName::DefaultGraph,
+        )
+    }));
+    let mut context = LexicalContext::default();
+    context.decimal.traps[0] = false;
+    let mut transaction = data.insert_transaction();
+    crate::inference::literal_values::substitute(&mut transaction, &context).unwrap();
+    transaction.commit();
+    for file in [
+        include_str!("../numeric-reference-pairs-0.jsonl"),
+        include_str!("../numeric-reference-pairs-1.jsonl"),
+        include_str!("../numeric-reference-pairs-2.jsonl"),
+        include_str!("../numeric-reference-pairs-3.jsonl"),
+    ] {
+        for line in file.lines() {
+            let pair: PairFixture = serde_json::from_str(line).unwrap();
+            if pair.invalid_trap {
+                continue;
+            }
+            let quad = Quad::new(
+                NamedNode::new(format!("urn:oracle:s{}", pair.left)).unwrap(),
+                NamedNode::new("urn:oracle:p").unwrap(),
+                literals[pair.right].clone(),
+                GraphName::DefaultGraph,
+            );
+            assert_eq!(
+                data.contains(&quad),
+                pair.left == pair.right || pair.expected == "true",
+                "{quad}"
+            );
+        }
+    }
+}
