@@ -11,7 +11,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_native_licenses_survive_crlf_checkouts(tmp_path):
+def test_native_source_identity_survives_crlf_checkouts(tmp_path):
     repository = tmp_path / "repository"
     repository.mkdir()
 
@@ -26,8 +26,14 @@ def test_native_licenses_survive_crlf_checkouts(tmp_path):
     git("init", "--quiet")
     git("config", "core.autocrlf", "true")
     git("config", "core.eol", "crlf")
-    # bounded: fixed native notices plus representative C++ and CMake source bytes.
+    # bounded: fixed source identity seams, notices and representative vendored bytes.
     paths = [
+        "Cargo.toml",
+        "src/lib.rs",
+        "crates/engine/src/lib.rs",
+        "crates/python/src/lib.rs",
+        "scripts/ci_facade.py",
+        "vendor/fancy-regex-0.19.2/src/lib.rs",
         "LICENSE-APACHE",
         "vendor/oxigraph-0.5.11/LICENSE-MIT",
         "vendor/oxrocksdb-sys-0.5.11-notices/LICENSE-APACHE",

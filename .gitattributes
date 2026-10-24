@@ -1,5 +1,3 @@
-# Licenses ship verbatim from upstream; checkout must preserve their exact bytes.
-**/LICENSE* -text
-
-# Preserve the checksum-verified native crate bytes on every platform.
-vendor/oxrocksdb-sys-0.5.11/** -text
+# Native source, semantic identities and archive receipts must describe the
+# same tracked bytes on every build host, including core.autocrlf=true hosts.
+* -text
