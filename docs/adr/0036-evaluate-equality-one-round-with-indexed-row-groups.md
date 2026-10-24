@@ -81,3 +81,41 @@ closed cliques and disjoint closed pairs. Mixed inputs retain only the small
 nearly closed component. A degree-two seed in a large incoming star must stop
 before scanning the full component. These contracts complement the work bounds
 and exact one-round differential tests.
+
+Sparse inverse compositions now stream common predecessors per output row.
+The current outgoing term set rejects already-present targets; the same
+missing-target delta is reused after grouped transitive candidates have been
+emitted. Identical predecessor rows contribute through their actual incoming
+representative once. Terminal named or blank subjects without outgoing rows
+retain the source-group witness route; literal targets remain objects only.
+Only source scans establish witnesses. Final pending publication still checks
+source plus destination membership, retaining separate-destination suppression.
+No second outgoing set, additional connectivity index or edge copy is retained.
+
+Actual 128-node ring composition reached 94,208 existing-head storage probes in
+one sparse round, including 90,112 repeated existing heads. A regression requires
+zero existing-head probes during composition for every 64- and 128-node ring
+round. This removes redundant exact storage probes, not all repeated witness
+scans; it does not establish a universal subcubic work bound. The existing fixed
+work/resource bounds and immutable-round differential oracles remain unchanged.
+
+The output-row route must not add one incoming query per isolated reflexive
+subject or closed-row member. During the existing grouped transitive pass,
+annotate each existing subject slot when the representative outgoing row proves
+an incoming edge from a different exact row group. Mark even dense source rows.
+After every group has contributed, evaluate inverse compositions in a second
+phase. Skip groups without annotated members before loading another row: every
+predecessor has exactly the current outgoing targets, so no head can be new.
+Terminal subjects retain their source-group route. Both phases read only the
+original source snapshot, never pending or destination-only edges.
+
+Use a checked, typed one-word subject slot: the row index occupies its high bits
+and the cross-group flag its low bit. A physical row-group Vec already restricts
+its indices sufficiently; overflow still fails explicitly. Subject-map values
+remain exactly one usize and row groups remain exactly one member Vec. No new
+map, relation or outgoing-row set is retained. Regressions preserve those layouts,
+require only the original preparation source scan, and bound complete
+composition of disjoint self, pair and clique groups to one representative
+outgoing read per group with zero incoming queries. Active groups load one
+current row for the inverse phase; previous-phase rows and deltas have already
+been dropped. Existing work and allocation budgets remain.

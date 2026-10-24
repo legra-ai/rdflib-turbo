@@ -1,9 +1,26 @@
 use datalog_structural_model::{
     Atom, BuiltinFilter, ConstantSymbol, Literal, PredicateSymbol, Term, VariableSymbol,
 };
-use oxigraph::model::{Dataset, GraphName, NamedNode, Quad};
-use oxigraph::sparql::QueryResults;
+use oxigraph::model::{Dataset, GraphName, NamedNode, NamedOrBlankNode, Quad, Triple};
+use oxigraph::sparql::{PreparedSparqlQuery, QueryEvaluationError, QueryResults};
 use rdf_reasoning::RuleId;
+
+fn heads(
+    query: PreparedSparqlQuery,
+    data: &Dataset,
+) -> impl Iterator<Item = Result<Triple, QueryEvaluationError>> + '_ {
+    let QueryResults::Solutions(rows) = query.on_queryable_dataset(data).execute().unwrap() else {
+        panic!("expected shared head bindings")
+    };
+    rows.map(|row| {
+        let row = row?;
+        Ok(Triple::new(
+            NamedOrBlankNode::try_from(row.get("__head_s").unwrap().clone()).unwrap(),
+            NamedNode::try_from(row.get("__head_p").unwrap().clone()).unwrap(),
+            row.get("__head_o").unwrap().clone(),
+        ))
+    })
+}
 
 #[test]
 fn shared_domain_rule_executes_with_exact_backend_terms() {
@@ -24,14 +41,7 @@ fn shared_domain_rule_executes_with_exact_backend_terms() {
         GraphName::DefaultGraph,
     ));
     let query = super::shared::CompiledRule::try_new(&RuleId::Rdfs2.definition()).unwrap();
-    let QueryResults::Graph(mut triples) = query
-        .into_query()
-        .on_queryable_dataset(&dataset)
-        .execute()
-        .unwrap()
-    else {
-        panic!("expected a graph result")
-    };
+    let mut triples = heads(query.into_query(), &dataset);
     let triple = triples.next().unwrap().unwrap();
     assert_eq!(triple.subject.to_string(), subject.to_string());
     assert_eq!(triple.object.to_string(), class.to_string());
@@ -115,14 +125,7 @@ fn shared_inequality_compares_exact_term_identity() {
         ));
     }
     let query = super::shared::CompiledRule::try_new(&rule).unwrap();
-    let QueryResults::Graph(mut triples) = query
-        .into_query()
-        .on_queryable_dataset(&dataset)
-        .execute()
-        .unwrap()
-    else {
-        panic!("expected graph result")
-    };
+    let mut triples = heads(query.into_query(), &dataset);
     assert_eq!(
         triples.next().unwrap().unwrap().object.to_string(),
         "<urn:identity:different>"
@@ -159,14 +162,7 @@ fn shared_inequality_retains_distinct_numeric_lexical_forms() {
         ));
     }
     let query = super::shared::CompiledRule::try_new(&rule).unwrap();
-    let QueryResults::Graph(triples) = query
-        .into_query()
-        .on_queryable_dataset(&dataset)
-        .execute()
-        .unwrap()
-    else {
-        panic!("expected graph result")
-    };
+    let triples = heads(query.into_query(), &dataset);
     assert_eq!(triples.count(), 2);
 }
 
@@ -193,10 +189,7 @@ fn shared_owl_mode_executes_restrictions_and_reference_schema() {
     let mut value = false;
     let mut self_equivalent = false;
     for query in super::shared::CompiledRule::for_mode("owlrl").unwrap() {
-        let QueryResults::Graph(triples) = query.on_queryable_dataset(&dataset).execute().unwrap()
-        else {
-            panic!("expected graph result")
-        };
+        let triples = heads(query, &dataset);
         for triple in triples {
             let triple = triple.unwrap();
             value |= triple.subject == n("urn:a").into()
@@ -272,14 +265,7 @@ fn shared_list_relation_reaches_cycles_and_branches_without_crossing_lists() {
         ));
     }
     let query = super::shared::CompiledRule::try_new(&rule).unwrap();
-    let QueryResults::Graph(triples) = query
-        .into_query()
-        .on_queryable_dataset(&dataset)
-        .execute()
-        .unwrap()
-    else {
-        panic!("expected graph result")
-    };
+    let triples = heads(query.into_query(), &dataset);
     // bounded: the three reachable members in this eight-triple fixture.
     let subjects = triples
         .map(|triple| triple.unwrap().subject.to_string())

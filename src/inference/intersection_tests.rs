@@ -65,13 +65,13 @@ struct MeasuredGraph<'a> {
     explanations: RefCell<Vec<QueryExplanation>>,
 }
 
-impl Graph for MeasuredGraph<'_> {
+impl<'data> Graph for MeasuredGraph<'data> {
     fn quads<'a>(
         &'a self,
-        subject: Option<NamedOrBlankNodeRef<'a>>,
-        predicate: Option<NamedNodeRef<'a>>,
-        object: Option<TermRef<'a>>,
-    ) -> impl Iterator<Item = Result<Quad>> + 'a {
+        subject: Option<NamedOrBlankNodeRef<'_>>,
+        predicate: Option<NamedNodeRef<'_>>,
+        object: Option<TermRef<'_>>,
+    ) -> impl Iterator<Item = Result<Quad>> + use<'a, 'data> {
         self.data
             .quads_for_pattern(subject, predicate, object, Some(GraphNameRef::DefaultGraph))
             .inspect(|_| self.rows.set(self.rows.get() + 1))
