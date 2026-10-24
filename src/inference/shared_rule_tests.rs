@@ -364,3 +364,26 @@ fn shared_literal_rule_requires_explicit_value_class_capability() {
     let rule = rdf_reasoning::LiteralRuleId::RdfsValueSubstitution.definition();
     assert!(super::shared::CompiledRule::try_new(&rule).is_err());
 }
+
+#[test]
+fn shared_tuple_negation_validates_before_adapter_rejection() {
+    let tuple = |property| Atom {
+        predicate: PredicateSymbol::new(rdf_reasoning::TRIPLE_RELATION),
+        // bounded: one ground triple in a fixed validation fixture.
+        terms: vec![
+            Term::Constant(ConstantSymbol::new("urn:shared:subject")),
+            Term::Constant(ConstantSymbol::new(property)),
+            Term::Constant(ConstantSymbol::new("urn:shared:object")),
+        ],
+    };
+    let program = datalog_structural_model::Program::try_new(vec![Rule::new(
+        tuple("urn:shared:output"),
+        vec![Literal::Negative(tuple("urn:shared:input"))],
+    )])
+    .expect("disjoint RDF properties have no recursive negative dependency");
+    assert_eq!(program.stratify().unwrap().stratum_of_rule(0), Some(0));
+    assert!(matches!(
+        super::shared::CompiledRule::try_new(&program.rules[0]),
+        Err(crate::Error::Unsupported(_))
+    ));
+}
