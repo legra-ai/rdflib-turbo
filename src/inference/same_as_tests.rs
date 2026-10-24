@@ -267,11 +267,13 @@ fn new_symmetry_is_not_visible_to_other_rules_in_the_same_round() {
 
 fn unrestricted_shared_closure(data: &mut Dataset) {
     let mut transaction = data.insert_transaction();
+    let mut generalized = super::generalized::Generalized::default();
     super::axioms::owl(
         &mut transaction,
         false,
         &mut super::diagnostics::Diagnostics::default(),
         &super::diagnostic_datatypes::LexicalContext::default(),
+        &mut generalized,
     )
     .unwrap();
     // bounded: the fixed former rule inventory, retaining its round semantics.
@@ -295,7 +297,6 @@ fn unrestricted_shared_closure(data: &mut Dataset) {
                 .into_query(),
         );
     }
-    let mut generalized = super::generalized::Generalized::default();
     loop {
         let mut pending = Pending::default();
         apply_rules(&transaction, &prepared, &mut pending, false).unwrap();

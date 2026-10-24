@@ -77,6 +77,7 @@ pub(super) fn owl(
     combined: bool,
     diagnostics: &mut Diagnostics,
     context: &LexicalContext,
+    generalized: &mut super::generalized::Generalized,
 ) -> Result<()> {
     // bounded: the fixed XSD/RDF datatype vocabulary below.
     let datatypes: HashSet<NamedNode> = XSD_TYPES
@@ -120,6 +121,9 @@ pub(super) fn owl(
             continue;
         };
         used.insert(datatype.clone());
+        if let Term::Literal(literal) = &q.object {
+            generalized.literal_type(literal, datatype.clone());
+        }
         if has_subject {
             additions.push(
                 data,
@@ -133,6 +137,9 @@ pub(super) fn owl(
         while let Some(name) = parent {
             let datatype = iri(XSD, name);
             used.insert(datatype.clone());
+            if let Term::Literal(literal) = &q.object {
+                generalized.literal_type(literal, datatype.clone());
+            }
             if has_subject {
                 additions.push(data, triple(q.subject.clone(), iri(RDF, "type"), datatype))?;
             }

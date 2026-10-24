@@ -1,4 +1,4 @@
-//! Standard-RDF inconsistency messages, published only after successful closure.
+//! Inconsistency messages over ordinary and generalized tuples, published only after successful closure.
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -7,6 +7,7 @@ use oxigraph::model::*;
 
 use super::backend::Graph;
 use super::diagnostic_datatypes::{self, LexicalContext, LexicalResult};
+use super::generalized::{Generalized, Tuples};
 use super::outcome::{ERROR_NAMESPACE, InferenceOutcome};
 use crate::graph::{RDF, iri};
 use crate::{Error, Result};
@@ -57,7 +58,8 @@ impl Diagnostics {
         Ok(())
     }
 
-    pub(super) fn round(&mut self, data: &impl Graph) -> Result<()> {
+    pub(super) fn round(&mut self, data: &impl Graph, extra: &Generalized) -> Result<()> {
+        let data = &Tuples { data, extra };
         let witnesses = std::mem::take(&mut self.list_witnesses);
         let result = lists::collect(data, self, &witnesses);
         self.list_witnesses = witnesses;
@@ -67,12 +69,14 @@ impl Diagnostics {
     pub(super) fn finish(
         mut self,
         data: &mut impl Graph,
+        extra: &Generalized,
         owl: bool,
         is_zero: impl Fn(&Term) -> Result<bool>,
     ) -> Result<InferenceOutcome> {
         if owl {
-            relations::collect(data, &mut self)?;
-            restrictions::collect(data, &mut self, is_zero)?;
+            let view = Tuples { data, extra };
+            relations::collect(&view, &mut self)?;
+            restrictions::collect(&view, &mut self, is_zero)?;
         }
         drop(self.known);
         drop(self.list_witnesses);
@@ -100,14 +104,6 @@ impl Diagnostics {
     }
 }
 
-fn subject(term: &Term) -> Option<NamedOrBlankNodeRef<'_>> {
-    match term {
-        Term::NamedNode(node) => Some(node.as_ref().into()),
-        Term::BlankNode(node) => Some(node.as_ref().into()),
-        Term::Literal(_) => None,
-    }
-}
-
 fn text(term: &Term) -> &str {
     match term {
         Term::NamedNode(node) => node.as_str(),
@@ -116,24 +112,28 @@ fn text(term: &Term) -> &str {
     }
 }
 
-fn has(data: &impl Graph, left: &Term, predicate: &NamedNode, right: &Term) -> Result<bool> {
-    let Some(left) = subject(left) else {
-        return Ok(false);
-    };
-    data.quads(Some(left), Some(predicate.as_ref()), Some(right.as_ref()))
-        .next()
-        .transpose()
-        .map(|quad| quad.is_some())
+fn has(
+    data: &Tuples<'_, impl Graph>,
+    left: &Term,
+    predicate: &NamedNode,
+    right: &Term,
+) -> Result<bool> {
+    data.quads(
+        Some(left.as_ref()),
+        Some(predicate.as_ref()),
+        Some(right.as_ref()),
+    )
+    .next()
+    .transpose()
+    .map(|quad| quad.is_some())
 }
 
 fn objects<'a>(
-    data: &'a impl Graph,
+    data: &'a Tuples<'_, impl Graph>,
     node: &'a Term,
     predicate: &'a NamedNode,
 ) -> impl Iterator<Item = Result<Term>> + 'a {
-    subject(node)
-        .into_iter()
-        .flat_map(move |node| data.quads(Some(node), Some(predicate.as_ref()), None))
+    data.quads(Some(node.as_ref()), Some(predicate.as_ref()), None)
         .map(|quad| quad.map(|quad| quad.object))
 }
 

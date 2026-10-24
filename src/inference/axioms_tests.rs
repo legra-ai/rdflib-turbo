@@ -46,6 +46,7 @@ fn used_datatypes_receive_all_ancestor_types_and_disjointness_axioms() {
             combined,
             &mut Diagnostics::default(),
             &LexicalContext::default(),
+            &mut super::super::generalized::Generalized::default(),
         )
         .unwrap();
         transaction.commit();
