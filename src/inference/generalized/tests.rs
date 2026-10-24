@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use oxigraph::io::{RdfFormat, RdfParser};
 use oxigraph::model::*;
 
@@ -79,4 +81,64 @@ fn equality_connects_named_aliases_through_a_literal() {
         NamedNode::new("urn:value").unwrap(),
         GraphName::DefaultGraph,
     )));
+}
+
+#[test]
+fn compact_reflexivity_matches_exact_tuple_patterns() {
+    let datatype = NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap();
+    let left: Term = Literal::new_typed_literal("01", datatype.clone()).into();
+    let right: Term = Literal::new_typed_literal("1", datatype).into();
+    let same: Term = super::SAME_AS.into();
+    let predicate: Term = NamedNode::new("urn:p").unwrap().into();
+    let blank: Term = BlankNode::new("predicate").unwrap().into();
+    let value: Term = NamedNode::new("urn:value").unwrap().into();
+    let expected = [
+        [left.clone(), same.clone(), left.clone()],
+        [right.clone(), same.clone(), right.clone()],
+        [left.clone(), predicate.clone(), value.clone()],
+        [value.clone(), blank.clone(), left.clone()],
+    ];
+    let mut current = Generalized::default();
+    for row in &expected {
+        current.insert(row.clone());
+        current.insert(row.clone());
+    }
+    for subject in [
+        None,
+        Some(left.as_ref()),
+        Some(right.as_ref()),
+        Some(value.as_ref()),
+    ] {
+        for property in [
+            None,
+            Some(same.as_ref()),
+            Some(predicate.as_ref()),
+            Some(blank.as_ref()),
+        ] {
+            for object in [
+                None,
+                Some(left.as_ref()),
+                Some(right.as_ref()),
+                Some(value.as_ref()),
+            ] {
+                let pattern = [subject, property, object];
+                // bounded: four distinct tuples, checked against all64 selector combinations.
+                let actual: HashSet<_> = current
+                    .matching(pattern)
+                    .map(|row| row.map(TermRef::into_owned))
+                    .collect();
+                let selected: HashSet<_> = expected
+                    .iter()
+                    .filter(|row| {
+                        pattern
+                            .iter()
+                            .zip(*row)
+                            .all(|(bound, term)| bound.is_none_or(|bound| bound == term.as_ref()))
+                    })
+                    .cloned()
+                    .collect();
+                assert_eq!(actual, selected, "pattern {pattern:?}");
+            }
+        }
+    }
 }
