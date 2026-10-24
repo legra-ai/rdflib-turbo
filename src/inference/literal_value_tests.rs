@@ -141,3 +141,37 @@ fn rdfs_substitutes_equal_numeric_values_without_conflating_strings_or_rounding(
         }
     }
 }
+
+#[test]
+fn signaling_nan_is_not_compared_with_itself_or_non_numeric_values() {
+    let nan = Literal::new_typed_literal(
+        "sNaN",
+        NamedNode::new("http://www.w3.org/2001/XMLSchema#decimal").unwrap(),
+    );
+    let mut data = Dataset::from_iter([Quad::new(
+        NamedNode::new("urn:s").unwrap(),
+        NamedNode::new("urn:p").unwrap(),
+        nan,
+        GraphName::DefaultGraph,
+    )]);
+    expand(&mut data, "rdfs", Default::default()).unwrap();
+    data.insert(&Quad::new(
+        NamedNode::new("urn:s").unwrap(),
+        NamedNode::new("urn:q").unwrap(),
+        Literal::new_simple_literal("one"),
+        GraphName::DefaultGraph,
+    ));
+    expand(&mut data, "rdfs", Default::default()).unwrap();
+    data.insert(&Quad::new(
+        NamedNode::new("urn:s").unwrap(),
+        NamedNode::new("urn:n").unwrap(),
+        Literal::from(1),
+        GraphName::DefaultGraph,
+    ));
+    assert!(matches!(
+        expand(&mut data, "rdfs", Default::default()),
+        Err(crate::Error::Lexical(
+            super::LexicalFailure::DecimalInvalidComparison
+        ))
+    ));
+}

@@ -40,7 +40,7 @@ def test_numeric_closure_matches_reference_with_untrapped_nan(api):
     with decimal.localcontext() as context:
         context.traps[decimal.InvalidOperation] = False
         reference = ReferenceGraph().parse(data=source, format="nt")
-        DeductiveClosure(RDFS_Semantics).expand(reference)
+        DeductiveClosure(RDFS_Semantics, improved_datatypes=False).expand(reference)
         expected = values(reference)
         if api == "dataset":
             native = Dataset().parse(data=source, format="nt").infer(inference="rdfs")
@@ -57,14 +57,26 @@ def test_numeric_closure_matches_reference_with_untrapped_nan(api):
                 if api == "transaction":
                     with store.transaction() as transaction:
                         transaction.parse(data=source, format="nt").infer(inference="rdfs")
-                        assert values(transaction.to_rdflib()) == expected
+                        assert (
+                            values(
+                                ReferenceGraph().parse(
+                                    data=transaction.serialize(format="ntriples"), format="nt"
+                                )
+                            )
+                            == expected
+                        )
                 else:
                     store.parse(data=source, format="nt").infer(inference="rdfs")
-                assert values(store.to_rdflib()) == expected
+                assert (
+                    values(
+                        ReferenceGraph().parse(data=store.serialize(format="ntriples"), format="nt")
+                    )
+                    == expected
+                )
 
 
 def test_signaling_nan_raises_reference_exception_and_rolls_back():
-    source = '<urn:s> <urn:p> "sNaN"^^<http://www.w3.org/2001/XMLSchema#decimal> .'
+    source = '<urn:s> <urn:p> "sNaN"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n<urn:s> <urn:q> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .'
     with decimal.localcontext() as context:
         context.traps[decimal.InvalidOperation] = True
         for graph in [
@@ -74,7 +86,7 @@ def test_signaling_nan_raises_reference_exception_and_rolls_back():
             context.clear_flags()
             with pytest.raises(decimal.InvalidOperation) as error:
                 if isinstance(graph, ReferenceGraph):
-                    DeductiveClosure(RDFS_Semantics).expand(graph)
+                    DeductiveClosure(RDFS_Semantics, improved_datatypes=False).expand(graph)
                 else:
                     before = graph.serialize(format="ntriples")
                     graph.infer(inference="rdfs")
@@ -96,7 +108,7 @@ def test_decimal_float_comparison_flags_match_reference(right):
                 else Dataset().parse(data=source, format="nt")
             )
             if api == "reference":
-                DeductiveClosure(RDFS_Semantics).expand(graph)
+                DeductiveClosure(RDFS_Semantics, improved_datatypes=False).expand(graph)
                 expected = dict(context.flags)
             else:
                 graph.infer(inference="rdfs")
@@ -121,3 +133,21 @@ def test_numeric_conversion_snapshots_each_callers_integer_limit():
             )
     finally:
         sys.set_int_max_str_digits(previous)
+
+
+def test_single_signaling_nan_uses_identity_without_comparing_its_value():
+    source = '<urn:s> <urn:p> "sNaN"^^<http://www.w3.org/2001/XMLSchema#decimal> .'
+    with decimal.localcontext() as context:
+        context.traps[decimal.InvalidOperation] = True
+        for api in ["reference", "native"]:
+            context.clear_flags()
+            graph = (
+                ReferenceGraph().parse(data=source, format="nt")
+                if api == "reference"
+                else Dataset().parse(data=source, format="nt")
+            )
+            if api == "reference":
+                DeductiveClosure(RDFS_Semantics, improved_datatypes=False).expand(graph)
+            else:
+                graph.infer(inference="rdfs")
+            assert not context.flags[decimal.InvalidOperation]

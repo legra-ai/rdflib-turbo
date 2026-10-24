@@ -48,20 +48,21 @@ pub(super) fn substitute(data: &mut impl Graph, context: &LexicalContext) -> Res
     // their exact keys differ. Scan scalar categories, never literal pairs.
     let mut decimal = false;
     let mut float = false;
+    let mut signaling_nan = false;
+    let mut first_numeric = None; // bounded: one scalar literal, independent of graph size.
+    let mut distinct_numeric = false;
     for quad in data.quads(None, None, None) {
         let Term::Literal(literal) = quad?.object else {
             continue;
         };
         let numeric = parse_numeric(&literal, context);
-        if matches!(numeric, Some(PythonNumericValue::SignalingNaN)) {
-            context.record_invalid_operation();
-            if context.traps_invalid_operation() {
-                return Err(Error::Lexical(
-                    super::LexicalFailure::DecimalInvalidComparison,
-                ));
-            }
-        }
+        signaling_nan |= matches!(numeric, Some(PythonNumericValue::SignalingNaN));
         if !matches!(numeric, None | Some(PythonNumericValue::Missing)) {
+            if let Some(first) = &first_numeric {
+                distinct_numeric |= first != &literal;
+            } else {
+                first_numeric = Some(literal.clone());
+            }
             decimal |= literal.datatype().as_str() == "http://www.w3.org/2001/XMLSchema#decimal";
             float |= matches!(
                 literal.datatype().as_str(),
@@ -72,6 +73,16 @@ pub(super) fn substitute(data: &mut impl Graph, context: &LexicalContext) -> Res
     }
     if decimal && float {
         context.record_float_operation();
+    }
+    // The reference bypasses equality for literal identity. A lone sNaN
+    // therefore signals only if another distinct numeric literal is present.
+    if signaling_nan && distinct_numeric {
+        context.record_invalid_operation();
+        if context.traps_invalid_operation() {
+            return Err(Error::Lexical(
+                super::LexicalFailure::DecimalInvalidComparison,
+            ));
+        }
     }
     let QueryResults::Solutions(rows) = data.query(value_query(context.clone())?)? else {
         unreachable!("Literal substitution uses a SELECT query")
