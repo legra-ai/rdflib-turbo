@@ -59,6 +59,32 @@ fn node(index: usize) -> NamedNode {
 }
 
 #[test]
+fn indexed_test_graph_owns_temporary_pattern_filters() {
+    let mut data = Dataset::new();
+    let quad = Quad::new(node(0), node(1), node(2), GraphName::DefaultGraph);
+    data.insert(quad.as_ref());
+    let reads = ExistingHeads {
+        data: &data,
+        probes: Cell::new(0),
+        work: Cell::new(0),
+        incoming: Cell::new(0),
+        full_scans: Cell::new(0),
+    };
+    let mut scan = {
+        let subject = node(0);
+        let predicate = node(1);
+        let object = node(2);
+        reads.quads(
+            Some(subject.as_ref().into()),
+            Some(predicate.as_ref()),
+            Some(object.as_ref().into()),
+        )
+    };
+    assert_eq!(scan.next().unwrap().unwrap(), quad);
+    assert!(scan.next().is_none());
+}
+
+#[test]
 fn ring_composition_never_probes_already_present_heads() {
     let predicate = NamedNode::new("http://www.w3.org/2002/07/owl#sameAs").unwrap();
     for size in [64, 128] {
