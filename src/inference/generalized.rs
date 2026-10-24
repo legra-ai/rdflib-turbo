@@ -11,6 +11,10 @@ mod equality;
 mod query;
 pub(super) use equality::EqualityRules;
 #[cfg(test)]
+mod equality_tests;
+#[cfg(test)]
+mod equality_work_tests;
+#[cfg(test)]
 mod tests;
 
 pub(super) const GENERALIZED_GRAPH: NamedNodeRef<'static> =

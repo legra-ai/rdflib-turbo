@@ -68,9 +68,20 @@ impl CompiledRule {
         if matches!(partition, RulePartition::GeneralizedHead) {
             let subject = Self::term(&rule.head.terms[0])?;
             let predicate = Self::term(&rule.head.terms[1])?;
-            body.push_str(&format!(
-                "FILTER (!(isIRI({subject}) || isBlank({subject})) || !isIRI({predicate})) "
-            ));
+            // These queries read RDF-only premises. Remove head-kind conditions
+            // already guaranteed by those positions so filters can precede joins.
+            let subject_is_rdf = Self::guaranteed_iri(rule, &rule.head.terms[0])
+                || Self::bound_at(rule, &rule.head.terms[0], 0);
+            let predicate_is_iri = Self::guaranteed_iri(rule, &rule.head.terms[1]);
+            let filter = match (subject_is_rdf, predicate_is_iri) {
+                (true, true) => "false".to_owned(),
+                (false, true) => format!("!(isIRI({subject}) || isBlank({subject}))"),
+                (true, false) => format!("!isIRI({predicate})"),
+                (false, false) => {
+                    format!("!(isIRI({subject}) || isBlank({subject})) || !isIRI({predicate})")
+                }
+            };
+            body.push_str(&format!("FILTER ({filter}) "));
         }
         // bounded: exactly three head columns, preserving every RDF term kind.
         let columns = rule
@@ -85,6 +96,18 @@ impl CompiledRule {
             .parse_query(&text)
             .map(Self)
             .map_err(|error| Error::Runtime(format!("Invalid shared inference rule: {error}")))
+    }
+
+    fn guaranteed_iri(rule: &Rule, term: &Term) -> bool {
+        matches!(term, Term::Constant(_)) || Self::bound_at(rule, term, 1)
+    }
+
+    fn bound_at(rule: &Rule, term: &Term, position: usize) -> bool {
+        rule.body.iter().any(|literal| {
+            matches!(literal,
+            Literal::Positive(atom) if atom.predicate.as_str() == TRIPLE_RELATION
+                && atom.terms.get(position) == Some(term))
+        })
     }
 
     fn body_atom(atom: &Atom) -> Result<String> {
