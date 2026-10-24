@@ -37,16 +37,58 @@ class CompanionTests(unittest.TestCase):
             source = Path(directory) / "source"
             package = source / "src/owlrl_turbo"
             package.mkdir(parents=True)
+            (source / "pyproject.toml").write_text(
+                '[project]\nname="owlrl-turbo"\nversion="0.1.0a3"\n'
+            )
             (package / "__init__.py").write_text("public-code")
             (package / "py.typed").write_text("")
             wheel = Path(directory) / "companion.whl"
             with ZipFile(wheel, "w") as archive:
                 archive.writestr("owlrl_turbo/__init__.py", "public-code")
                 archive.writestr("owlrl_turbo/py.typed", "")
+                archive.writestr(
+                    "owlrl_turbo-0.1.0a3.dist-info/METADATA",
+                    "Name: owlrl-turbo\nVersion: 0.1.0a3\n",
+                )
+                archive.writestr(
+                    "owlrl_turbo-0.1.0a3.dist-info/WHEEL",
+                    "Root-Is-Purelib: true\nTag: py3-none-any\n",
+                )
             self.assertEqual(len(companion.verify_payload(source, wheel)), 2)
             with ZipFile(wheel, "w") as archive:
                 archive.writestr("owlrl_turbo/__init__.py", "different-code")
-            with self.assertRaisesRegex(ValueError, "public source"):
+                archive.writestr(
+                    "owlrl_turbo-0.1.0a3.dist-info/METADATA",
+                    "Name: owlrl-turbo\nVersion: 0.1.0a3\n",
+                )
+                archive.writestr(
+                    "owlrl_turbo-0.1.0a3.dist-info/WHEEL",
+                    "Root-Is-Purelib: true\nTag: py3-none-any\n",
+                )
+            with self.assertRaisesRegex(ValueError, "source"):
+                companion.verify_payload(source, wheel)
+
+    def test_comparison_cannot_accept_different_original_wheel_version(self):
+        companion = importlib.import_module("comparison_companion")
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "source"
+            package = source / "src/owlrl_turbo"
+            package.mkdir(parents=True)
+            (source / "pyproject.toml").write_text(
+                '[project]\nname="owlrl-turbo"\nversion="0.1.0a3"\n'
+            )
+            (package / "__init__.py").write_text("original")
+            wheel = Path(directory) / "companion.whl"
+            with ZipFile(wheel, "w") as archive:
+                archive.writestr("owlrl_turbo/__init__.py", "original")
+                archive.writestr(
+                    "owlrl_turbo-0.1.0a3.dist-info/METADATA", "Name: owlrl-turbo\nVersion: 9.9.9\n"
+                )
+                archive.writestr(
+                    "owlrl_turbo-0.1.0a3.dist-info/WHEEL",
+                    "Root-Is-Purelib: true\nTag: py3-none-any\n",
+                )
+            with self.assertRaises(ValueError):
                 companion.verify_payload(source, wheel)
 
 

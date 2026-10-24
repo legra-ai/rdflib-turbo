@@ -1,14 +1,13 @@
 """Build a test companion from immutable public source, never relabel a release."""
 
-import hashlib
 import json
 import subprocess
 import tarfile
 from pathlib import Path
-from zipfile import ZipFile
 
 from audit_sdist import audit
 from comparison_inputs import PYTHON, freeze, json_file, run, sha
+from pure_companion import verify_payload
 
 OWL_REVISION = "839d4877102e9c0e7b8b46eb6262a8996cd734cf"
 
@@ -20,24 +19,6 @@ def verify_originals(output):
             raise ValueError(f"Original public companion {key} changed")
     if freeze(output / "owl-source") != receipt["git_source"]:
         raise ValueError("Original public companion source changed")
-
-
-def verify_payload(source, wheel):
-    package = source / "src/owlrl_turbo"
-    expected = {
-        "owlrl_turbo/" + path.relative_to(package).as_posix(): sha(path)
-        for path in package.rglob("*")
-        if path.is_file()
-    }
-    with ZipFile(wheel) as archive:
-        actual = {
-            name: hashlib.sha256(archive.read(name)).hexdigest()
-            for name in archive.namelist()
-            if name.startswith("owlrl_turbo/") and not name.endswith("/")
-        }
-    if actual != expected:
-        raise ValueError("Companion wheel payload differs from exact public source")
-    return actual
 
 
 def owl_input(output):
