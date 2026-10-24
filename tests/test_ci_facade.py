@@ -137,3 +137,59 @@ def test_consumer_git_launch_does_not_use_the_posix_only_coverage_launcher(monke
     monkeypatch.setattr(module.subprocess, "run", launch)
     assert module.run(["git", "rev-parse", "HEAD"], capture=True) == "immutable-revision\n"
     assert calls[0][1] == {"check": True, "text": True, "stdout": subprocess.PIPE}
+
+
+def test_prepare_rejects_an_unavailable_owl_revision_before_building_any_facade(
+    tmp_path, monkeypatch
+):
+    module = helper()
+    selected = {"facade": {"revision": REVISION}, "owlrl": {"revision": "c" * 40}}
+    monkeypatch.setattr(module, "policy", lambda: selected)
+    monkeypatch.setattr(module, "owner_input", lambda: {"revision": "b" * 40})
+    calls = []
+
+    def checkout(peer, destination):
+        calls.append(("checkout", peer["revision"]))
+        if peer == selected["owlrl"]:
+            raise subprocess.CalledProcessError(128, ["git", "checkout", peer["revision"]])
+
+    def build(arguments):
+        calls.append(("build", arguments))
+        raise AssertionError("Unavailable OWL authority must be detected before pure builds")
+
+    builder = SimpleNamespace(build=build, freeze=lambda *args: {"revision": args[1], "files": {}})
+    monkeypatch.setattr(module, "checkout", checkout)
+    monkeypatch.setattr(module, "load", lambda name: builder)
+    with pytest.raises(subprocess.CalledProcessError):
+        module.prepare(tmp_path / "candidate-facade-evidence")
+    assert calls == [("checkout", REVISION), ("checkout", "c" * 40)]
+
+
+def test_prepare_rechecks_both_immutable_peers_after_pure_artifact_construction(
+    tmp_path, monkeypatch
+):
+    module = helper()
+    selected = {"facade": {"revision": REVISION}, "owlrl": {"revision": "c" * 40}}
+    monkeypatch.setattr(module, "policy", lambda: selected)
+    monkeypatch.setattr(module, "owner_input", lambda: {"revision": "b" * 40})
+    calls = []
+    changed = False
+
+    def freeze(source, revision, project, run):
+        calls.append(("freeze", project))
+        return {"revision": revision, "files": {"source.py": "changed" if changed else "original"}}
+
+    def build(arguments):
+        nonlocal changed
+        calls.append(("build", arguments.facade_revision))
+        changed = True
+        return {}
+
+    monkeypatch.setattr(
+        module, "checkout", lambda peer, destination: calls.append(("checkout", peer["revision"]))
+    )
+    monkeypatch.setattr(module, "retain_evidence", lambda *args: None)
+    monkeypatch.setattr(module, "load", lambda name: SimpleNamespace(build=build, freeze=freeze))
+    with pytest.raises(ValueError, match="peer source"):
+        module.prepare(tmp_path / "candidate-facade-evidence")
+    assert calls.index(("freeze", "owlrl-turbo")) < calls.index(("build", REVISION))

@@ -96,14 +96,20 @@ def prepare(output):
     output = output.resolve()
     if output.is_relative_to(ROOT) or not output.name.startswith("candidate-facade"):
         raise ValueError("Candidate evidence must have its own namespace outside provider source")
-    selected = policy()["facade"]
+    selected = policy()
     owner = owner_input()
     facade = output.with_name(output.name + "-source")
-    checkout(selected, facade)
+    owlrl = output.with_name(output.name + "-owlrl-source")
+    builder = load("build_facade_candidate")
+    peers = (("facade", "pyshacl-turbo", facade), ("owlrl", "owlrl-turbo", owlrl))
+    frozen = {}
+    for name, project, source in peers:
+        checkout(selected[name], source)
+        frozen[name] = builder.freeze(source, selected[name]["revision"], project, run)
     build_output = output.with_name(output.name + "-build")
     arguments = SimpleNamespace(
         facade_source=facade,
-        facade_revision=selected["revision"],
+        facade_revision=selected["facade"]["revision"],
         provider_revision=owner["revision"],
         declaration_source=None,
         declaration_revision=None,
@@ -112,10 +118,13 @@ def prepare(output):
         output=build_output,
         python=sys.executable,
     )
-    record = load("build_facade_candidate").build(arguments)
-    retain_evidence(build_output, output, record)
+    record = builder.build(arguments)
     if owner_input() != owner:
         raise ValueError("Native provider source changed during candidate preparation")
+    for name, project, source in peers:
+        if builder.freeze(source, selected[name]["revision"], project, run) != frozen[name]:
+            raise ValueError("Immutable peer source changed during candidate preparation")
+    retain_evidence(build_output, output, record)
     return output
 
 
