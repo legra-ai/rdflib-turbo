@@ -92,3 +92,43 @@ fn max_cardinality_retains_literal_equality() {
         GraphName::DefaultGraph,
     )));
 }
+
+#[test]
+fn qualified_cardinality_retains_literal_equality_in_both_branches() {
+    for qualification in [
+        "<urn:R> owl:onClass <urn:C> . <urn:p> rdfs:range <urn:C> .",
+        "<urn:R> owl:onClass owl:Thing .",
+    ] {
+        let data = closure(&format!(
+            r#"
+            <urn:R> owl:onProperty <urn:p> ; owl:maxQualifiedCardinality 1 .
+            <urn:x> a <urn:R> ; <urn:p> "left", "right" .
+            <urn:y> <urn:q> "left" .
+            {qualification}
+        "#
+        ));
+        assert!(data.contains(&Quad::new(
+            NamedNode::new("urn:y").unwrap(),
+            NamedNode::new("urn:q").unwrap(),
+            Literal::new_simple_literal("right"),
+            GraphName::DefaultGraph,
+        )));
+    }
+}
+
+#[test]
+fn qualified_cardinality_requires_both_value_types() {
+    let data = closure(
+        r#"
+        <urn:R> owl:onProperty <urn:p> ; owl:maxQualifiedCardinality 1 ; owl:onClass <urn:C> .
+        <urn:x> a <urn:R> ; <urn:p> "left", "right" .
+        <urn:y> <urn:q> "left" .
+    "#,
+    );
+    assert!(!data.contains(&Quad::new(
+        NamedNode::new("urn:y").unwrap(),
+        NamedNode::new("urn:q").unwrap(),
+        Literal::new_simple_literal("right"),
+        GraphName::DefaultGraph,
+    )));
+}

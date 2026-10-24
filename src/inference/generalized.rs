@@ -20,6 +20,8 @@ mod equality_work_tests;
 mod list_cardinality_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tuple_tests;
 
 pub(super) const GENERALIZED_GRAPH: NamedNodeRef<'static> =
     NamedNodeRef::new_unchecked("urn:rdflib-turbo:inference:generalized");
