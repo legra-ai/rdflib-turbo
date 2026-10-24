@@ -15,13 +15,13 @@ struct ExistingHeads<'a> {
     full_scans: Cell<usize>,
 }
 
-impl Graph for ExistingHeads<'_> {
+impl<'data> Graph for ExistingHeads<'data> {
     fn quads<'a>(
         &'a self,
-        s: Option<NamedOrBlankNodeRef<'a>>,
-        p: Option<NamedNodeRef<'a>>,
-        o: Option<TermRef<'a>>,
-    ) -> impl Iterator<Item = Result<Quad>> + 'a {
+        s: Option<NamedOrBlankNodeRef<'_>>,
+        p: Option<NamedNodeRef<'_>>,
+        o: Option<TermRef<'_>>,
+    ) -> impl Iterator<Item = Result<Quad>> + use<'a, 'data> {
         self.work.set(self.work.get() + 1);
         if s.is_none() && o.is_none() {
             self.full_scans.set(self.full_scans.get() + 1);

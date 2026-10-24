@@ -66,3 +66,23 @@ def test_failed_budget_stops_remaining_processes(budgets, monkeypatch):
 
 def test_native_boolean_membership_budget_is_required(budgets):
     assert "store::read_input_tests::native_boolean_membership_avoids_result_rows" in budgets.TESTS
+
+
+def test_borrowed_validation_view_budget_is_required(budgets):
+    assert (
+        "inference::borrowed_tests::borrowed_validation_view_does_not_clone_large_base_lexical_storage"
+        in budgets.TESTS
+    )
+
+
+@pytest.mark.parametrize(
+    "name",
+    (
+        "inference::scoped::boolean_tests::scoped_boolean_probes_do_not_clone_bound_lexical_terms",
+        "inference::backend::boolean_tests::default_dataset_boolean_does_not_clone_bound_lexical_terms",
+        "inference::backend::boolean_tests::transaction_destination_boolean_does_not_clone_bound_lexical_terms",
+        "inference::borrowed::boolean_tests::borrowed_overlay_boolean_does_not_materialize_overlay_lexical_terms",
+    ),
+)
+def test_inference_boolean_allocation_budgets_are_required(budgets, name):
+    assert name in budgets.TESTS
