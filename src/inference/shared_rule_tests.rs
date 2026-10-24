@@ -1,5 +1,6 @@
 use datalog_structural_model::{
-    Atom, BuiltinFilter, ConstantSymbol, Literal, PredicateSymbol, Term, VariableSymbol,
+    AggregateBody, Aggregator, Atom, BindExpr, BuiltinFilter, ConstantSymbol, Literal,
+    PredicateSymbol, Rule, Term, VariableSymbol,
 };
 use oxigraph::model::{Dataset, GraphName, NamedNode, NamedOrBlankNode, Quad, Triple};
 use oxigraph::sparql::{PreparedSparqlQuery, QueryEvaluationError, QueryResults};
@@ -297,4 +298,48 @@ fn shared_list_consumers_compile_but_auxiliary_heads_and_bad_arity_fail() {
         .push(Term::Constant(ConstantSymbol::new("urn:extra")));
     assert!(rule.is_safe());
     assert!(super::shared::CompiledRule::try_new(&rule).is_err());
+}
+
+#[test]
+fn shared_aggregate_exports_validate_before_adapter_rejection() {
+    let total = VariableSymbol::new("total");
+    let copy = VariableSymbol::new("copy");
+    let input = VariableSymbol::new("input");
+    // bounded: one fixed clause with a single aggregate and subsequent bind.
+    let rule = Rule::try_new(
+        Atom {
+            predicate: PredicateSymbol::new(rdf_reasoning::TRIPLE_RELATION),
+            terms: vec![
+                Term::Constant(ConstantSymbol::new("urn:shared:subject")),
+                Term::Constant(ConstantSymbol::new("urn:shared:count")),
+                Term::Variable(copy.clone()),
+            ],
+        },
+        vec![
+            Literal::Aggregate(AggregateBody {
+                result_var: total.clone(),
+                aggregator: Aggregator::Count,
+                input_var: input.clone(),
+                group_by: vec![],
+                inner_body: vec![Literal::Positive(Atom {
+                    predicate: PredicateSymbol::new("urn:shared:input-relation"),
+                    terms: vec![
+                        Term::Variable(VariableSymbol::new("subject")),
+                        Term::Constant(ConstantSymbol::new("urn:shared:input")),
+                        Term::Variable(input),
+                    ],
+                })],
+            }),
+            Literal::Bind {
+                var: copy,
+                expr: BindExpr::Term(Term::Variable(total)),
+            },
+        ],
+    )
+    .expect("shared aggregate exports must bind subsequent expressions");
+    assert!(rule.is_safe());
+    assert!(matches!(
+        super::shared::CompiledRule::try_new(&rule),
+        Err(crate::Error::Unsupported(_))
+    ));
 }
