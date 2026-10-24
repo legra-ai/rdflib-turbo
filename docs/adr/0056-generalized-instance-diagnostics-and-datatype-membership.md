@@ -32,6 +32,14 @@ just like ordinary initialization output. Reuse the existing recognized datatype
 inventory, lexical converter, ancestor hierarchy and transaction ownership.
 RDFS-only initialization remains separate.
 
+Literal-subject rdf:type tuples whose class is an IRI or blank node contain two
+independent values. Store a single inverse record in the existing private
+indexed relation and reconstruct the logical triple on reads. Preserve both
+bound-slot indexes, exact lexical identity and ordinary/generalized output
+classification. Other type shapes retain the general representation. This
+removes redundant generated row identities and column indexes; it does not
+remove facts or relax the existing inference heap budget.
+
 ## Scope
 
 This corrects generalized *instance* diagnostics and recognized literal datatype
