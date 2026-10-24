@@ -177,11 +177,9 @@ jobs:
       - name: Verify the facade cohort and arrange the original locked peer
         run: uv run --no-project --python 3.13 python -B scripts/ci_facade.py consume --input "$RUNNER_TEMP/candidate-facade-evidence" --environment-file "$GITHUB_ENV"
       - name: Unpack the tested source distribution once for every interpreter
-        run: |
-          mkdir source-build || exit 1
-          # Restored Cargo outputs can be newer than archive timestamps. Establish
-          # checkout freshness while preserving the tested archive and source bytes.
-          tar -xzmf "$RUNNER_TEMP/release-source-dist/"*.tar.gz --strip-components=1 -C source-build || exit 1
+        # New files retain executable modes and invalidate stale restored Cargo
+        # outputs. Native Python paths also preserve Windows drive semantics.
+        run: uv run --no-project --python 3.13 python -I -B scripts/extract_source.py --archive-directory "$RUNNER_TEMP/release-source-dist" --destination source-build
       - name: Build native manylinux wheel from source archive
         if: runner.os == 'Linux'
         run: sh scripts/build_manylinux.sh '${{ matrix.container }}' '${{ matrix.target }}' cp311-cp311 cp312-cp312 cp313-cp313 cp314-cp314 cp315-cp315

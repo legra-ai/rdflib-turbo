@@ -75,5 +75,10 @@ def test_downloaded_source_archive_stays_outside_the_frozen_provider_checkout():
     wheels = job(workflow, "wheels", "native-coverage")
     download = wheels.split("name: release-sdist", 1)[1].split("- uses:", 1)[0]
     assert "path: ${{ runner.temp }}/release-source-dist" in download
-    assert 'tar -xzmf "$RUNNER_TEMP/release-source-dist/"*.tar.gz' in wheels
+    assert (
+        'python -I -B scripts/extract_source.py --archive-directory "$RUNNER_TEMP/release-source-dist" --destination source-build'
+        in wheels
+    )
+    assert "--python 3.13" in wheels
+    assert "tar -" not in wheels
     assert "path: source-dist" not in download
