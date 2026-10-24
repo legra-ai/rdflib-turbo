@@ -135,6 +135,12 @@ def test_environment_lines_cannot_inject_other_github_commands(tmp_path):
     assert destination.read_text() == "SHACL_WHEEL=/tmp/original.whl\n"
 
 
+def test_original_archive_sha256_environment_name_is_valid(tmp_path):
+    destination = tmp_path / "environment"
+    helper().write_environment(destination, {"OWLRL_SHA256": "a" * 64})
+    assert destination.read_text() == "OWLRL_SHA256=" + "a" * 64 + "\n"
+
+
 def test_consumer_git_launch_does_not_use_the_posix_only_coverage_launcher(monkeypatch):
     module = helper()
     calls = []

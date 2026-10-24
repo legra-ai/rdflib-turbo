@@ -191,10 +191,10 @@ def consume(bundle):
 def write_environment(destination, values):
     if any("\n" in str(value) or "\r" in str(value) for value in values.values()):
         raise ValueError("GitHub environment values must fit one line")
+    if any(not re.fullmatch(r"[A-Z_][A-Z0-9_]*", name) for name in values):
+        raise ValueError("Invalid CI environment variable name")
     with destination.open("a") as stream:
         for name, value in values.items():
-            if not re.fullmatch(r"[A-Z_]+", name):
-                raise ValueError("Invalid CI environment variable name")
             stream.write(f"{name}={value}\n")
 
 
