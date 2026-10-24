@@ -35,7 +35,7 @@ reference comparisons. This decision does not claim complete RDFS value parity.
 
 ## Numeric reference value classes
 
-Use rdf-reasoning 0.4.0's LiteralRuleId and ExactNumber for the string and numeric
+Use rdf-reasoning 1.0.0's LiteralRuleId and ExactNumber for the string and numeric
 value-class join. The runtime supplies the relation explicitly; ordinary shared
 rule compilation rejects it without that capability. Keep exact source literal
 identities in the result and require bound keys on both sides of the hash join.
