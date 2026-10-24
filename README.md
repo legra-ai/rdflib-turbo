@@ -246,6 +246,12 @@ registering a named RDFLib storage plugin.
 Compiled pyshacl-turbo shapes validate Store and open Transaction directly;
 stored data is never copied into Dataset for inference or validation.
 
+The pinned shared engine includes `sh:singleLine` from the
+[SHACL 1.2 Core Working Draft of 14 October 2026](https://www.w3.org/TR/2026/WD-shacl12-core-20261014/#SingleLineConstraintComponent).
+Borrowed Graph and StoreDataset validation retains literal identity and reports
+the draft constraint through the same native owner. This selected, at-risk draft
+coverage does not establish complete SHACL 1.2 conformance.
+
 ```python
 from pyshacl_turbo import compile_shapes
 from rdflib_turbo import Store, ValidationError

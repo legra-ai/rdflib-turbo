@@ -223,7 +223,7 @@ checksum = "0e9c71c2167ca323c882b99918929403426e2373ea17242ff5653e0d5e1058be"
 [[package]]
 name = "fancy-regex"
 version = "0.19.2"
-source = "git+https://github.com/legra-ai/pyshacl-turbo?rev=0002b1c346229b53e6ef89db80d684612946af39#0002b1c346229b53e6ef89db80d684612946af39"
+source = "git+https://github.com/legra-ai/pyshacl-turbo?rev=5a5bb294eb0c270c6159e70665f9cf30039e7521#5a5bb294eb0c270c6159e70665f9cf30039e7521"
 dependencies = [
  "bit-set",
  "regex-automata",
@@ -339,13 +339,13 @@ dependencies = [
 
 [[package]]
 name = "iri-rfc3987"
-version = "0.1.6"
+version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b6790b711bd780f87a45a2bd1f241f5b2c631f07e5664c5f9167b4277f80862"
+checksum = "d58e84286e9d1e9ca8f172f0195624439191118d2b7d82ec8f944cbfa17f59c2"
 dependencies = [
  "borrow-or-share",
  "ref-cast",
- "rhusky 0.0.6",
+ "rhusky 2.0.1",
  "serde",
 ]
 
@@ -524,7 +524,7 @@ dependencies = [
  "sparesults",
  "spareval",
  "spargebra",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -552,7 +552,7 @@ dependencies = [
  "oxiri",
  "oxrdf",
  "ryu-js",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -565,7 +565,7 @@ dependencies = [
  "oxsdatatypes",
  "rand 0.9.5",
  "sha2",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -578,7 +578,7 @@ dependencies = [
  "oxrdf",
  "oxrdfxml",
  "oxttl",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -591,7 +591,7 @@ dependencies = [
  "oxiri",
  "oxrdf",
  "quick-xml",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -607,7 +607,7 @@ name = "oxsdatatypes"
 version = "0.2.3"
 dependencies = [
  "sha2",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -620,7 +620,7 @@ dependencies = [
  "oxilangtag",
  "oxiri",
  "oxrdf",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -824,8 +824,8 @@ dependencies = [
 
 [[package]]
 name = "pyshacl-turbo-engine"
-version = "0.6.3"
-source = "git+https://github.com/legra-ai/pyshacl-turbo?rev=0002b1c346229b53e6ef89db80d684612946af39#0002b1c346229b53e6ef89db80d684612946af39"
+version = "0.6.5"
+source = "git+https://github.com/legra-ai/pyshacl-turbo?rev=5a5bb294eb0c270c6159e70665f9cf30039e7521#5a5bb294eb0c270c6159e70665f9cf30039e7521"
 dependencies = [
  "bigdecimal",
  "fancy-regex",
@@ -948,14 +948,14 @@ dependencies = [
 
 [[package]]
 name = "rdf-structural-model"
-version = "0.1.0"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "327a23206458dffc34fa4a529a077903290a6240155f2c53aaad4bd45fe48621"
+checksum = "be2f3bb20dab890cce27c997c7f3c85df615853a992fd7bbd5c8d5c70c8cc8d2"
 dependencies = [
  "borrow-or-share",
  "iri-rfc3987",
  "langtag",
- "rhusky 0.0.6",
+ "rhusky 2.0.1",
  "serde",
  "thiserror 2.0.21",
 ]
@@ -1165,13 +1165,13 @@ dependencies = [
 
 [[package]]
 name = "shacl-structural-model"
-version = "5.0.0"
+version = "6.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70e2e32f4e47db409109512d17715428dad6fa1e5672ac6200b9999bc7a7e806"
+checksum = "b7926e95879078e14ecd7f61ff4bb66fbffe425c18bc2a4c34549305378cb52d"
 dependencies = [
  "iri-rfc3987",
  "rdf-structural-model",
- "rhusky 0.0.6",
+ "rhusky 2.0.1",
  "serde",
  "thiserror 2.0.21",
 ]
@@ -1216,7 +1216,7 @@ dependencies = [
  "memchr",
  "oxrdf",
  "quick-xml",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -1237,7 +1237,7 @@ dependencies = [
  "sparesults",
  "spargebra",
  "sparopt",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -1250,7 +1250,7 @@ dependencies = [
  "peg",
  "rand 0.9.5",
  "sha2",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
