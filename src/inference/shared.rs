@@ -10,18 +10,46 @@ use spargebra::term::Variable;
 
 use crate::{Error, Result};
 
+pub(super) enum RulePartition {
+    All,
+    GeneralizedHead,
+    GeneralizedPremise(usize),
+}
+
 pub(super) struct CompiledRule(PreparedSparqlQuery);
 
 impl CompiledRule {
     pub(super) fn try_new(rule: &Rule) -> Result<Self> {
+        Self::partition(rule, RulePartition::All)
+    }
+
+    pub(super) fn partition(rule: &Rule, partition: RulePartition) -> Result<Self> {
         if !rule.is_safe() {
             return Err(Error::Unsupported("Unsafe shared inference rule".into()));
         }
         Self::atom(&rule.head)?;
+        if let RulePartition::GeneralizedPremise(index) = partition
+            && !matches!(rule.body.get(index), Some(Literal::Positive(_)))
+        {
+            return Err(Error::Unsupported(
+                "Generalized premise must select a positive atom".into(),
+            ));
+        }
         let mut body = String::new();
-        for literal in &rule.body {
+        for (index, literal) in rule.body.iter().enumerate() {
             match literal {
-                Literal::Positive(atom) => body.push_str(&Self::body_atom(atom)?),
+                Literal::Positive(atom) => {
+                    let pattern = Self::body_atom(atom)?;
+                    if matches!(partition, RulePartition::GeneralizedPremise(selected) if index == selected)
+                    {
+                        body.push_str(&format!(
+                            "GRAPH {} {{ {pattern} }} ",
+                            super::generalized::GENERALIZED_GRAPH
+                        ));
+                    } else {
+                        body.push_str(&pattern);
+                    }
+                }
                 Literal::Filter(BuiltinFilter::Ne(left, right)) => {
                     body.push_str(&format!(
                         "FILTER(!sameTerm({}, {})) ",
@@ -36,6 +64,13 @@ impl CompiledRule {
                     ));
                 }
             }
+        }
+        if matches!(partition, RulePartition::GeneralizedHead) {
+            let subject = Self::term(&rule.head.terms[0])?;
+            let predicate = Self::term(&rule.head.terms[1])?;
+            body.push_str(&format!(
+                "FILTER (!(isIRI({subject}) || isBlank({subject})) || !isIRI({predicate})) "
+            ));
         }
         // bounded: exactly three head columns, preserving every RDF term kind.
         let columns = rule

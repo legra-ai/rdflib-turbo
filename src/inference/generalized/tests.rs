@@ -52,3 +52,31 @@ fn generalized_rows_preserve_exact_identity_and_deduplicate() {
         1
     );
 }
+
+#[test]
+fn equality_connects_named_aliases_through_a_literal() {
+    let document = r#"
+        @prefix owl: <http://www.w3.org/2002/07/owl#> .
+        <urn:a> owl:sameAs "shared" .
+        <urn:b> owl:sameAs "shared" .
+        <urn:a> <urn:p> <urn:value> .
+    "#;
+    // bounded: three input statements and their finite tiny closure.
+    let mut data: Dataset = RdfParser::from_format(RdfFormat::Turtle)
+        .for_slice(document.as_bytes())
+        .map(|quad| quad.unwrap())
+        .collect();
+    expand(&mut data, "owlrl", InferenceRequest::default()).unwrap();
+    assert!(data.contains(&Quad::new(
+        NamedNode::new("urn:a").unwrap(),
+        NamedNode::new("http://www.w3.org/2002/07/owl#sameAs").unwrap(),
+        NamedNode::new("urn:b").unwrap(),
+        GraphName::DefaultGraph,
+    )));
+    assert!(data.contains(&Quad::new(
+        NamedNode::new("urn:b").unwrap(),
+        NamedNode::new("urn:p").unwrap(),
+        NamedNode::new("urn:value").unwrap(),
+        GraphName::DefaultGraph,
+    )));
+}

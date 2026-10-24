@@ -7,9 +7,14 @@ use super::Pending;
 use super::backend::Graph;
 use crate::{Error, Result};
 
+mod equality;
 mod query;
+pub(super) use equality::EqualityRules;
 #[cfg(test)]
 mod tests;
+
+pub(super) const GENERALIZED_GRAPH: NamedNodeRef<'static> =
+    NamedNodeRef::new_unchecked("urn:rdflib-turbo:inference:generalized");
 
 const COLUMNS: [NamedNodeRef<'static>; 3] = [
     NamedNodeRef::new_unchecked("urn:rdflib-turbo:inference:subject"),
@@ -102,33 +107,45 @@ impl Generalized {
                     .on_queryable_dataset(query::View { data, extra: self })
                     .execute()?
             };
-            let QueryResults::Solutions(solutions) = results else {
-                return Err(Error::Runtime(
-                    "Shared inference requires head bindings".into(),
-                ));
-            };
-            for solution in solutions {
-                let solution = solution?;
-                let row = ["__head_s", "__head_p", "__head_o"].map(|name| {
-                    solution.get(name).cloned().ok_or_else(|| {
-                        Error::Runtime(format!("Unbound shared inference head: {name}"))
-                    })
-                });
-                let [subject, predicate, object] = row;
-                let row = [subject?, predicate?, object?];
-                match (
-                    NamedOrBlankNode::try_from(row[0].clone()),
-                    NamedNode::try_from(row[1].clone()),
-                ) {
-                    (Ok(subject), Ok(predicate)) => ordinary.push(
-                        data,
-                        Quad::new(subject, predicate, row[2].clone(), GraphName::DefaultGraph),
-                    )?,
-                    _ if !self.contains(&row) => pending.insert(row),
-                    _ => {}
-                }
-            }
+            self.retain(results, data, ordinary, &mut pending)?;
         }
         Ok(pending)
+    }
+
+    fn retain(
+        &self,
+        results: QueryResults<'_>,
+        data: &impl Graph,
+        ordinary: &mut Pending,
+        pending: &mut Self,
+    ) -> Result<()> {
+        let QueryResults::Solutions(solutions) = results else {
+            return Err(Error::Runtime(
+                "Shared inference requires head bindings".into(),
+            ));
+        };
+        for solution in solutions {
+            let solution = solution?;
+            let row = ["__head_s", "__head_p", "__head_o"].map(|name| {
+                solution
+                    .get(name)
+                    .cloned()
+                    .ok_or_else(|| Error::Runtime(format!("Unbound shared inference head: {name}")))
+            });
+            let [subject, predicate, object] = row;
+            let row = [subject?, predicate?, object?];
+            match (
+                NamedOrBlankNode::try_from(row[0].clone()),
+                NamedNode::try_from(row[1].clone()),
+            ) {
+                (Ok(subject), Ok(predicate)) => ordinary.push(
+                    data,
+                    Quad::new(subject, predicate, row[2].clone(), GraphName::DefaultGraph),
+                )?,
+                _ if !self.contains(&row) => pending.insert(row),
+                _ => {}
+            }
+        }
+        Ok(())
     }
 }
