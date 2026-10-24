@@ -73,6 +73,9 @@ def installed(tmp_path, monkeypatch):
             (package / path.relative_to(source / "src/owlrl_turbo")).write_bytes(path.read_bytes())
     module = types.ModuleType("owlrl_turbo")
     module.__file__ = str(package / "__init__.py")
+    for name in tuple(sys.modules):
+        if name.startswith("owlrl_turbo."):
+            monkeypatch.delitem(sys.modules, name)
     monkeypatch.setitem(sys.modules, "owlrl_turbo", module)
     return wheel, venv, package
 
@@ -94,4 +97,15 @@ def test_source_import_or_installed_payload_drift_is_rejected(tmp_path, monkeypa
     else:
         venv = tmp_path / "other"
     with pytest.raises(ValueError):
+        helper().verify_loaded(wheel, venv)
+
+
+def test_loaded_reasoning_submodule_cannot_come_from_another_source_tree(tmp_path, monkeypatch):
+    wheel, venv, _ = installed(tmp_path, monkeypatch)
+    foreign = tmp_path / "foreign.py"
+    foreign.write_text("foreign reasoning implementation")
+    submodule = types.ModuleType("owlrl_turbo._closure")
+    submodule.__file__ = str(foreign)
+    monkeypatch.setitem(sys.modules, submodule.__name__, submodule)
+    with pytest.raises(ValueError, match="submodule"):
         helper().verify_loaded(wheel, venv)

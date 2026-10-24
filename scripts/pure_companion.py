@@ -5,6 +5,7 @@ import hashlib
 import importlib
 import json
 import re
+import sys
 import tomllib
 from email.parser import BytesParser
 from pathlib import Path
@@ -85,6 +86,16 @@ def verify_loaded(wheel, environment):
     actual = source_payload(root)
     if not root.is_relative_to(Path(environment).resolve()) or actual != wheel_payload(wheel):
         raise ValueError("Installed OWL companion payload differs from its original wheel")
+    for name, module in tuple(sys.modules.items()):
+        if name != "owlrl_turbo" and not name.startswith("owlrl_turbo."):
+            continue
+        origin = getattr(module, "__file__", None)
+        if origin is None or not Path(origin).resolve(strict=True).is_relative_to(root):
+            raise ValueError("Loaded OWL companion submodule has a foreign source origin")
+        path = Path(origin).resolve(strict=True)
+        key = "owlrl_turbo/" + path.relative_to(root).as_posix()
+        if actual.get(key) != digest(path):
+            raise ValueError("Loaded OWL companion submodule differs from the original payload")
     return {"package": str(root), "payload": actual, "wheel_sha256": digest(wheel)}
 
 
