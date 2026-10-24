@@ -32,3 +32,30 @@ cached Python values from before lexical normalization; preserving that state
 is an unresolved transport contract, not an accepted parity exception. Numeric,
 binary, temporal, XML and context-sensitive value profiles require their own
 reference comparisons. This decision does not claim complete RDFS value parity.
+
+## Numeric reference value classes
+
+Use rdf-reasoning 1.0.0's LiteralRuleId and ExactNumber for the string and numeric
+value-class join. The runtime supplies the relation explicitly; ordinary shared
+rule compilation rejects it without that capability. Keep exact source literal
+identities in the result and require bound keys on both sides of the hash join.
+
+Default RDFLib numeric conversion is separate from AltXSD datatype diagnostics:
+booleans compare with numbers, integer subtypes use Python integer values without
+AltXSD range checks, and both float and double use binary64. Decimal coefficients
+and binary floats share exact finite keys without rounding decimal 0.1 into
+binary 0.1. Signed mathematical zeros join; positive and negative infinities
+have separate keys. NaNs never acquire an equality key. The reference identity
+publication remains separate, retaining each original statement even for NaN.
+
+Capture integer digit limits and Decimal status in the existing invocation-owned
+context. Propagate signaling-NaN comparison exceptions before publishing the
+substitution delta, retain Decimal conversion flags, and record FloatOperation
+when the input includes comparable Decimal and float categories. A scalar pass
+records these effects without constructing a Cartesian literal relation.
+
+The fixed 26-term oracle checks 1,352 reference pairs, including subnormal floats,
+large exponents, invalid lexicals and both InvalidOperation trap settings. This
+extends the existing RDFS reference profile; it does not define standard OWL
+numeric datatype identity or resolve cached/custom Python literal values,
+binary/temporal/XML equality, or complete Python owlrl compatibility.

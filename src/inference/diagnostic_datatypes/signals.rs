@@ -57,6 +57,11 @@ impl Signal {
 pub(super) struct Signals(AtomicU16);
 
 impl Signals {
+    pub(super) fn record_float_operation(&self) {
+        self.0
+            .fetch_or(Signal::FloatOperation.bit(), Ordering::Relaxed);
+    }
+
     pub(super) fn snapshot(&self) -> u16 {
         self.0.load(Ordering::Relaxed)
     }

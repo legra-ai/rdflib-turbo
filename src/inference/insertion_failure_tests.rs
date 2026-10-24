@@ -110,10 +110,13 @@ fn literal_substitution_and_diagnostic_insertions_propagate_failures() {
     let mut data = Dataset::from_iter([&plain, &typed]);
     {
         let mut journal = data.insert_transaction();
-        error(literal_values::strings(&mut InsertionFault {
-            journal: &mut journal,
-            remaining: 0,
-        }));
+        error(literal_values::substitute(
+            &mut InsertionFault {
+                journal: &mut journal,
+                remaining: 0,
+            },
+            &Default::default(),
+        ));
     }
     {
         let mut journal = data.insert_transaction();

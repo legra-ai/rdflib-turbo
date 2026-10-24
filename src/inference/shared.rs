@@ -4,7 +4,8 @@ use datalog_structural_model::{Atom, BuiltinFilter, Literal, Rule, Term};
 use oxigraph::model::NamedNodeRef;
 use oxigraph::sparql::{PreparedSparqlQuery, SparqlEvaluator};
 use rdf_reasoning::{
-    ListRuleId, Owlrl762RuleId, RDF_LIST_MEMBER_RELATION, RuleId::*, TRIPLE_RELATION,
+    LITERAL_VALUE_RELATION, ListRuleId, Owlrl762RuleId, RDF_LIST_MEMBER_RELATION, RuleId::*,
+    TRIPLE_RELATION,
 };
 use spargebra::term::Variable;
 
@@ -24,6 +25,18 @@ impl CompiledRule {
     }
 
     pub(super) fn partition(rule: &Rule, partition: RulePartition) -> Result<Self> {
+        Self::compile(rule, partition, None)
+    }
+
+    pub(super) fn with_literal_values(rule: &Rule, evaluator: SparqlEvaluator) -> Result<Self> {
+        Self::compile(rule, RulePartition::All, Some(evaluator))
+    }
+
+    fn compile(
+        rule: &Rule,
+        partition: RulePartition,
+        evaluator: Option<SparqlEvaluator>,
+    ) -> Result<Self> {
         if !rule.is_safe() {
             return Err(Error::Unsupported("Unsafe shared inference rule".into()));
         }
@@ -39,7 +52,7 @@ impl CompiledRule {
         for (index, literal) in rule.body.iter().enumerate() {
             match literal {
                 Literal::Positive(atom) => {
-                    let pattern = Self::body_atom(atom)?;
+                    let pattern = Self::body_atom(atom, evaluator.is_some())?;
                     if matches!(partition, RulePartition::GeneralizedPremise(selected) if index == selected)
                     {
                         body.push_str(&format!(
@@ -92,7 +105,8 @@ impl CompiledRule {
             .map(|(term, name)| Self::term(term).map(|term| format!("({term} AS ?{name})")))
             .collect::<Result<Vec<_>>>()?;
         let text = format!("SELECT {} WHERE {{ {body} }}", columns.join(" "));
-        SparqlEvaluator::new()
+        evaluator
+            .unwrap_or_default()
             .parse_query(&text)
             .map(Self)
             .map_err(|error| Error::Runtime(format!("Invalid shared inference rule: {error}")))
@@ -110,7 +124,26 @@ impl CompiledRule {
         })
     }
 
-    fn body_atom(atom: &Atom) -> Result<String> {
+    fn body_atom(atom: &Atom, literal_values: bool) -> Result<String> {
+        if atom.predicate.as_str() == LITERAL_VALUE_RELATION {
+            if !literal_values || atom.terms.len() != 2 {
+                return Err(Error::Unsupported("Literal value classes require an explicit value-key evaluator and two operands".into()));
+            }
+            let literal = Self::term(&atom.terms[0])?;
+            let key = Self::term(&atom.terms[1])?;
+            // Only these two variables escape the subquery. Private scan names
+            // cannot collide with either operand or an outer rule variable.
+            let mut stem = "__literal".to_owned();
+            while [literal.as_str(), key.as_str()]
+                .iter()
+                .any(|term| term.starts_with(&format!("?{stem}")))
+            {
+                stem.push('_');
+            }
+            return Ok(format!(
+                "{{ SELECT DISTINCT {literal} {key} WHERE {{ ?{stem}s ?{stem}p {literal} . BIND (<{LITERAL_VALUE_RELATION}>({literal}) AS {key}) FILTER (BOUND({key})) }} }} "
+            ));
+        }
         if atom.predicate.as_str() != RDF_LIST_MEMBER_RELATION {
             return Self::atom(atom);
         }
