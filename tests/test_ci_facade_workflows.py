@@ -68,3 +68,12 @@ def test_only_original_native_archives_are_selected_for_publication():
     assert "pattern: release-*" in publish
     assert "candidate-facade-evidence" not in publish
     assert "pending-packages/*" in publish
+
+
+def test_downloaded_source_archive_stays_outside_the_frozen_provider_checkout():
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+    wheels = job(workflow, "wheels", "native-coverage")
+    download = wheels.split("name: release-sdist", 1)[1].split("- uses:", 1)[0]
+    assert "path: ${{ runner.temp }}/release-source-dist" in download
+    assert 'tar -xzmf "$RUNNER_TEMP/release-source-dist/"*.tar.gz' in wheels
+    assert "path: source-dist" not in download
