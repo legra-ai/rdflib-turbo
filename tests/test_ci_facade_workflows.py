@@ -25,6 +25,7 @@ def test_every_provider_wheel_job_verifies_the_shared_artifact_before_acceptance
     assert "scripts/ci_facade.py consume" in wheels
     call = next(line for line in wheels.splitlines() if "scripts/test_wheel.py" in line)
     assert '--shacl-wheel "$SHACL_WHEEL"' in call
+    assert '--owlrl-wheel "$OWLRL_WHEEL"' in call
     assert wheels.index("scripts/ci_facade.py consume") < wheels.index("scripts/test_wheel.py")
     assert "scripts/ci_facade.py prepare" not in wheels
 

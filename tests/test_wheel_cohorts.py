@@ -103,11 +103,12 @@ def test_explicit_cohort_selects_and_tests_every_matching_pair(tmp_path, monkeyp
     monkeypatch.setattr(
         module,
         "test_installed_wheel",
-        lambda path, version, facade: called.append((path, version, facade)),
+        lambda path, version, facade, owl: called.append((path, version, facade, owl)),
     )
     facade = tmp_path / "pyshacl_turbo-0.7.0-py3-none-any.whl"
-    module.test_matrix(selected, facade, versions=versions)
-    assert called == [(expected[version], version, facade) for version in versions]
+    owl = tmp_path / "owlrl_turbo-0.1.0a3-py3-none-any.whl"
+    module.test_matrix(selected, facade, owl, versions=versions)
+    assert called == [(expected[version], version, facade, owl) for version in versions]
 
 
 @pytest.mark.parametrize("versions", ((), ("3.10",), ("3.11", "3.11"), ("3.15", "3.11")))
@@ -134,20 +135,32 @@ def test_main_accepts_an_explicit_cohort_without_weakening_the_default(tmp_path,
     (tmp_path / "pyproject.toml").write_text('[project]\nversion = "0.2.0a1"\n')
     monkeypatch.setattr(module, "ROOT", tmp_path)
     facade = tmp_path / "pyshacl_turbo-0.7.0-py3-none-any.whl"
+    owl = tmp_path / "owlrl_turbo-0.1.0a3-py3-none-any.whl"
     monkeypatch.setattr(module, "require_facade_wheel", lambda path: path)
+    monkeypatch.setattr(module, "require_owlrl_wheel", lambda path: path)
     monkeypatch.setattr(
         sys,
         "argv",
-        ["test_wheel.py", "--shacl-wheel", str(facade), "--python-versions", *VERSIONS[3:]],
+        [
+            "test_wheel.py",
+            "--shacl-wheel",
+            str(facade),
+            "--owlrl-wheel",
+            str(owl),
+            "--python-versions",
+            *VERSIONS[3:],
+        ],
     )
     called = []
     monkeypatch.setattr(
         module,
         "test_installed_wheel",
-        lambda path, version, facade: called.append((path, version, facade)),
+        lambda path, version, facade, owl: called.append((path, version, facade, owl)),
     )
     module.main()
-    assert called == [(expected[version], version, facade) for version in VERSIONS[3:]]
-    monkeypatch.setattr(sys, "argv", ["test_wheel.py", "--shacl-wheel", str(facade)])
+    assert called == [(expected[version], version, facade, owl) for version in VERSIONS[3:]]
+    monkeypatch.setattr(
+        sys, "argv", ["test_wheel.py", "--shacl-wheel", str(facade), "--owlrl-wheel", str(owl)]
+    )
     with pytest.raises(ValueError):
         module.main()

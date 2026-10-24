@@ -41,6 +41,8 @@ def wheel(path, requirement="rdflib>=7.3,<8", *, name="rdflib-turbo", extra=None
                 "pyshacl_turbo/assets/probe.txt": b"asset\n",
             }
         )
+    if name == "owlrl-turbo":
+        members["owlrl_turbo/__init__.py"] = b"reasoning companion\n"
     members.update(extra or {})
     with ZipFile(path, "w") as archive:
         for member, payload in members.items():
@@ -50,6 +52,25 @@ def wheel(path, requirement="rdflib>=7.3,<8", *, name="rdflib-turbo", extra=None
 
 def companion(tmp_path, **kwargs):
     return wheel(tmp_path / "pyshacl_turbo-0.0.0-py3-none-any.whl", name="pyshacl-turbo", **kwargs)
+
+
+def reasoning(tmp_path, **kwargs):
+    return wheel(tmp_path / "owlrl_turbo-0.0.0-py3-none-any.whl", name="owlrl-turbo", **kwargs)
+
+
+def test_reasoning_original_wheel_is_required_before_any_provider_collection(tmp_path):
+    path = reasoning(tmp_path)
+    assert driver().require_owlrl_wheel(path) == path.resolve()
+    for missing in (None, tmp_path / "missing.whl", tmp_path):
+        with pytest.raises(ValueError):
+            driver().require_owlrl_wheel(missing)
+
+
+def test_reasoning_cannot_supply_a_second_native_runtime(tmp_path):
+    with pytest.raises(ValueError):
+        driver().require_owlrl_wheel(
+            reasoning(tmp_path, extra={"owlrl_turbo/engine.so": b"native"})
+        )
 
 
 def test_explicit_pure_facade_artifact_is_required(tmp_path):
@@ -171,6 +192,7 @@ def test_loaded_facade_rejects_changed_extra_or_source_payloads(tmp_path, monkey
 
 def test_isolated_project_receives_only_exact_wheel_sources(tmp_path, monkeypatch):
     facade = companion(tmp_path)
+    owl = reasoning(tmp_path)
     (tmp_path / "pyproject.toml").write_text(
         '[project]\nname="source-fixture"\nversion="0.0.0"\nrequires-python=">=3.11"\n'
         '[dependency-groups]\ncoverage=["pyshacl-turbo==0.0.0"]\n'
@@ -197,15 +219,25 @@ def test_isolated_project_receives_only_exact_wheel_sources(tmp_path, monkeypatc
 
     monkeypatch.setattr(module.subprocess, "run", run)
     python = f"{sys.version_info.major}.{sys.version_info.minor}"
-    module.test_installed_wheel(archive, python, facade)
+    module.test_installed_wheel(archive, python, facade, owl)
     project, manifest = snapshots[0]
-    for name, expected in (("pyshacl-turbo", facade), ("rdflib-turbo", archive)):
+    for name, expected in (
+        ("pyshacl-turbo", facade),
+        ("rdflib-turbo", archive),
+        ("owlrl-turbo", owl),
+    ):
         declaration = manifest["tool"]["uv"]["sources"][name]
         assert set(declaration) == {"path"}
         assert (project / declaration["path"]).resolve() == expected.resolve()
     assert not any("git+" in item for item in manifest["project"]["dependencies"])
     assert any(command[1:3] == ["python", "pin"] and command[-1] == python for command in commands)
     assert any("--verify-loaded" in command and str(facade) in command for command in commands)
+    installations = [
+        command for command in commands if command[1] == "add" and str(archive) in command
+    ]
+    assert len(installations) == 1
+    assert all(str(path) in installations[0] for path in (archive, facade, owl))
+    assert any("--verify-loaded" in command and str(owl) in command for command in commands)
     assert any("--cov-fail-under=100" in command for command in commands)
     assert not any(
         "--rev" in command or "--config-settings-package" in command for command in commands
