@@ -5,14 +5,17 @@ use oxigraph::model::Literal;
 mod cardinality;
 mod context;
 mod decimal;
+mod duration_truthiness;
 mod integer;
 mod signals;
 mod temporal;
 mod text;
+mod truthiness;
 mod unicode;
 
 pub(crate) use context::LexicalContext;
 pub(crate) use signals::SignalPublisher;
+pub(super) use truthiness::truthy;
 
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum LexicalResult {

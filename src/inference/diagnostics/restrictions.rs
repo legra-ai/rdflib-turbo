@@ -24,16 +24,17 @@ pub(super) fn collect(
                 "maxCardinality"
             },
         );
-        for declaration in data.quads(None, Some(property.as_ref()), None) {
+        for declaration in data.quads(None, Some(property.as_ref().into()), None) {
             let declaration = declaration?;
             if !is_zero(&declaration.object)? {
                 continue;
             }
             let restriction: Term = declaration.subject;
             for predicate in objects(data, &restriction, &iri(OWL, "onProperty")) {
-                let Term::NamedNode(predicate) = predicate? else {
+                let predicate = predicate?;
+                if predicate.is_literal() {
                     continue;
-                };
+                }
                 for quad in data.quads(None, Some(predicate.as_ref()), None) {
                     let quad = quad?;
                     let subject: Term = quad.subject;
@@ -64,14 +65,19 @@ pub(super) fn collect(
 }
 
 fn negative_assertions(data: &Tuples<'_, impl Graph>, errors: &mut Diagnostics) -> Result<()> {
-    for declaration in data.quads(None, Some(iri(OWL, "sourceIndividual").as_ref()), None) {
+    for declaration in data.quads(
+        None,
+        Some(iri(OWL, "sourceIndividual").as_ref().into()),
+        None,
+    ) {
         let declaration = declaration?;
         let assertion: Term = declaration.subject;
         let source = declaration.object;
         for predicate in objects(data, &assertion, &iri(OWL, "assertionProperty")) {
-            let Term::NamedNode(predicate) = predicate? else {
+            let predicate = predicate?;
+            if predicate.is_literal() {
                 continue;
-            };
+            }
             for (property, kind) in [("targetIndividual", "object"), ("targetValue", "datatype")] {
                 for target in objects(data, &assertion, &iri(OWL, property)) {
                     let target = target?;
@@ -79,7 +85,7 @@ fn negative_assertions(data: &Tuples<'_, impl Graph>, errors: &mut Diagnostics) 
                         errors.add(format!(
                             "Negative ({kind}) property assertion violated for: ({}, {}, {})",
                             text(&source),
-                            predicate.as_str(),
+                            text(&predicate),
                             text(&target)
                         ));
                     }

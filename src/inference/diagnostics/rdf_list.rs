@@ -8,6 +8,7 @@ use oxigraph::model::Term;
 use super::objects;
 use crate::graph::{RDF, iri};
 use crate::inference::backend::Graph;
+use crate::inference::diagnostic_datatypes::{self, LexicalContext};
 use crate::inference::generalized::Tuples;
 use crate::{Error, Result};
 
@@ -49,6 +50,7 @@ impl ListWitnesses {
 pub(super) struct RdfList<'a, 'graph, G> {
     data: &'a Tuples<'graph, G>,
     witnesses: &'a ListWitnesses,
+    context: &'a LexicalContext,
     head: Term,
     pub len: usize,
 }
@@ -58,10 +60,12 @@ impl<'a, 'graph, G: Graph> RdfList<'a, 'graph, G> {
         data: &'a Tuples<'graph, G>,
         witnesses: &'a ListWitnesses,
         head: Term,
+        context: &'a LexicalContext,
     ) -> Result<Self> {
         let mut cursor = Cursor {
             data,
             witnesses,
+            context,
             current: Some(head.clone()),
             guard: Some(CycleGuard {
                 anchor: head.clone(),
@@ -78,6 +82,7 @@ impl<'a, 'graph, G: Graph> RdfList<'a, 'graph, G> {
         Ok(Self {
             data,
             witnesses,
+            context,
             head,
             len,
         })
@@ -88,6 +93,7 @@ impl<'a, 'graph, G: Graph> RdfList<'a, 'graph, G> {
         Cursor {
             data: self.data,
             witnesses: self.witnesses,
+            context: self.context,
             current: Some(self.head.clone()),
             guard: None,
         }
@@ -97,6 +103,7 @@ impl<'a, 'graph, G: Graph> RdfList<'a, 'graph, G> {
 pub(super) struct Cursor<'a, 'graph, G> {
     data: &'a Tuples<'graph, G>,
     witnesses: &'a ListWitnesses,
+    context: &'a LexicalContext,
     current: Option<Term>,
     guard: Option<CycleGuard>,
 }
@@ -106,6 +113,7 @@ impl<'a, 'graph, G: Graph> Cursor<'a, 'graph, G> {
         Self {
             data: self.data,
             witnesses: self.witnesses,
+            context: self.context,
             current: self.current.clone(),
             guard: None,
         }
@@ -114,8 +122,11 @@ impl<'a, 'graph, G: Graph> Cursor<'a, 'graph, G> {
     pub fn next(&mut self) -> Result<Option<Term>> {
         while let Some(node) = self.current.take() {
             // RDFLib uses Python node truthiness, not a special rdf:nil branch.
-            // Literal-valued list cells remain outside this list-reader profile.
-            if node.is_literal() || super::text(&node).is_empty() {
+            let truthy = match &node {
+                Term::Literal(literal) => diagnostic_datatypes::truthy(literal, self.context),
+                _ => !super::text(&node).is_empty(),
+            };
+            if !truthy {
                 return Ok(None);
             }
             let selected = self.witnesses.read(self.data, &node)?;

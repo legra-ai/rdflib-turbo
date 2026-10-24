@@ -247,7 +247,7 @@ fn expand_inner(
         .collect::<Result<Vec<_>>>()?;
     loop {
         if mode != "rdfs" {
-            diagnostics.round(data, &generalized)?;
+            diagnostics.round(data, &generalized, &request.lexical_context)?;
         }
         let mut additions = std::mem::take(&mut initial_resources);
         let mut generalized_additions = generalized.apply(data, &shared_queries, &mut additions)?;
