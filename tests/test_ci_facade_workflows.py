@@ -48,6 +48,7 @@ def test_coverage_reuses_main_artifact_and_has_an_explicit_standalone_preparatio
         '--shacl-candidate-receipt "$SHACL_CANDIDATE_RECEIPT"',
         '--shacl-base-revision "$SHACL_BASE_REVISION"',
         '--owlrl-source "$OWLRL_SOURCE"',
+        '--owlrl-wheel "$OWLRL_WHEEL"',
         '--owlrl-archive "$OWLRL_ARCHIVE"',
         '--owlrl-sha256 "$OWLRL_SHA256"',
     ):

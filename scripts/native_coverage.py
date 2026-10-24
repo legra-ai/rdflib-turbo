@@ -335,6 +335,60 @@ print(json.dumps(checker.loaded_facade_record()))
     return verify_facade_record(wheel, actual, venv)
 
 
+def companion_checker():
+    spec = importlib.util.spec_from_file_location(
+        "coverage_companion_checker", Path(__file__).with_name("pure_companion.py")
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def freeze_owl_inputs(source, wheel):
+    if wheel is None or not Path(wheel).is_file():
+        raise ValueError("Coverage requires the original OWL companion wheel")
+    return {
+        "wheel_sha256": digest(wheel),
+        "package_payload": companion_checker().verify_payload(source, wheel),
+    }
+
+
+def install_python_cohort(project, native_wheel, facade_wheel, owlrl_wheel, environment):
+    installation = [
+        wheel for wheel in (native_wheel, facade_wheel, owlrl_wheel) if wheel is not None
+    ]
+    run(["uv", "add", "--project", project, "--no-sync", *installation], environment)
+    run(["uv", "sync", "--project", project, "--locked", "--no-build"], environment)
+
+
+def verify_installed_companion(source, wheel, frozen, project_run, venv, environment):
+    if freeze_owl_inputs(source, wheel) != frozen:
+        raise RuntimeError("Original OWL companion inputs changed during coverage")
+    actual = json.loads(
+        run(
+            [
+                *project_run,
+                "python",
+                "-I",
+                "-B",
+                str(Path(__file__).with_name("pure_companion.py")),
+                "--wheel",
+                str(wheel),
+                "--environment",
+                str(venv),
+            ],
+            environment,
+            capture=True,
+        )
+    )
+    if (
+        actual["wheel_sha256"] != frozen["wheel_sha256"]
+        or actual["payload"] != frozen["package_payload"]
+    ):
+        raise RuntimeError("Installed OWL companion differs from its original wheel")
+    return actual
+
+
 def verify_dependency_inputs(root, profiles, output, provenance):
     """Never attribute a measurement to source/export bytes that changed mid-run."""
     checks = {
@@ -519,6 +573,7 @@ def main():
     parser.add_argument("--output", type=Path, default=Path("native-coverage"))
     parser.add_argument("--python", default="3.13")
     parser.add_argument("--owlrl-source", type=Path)
+    parser.add_argument("--owlrl-wheel", type=Path)
     parser.add_argument("--owlrl-archive", type=Path)
     parser.add_argument("--owlrl-sha256")
     parser.add_argument("--shacl-source", type=Path)
@@ -537,6 +592,7 @@ def main():
     if project not in {"pyshacl-turbo", "rdflib-turbo"}:
         raise ValueError(f"Unsupported project: {project}")
     owlrl = args.owlrl_source.resolve() if args.owlrl_source else None
+    owlrl_wheel = args.owlrl_wheel.resolve(strict=True) if args.owlrl_wheel else None
     shacl = args.shacl_source.resolve() if args.shacl_source else None
     facade_wheel = args.shacl_wheel.resolve(strict=True) if args.shacl_wheel else None
     facade_inputs = None
@@ -572,6 +628,7 @@ def main():
         owlrl_authority = source_authority(
             owlrl, args.owlrl_archive, args.owlrl_sha256, project="owlrl-turbo"
         )
+    owlrl_inputs = freeze_owl_inputs(owlrl, owlrl_wheel) if owlrl else None
     environment = dict(os.environ)
     environment.pop("PYTHONPATH", None)
     environment.pop("VIRTUAL_ENV", None)
@@ -656,12 +713,15 @@ def main():
     if len(wheel_files) != 1:
         raise RuntimeError("Expected exactly one instrumented wheel")
     wheel = wheel_files[0]
-    installation = [wheel]
     if shacl:
         verify_facade_inputs(shacl, facade_wheel, facade_inputs, candidate=candidate)
-        installation.append(facade_wheel)
-    run(["uv", "add", "--project", project_environment, "--no-sync", *installation], environment)
-    run(["uv", "sync", "--project", project_environment, "--locked"], environment)
+    if owlrl and freeze_owl_inputs(owlrl, owlrl_wheel) != owlrl_inputs:
+        raise RuntimeError("Original OWL companion inputs changed during the native build")
+    install_python_cohort(project_environment, wheel, facade_wheel, owlrl_wheel, environment)
+    if owlrl:
+        owlrl_installed = verify_installed_companion(
+            owlrl, owlrl_wheel, owlrl_inputs, project_run, venv, environment
+        )
     module = project.replace("-", "_") + "._native"
     loaded = Path(
         run(
@@ -729,6 +789,8 @@ def main():
     )
     result["stages"]["python"]["environment_lock_sha256"] = python_lock
     require_python_execution(result["stages"]["python"], binding)
+    if owlrl:
+        verify_installed_companion(owlrl, owlrl_wheel, owlrl_inputs, project_run, venv, environment)
     stages = [profiles / "rust", profiles / "python"]
     if shacl:
         result["shacl_inputs"] = facade_inputs
@@ -761,23 +823,16 @@ def main():
         )
         result["stages"]["shacl"]["environment_lock_sha256"] = shacl_lock
         require_python_execution(result["stages"]["shacl"], "crates/python/src/lib.rs")
+        if owlrl:
+            verify_installed_companion(
+                owlrl, owlrl_wheel, owlrl_inputs, project_run, venv, environment
+            )
         stages.append(profiles / "shacl")
     if owlrl:
-        companion_wheels = profiles / "companion-wheels"
-        run(
-            ["uv", "build", "--wheel", owlrl, "--python", python, "--out-dir", companion_wheels],
-            environment,
-        )
-        companion_files = list(companion_wheels.glob("*.whl"))
-        if len(companion_files) != 1:
-            raise RuntimeError("Expected exactly one companion wheel")
-        run(
-            ["uv", "add", "--project", project_environment, "--no-sync", companion_files[0]],
-            environment,
-        )
-        run(["uv", "sync", "--project", project_environment, "--locked"], environment)
         owlrl_lock = record_environment_lock(project_environment, output, "owlrl")
-        result["owlrl_wheel_sha256"] = digest(companion_files[0])
+        result["owlrl_wheel_sha256"] = owlrl_inputs["wheel_sha256"]
+        result["owlrl_inputs"] = owlrl_inputs
+        result["owlrl_installed"] = owlrl_installed
         run(
             [
                 *project_run,
@@ -806,6 +861,7 @@ def main():
         )
         result["stages"]["owlrl"]["environment_lock_sha256"] = owlrl_lock
         require_python_execution(result["stages"]["owlrl"], binding)
+        verify_installed_companion(owlrl, owlrl_wheel, owlrl_inputs, project_run, venv, environment)
         stages.append(profiles / "owlrl")
     result["stages"]["combined"], flags = export(llvm, stages, objects, output / "combined", root)
     run(
