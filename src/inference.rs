@@ -68,6 +68,9 @@ const OWL_RULES: &[(&str, &str)] = &[
         "?s ?p ?o",
     ),
     ("?s ?q ?o", "?p owl:sameAs ?q . ?s ?p ?o"),
+];
+
+const CARDINALITY_RULES: &[(&str, &str)] = &[
     (
         "?y owl:sameAs ?z",
         "?r owl:onProperty ?p ; owl:maxCardinality ?n . FILTER(?n = 1) ?x a ?r ; ?p ?y, ?z",
@@ -219,7 +222,14 @@ fn expand_inner(
         }
     }
     // bounded: one prepared query per built-in rule.
-    let shared_queries = shared::CompiledRule::for_mode(mode)?;
+    let mut shared_queries = shared::CompiledRule::for_mode(mode)?;
+    if mode != "rdfs" {
+        for (_, pattern) in CARDINALITY_RULES {
+            shared_queries.push(SparqlEvaluator::new().parse_query(&format!(
+                "{PREFIXES} SELECT (?y AS ?__head_s) (owl:sameAs AS ?__head_p) (?z AS ?__head_o) WHERE {{ {pattern} }}"
+            )).map_err(|error| Error::Runtime(format!("Invalid cardinality rule: {error}")))?);
+        }
+    }
     let equality = (mode != "rdfs")
         .then(generalized::EqualityRules::try_new)
         .transpose()?;
@@ -251,9 +261,13 @@ fn expand_inner(
         apply_rules(data, &queries, &mut additions, mode != "rdfs")?;
         if mode != "rdfs" {
             // Lists can themselves be inferred, so discover them each round.
-            intersections::additions(data, &mut additions)?;
-            traversal::chains(data, &mut additions)?;
-            traversal::keys(data, &mut additions)?;
+            let tuples = generalized::Tuples {
+                data,
+                extra: &generalized,
+            };
+            intersections::additions(&tuples, &mut additions, &mut generalized_additions)?;
+            traversal::chains(&tuples, &mut additions, &mut generalized_additions)?;
+            traversal::keys(&tuples, &mut additions, &mut generalized_additions)?;
         }
         let generalized_changed = generalized.extend(generalized_additions);
         if additions.0.is_empty() && !generalized_changed {

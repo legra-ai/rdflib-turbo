@@ -304,8 +304,24 @@ fn unrestricted_shared_closure(data: &mut Dataset) {
         let generalized_pending = generalized
             .apply(&transaction, &shared, &mut pending)
             .unwrap();
-        super::traversal::chains(&transaction, &mut pending).unwrap();
-        super::traversal::keys(&transaction, &mut pending).unwrap();
+        super::traversal::chains(
+            &super::generalized::Tuples {
+                data: &transaction,
+                extra: &super::generalized::Generalized::default(),
+            },
+            &mut pending,
+            &mut super::generalized::Generalized::default(),
+        )
+        .unwrap();
+        super::traversal::keys(
+            &super::generalized::Tuples {
+                data: &transaction,
+                extra: &super::generalized::Generalized::default(),
+            },
+            &mut pending,
+            &mut super::generalized::Generalized::default(),
+        )
+        .unwrap();
         let generalized_changed = generalized.extend(generalized_pending);
         if pending.0.is_empty() && !generalized_changed {
             break;
