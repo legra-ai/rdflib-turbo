@@ -13,13 +13,13 @@ struct Fault<'a, 'data> {
     predicate: &'static str,
 }
 
-impl Graph for Fault<'_, '_> {
+impl<'graph, 'data> Graph for Fault<'graph, 'data> {
     fn quads<'a>(
         &'a self,
-        subject: Option<NamedOrBlankNodeRef<'a>>,
-        predicate: Option<NamedNodeRef<'a>>,
-        object: Option<TermRef<'a>>,
-    ) -> impl Iterator<Item = Result<Quad>> + 'a {
+        subject: Option<NamedOrBlankNodeRef<'_>>,
+        predicate: Option<NamedNodeRef<'_>>,
+        object: Option<TermRef<'_>>,
+    ) -> impl Iterator<Item = Result<Quad>> + use<'a, 'graph, 'data> {
         let failed = predicate.is_some_and(|predicate| predicate.as_str() == self.predicate);
         let rows = self.journal.quads_for_pattern(
             subject,

@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use oxigraph::io::{RdfFormat, RdfSerializer};
-use oxigraph::model::{Quad, Term};
+use oxigraph::model::{NamedOrBlankNode, Quad, Term};
 use oxigraph::sparql::{PreparedSparqlQuery, QueryResults, SparqlEvaluator};
 use oxigraph::store::StorageError;
 use serde::Serialize;
@@ -149,4 +149,138 @@ pub(super) fn dump(
             .map_err(invalid)?;
     }
     String::from_utf8(writer.finish().map_err(runtime)?).map_err(runtime)
+}
+
+pub(super) enum GraphNtOutput {
+    Document(String),
+    InvalidUri(String),
+}
+
+fn invalid_nt_uri(quad: &Quad) -> Option<&str> {
+    let subject = match &quad.subject {
+        NamedOrBlankNode::NamedNode(node) => Some(node.as_str()),
+        NamedOrBlankNode::BlankNode(_) => None,
+    };
+    let object = match &quad.object {
+        Term::NamedNode(node) => Some(node.as_str()),
+        _ => None,
+    };
+    // bounded: RDFLib calls URIRef.n3 only for these three triple positions.
+    [subject, Some(quad.predicate.as_str()), object]
+        .into_iter()
+        .flatten()
+        .find(|value| {
+            value.bytes().any(|byte| {
+                matches!(
+                    byte,
+                    b'<' | b'>' | b'"' | b' ' | b'{' | b'}' | b'|' | b'\\' | b'^' | b'`'
+                )
+            })
+        })
+}
+
+pub(super) fn dump_graph_nt(
+    quads: impl Iterator<Item = std::result::Result<Quad, StorageError>>,
+) -> Result<GraphNtOutput> {
+    let mut writer = RdfSerializer::from_format(RdfFormat::NTriples).for_writer(Vec::new());
+    for quad in quads {
+        let mut quad = quad.map_err(runtime)?;
+        if let Some(value) = invalid_nt_uri(&quad) {
+            // A formatter rejection is not a failed native transaction operation.
+            return Ok(GraphNtOutput::InvalidUri(value.into()));
+        }
+        quad.graph_name = oxigraph::model::GraphName::DefaultGraph;
+        writer.serialize_quad(&quad).map_err(invalid)?;
+    }
+    let text = String::from_utf8(writer.finish().map_err(runtime)?).map_err(runtime)?;
+    Ok(GraphNtOutput::Document(text))
+}
+
+#[cfg(test)]
+mod nt_serialization_tests {
+    use super::*;
+    use oxigraph::model::{BlankNode, GraphName, Literal, NamedNode};
+    use oxigraph::store::Store;
+
+    #[test]
+    fn selected_physical_graph_keeps_exact_literal_and_blank_identity() {
+        for graph in [
+            GraphName::DefaultGraph,
+            NamedNode::new("urn:selected").unwrap().into(),
+            BlankNode::new("selected").unwrap().into(),
+        ] {
+            let store = Store::new().unwrap();
+            let subject = BlankNode::new("subject-id").unwrap();
+            let predicate = NamedNode::new("urn:p").unwrap();
+            let values = [
+                Literal::new_simple_literal("same"),
+                Literal::new_typed_literal(
+                    "same",
+                    NamedNode::new("http://www.w3.org/2001/XMLSchema#string").unwrap(),
+                ),
+                Literal::new_language_tagged_literal("texte", "fr").unwrap(),
+                Literal::new_simple_literal("漢字🌍\n\t\r\\\"".repeat(512)),
+            ];
+            for value in &values {
+                store
+                    .insert(&Quad::new(
+                        subject.clone(),
+                        predicate.clone(),
+                        value.clone(),
+                        graph.clone(),
+                    ))
+                    .unwrap();
+            }
+            store
+                .insert(&Quad::new(
+                    NamedNode::new("urn:exclude").unwrap(),
+                    predicate,
+                    Literal::new_simple_literal("outside"),
+                    NamedNode::new("urn:other").unwrap(),
+                ))
+                .unwrap();
+            let GraphNtOutput::Document(text) =
+                dump_graph_nt(store.quads_for_pattern(None, None, None, Some(graph.as_ref())))
+                    .unwrap()
+            else {
+                panic!("Valid triple terms must serialize");
+            };
+            assert_eq!(text.lines().count(), values.len());
+            assert!(text.contains("_:subject-id"));
+            assert!(text.contains("\"same\" .\n"));
+            assert!(text.contains("\"same\"^^<http://www.w3.org/2001/XMLSchema#string>"));
+            assert!(text.contains("\"texte\"@fr"));
+            assert!(text.contains("漢字🌍"));
+            assert!(!text.contains("urn:exclude"));
+        }
+    }
+
+    #[test]
+    fn selected_graph_writer_sees_pending_transaction_without_publication() {
+        let store = Store::new().unwrap();
+        let mut transaction = store.start_transaction().unwrap();
+        transaction.insert(&Quad::new(
+            NamedNode::new("urn:s").unwrap(),
+            NamedNode::new("urn:p").unwrap(),
+            Literal::new_simple_literal("pending"),
+            GraphName::DefaultGraph,
+        ));
+        let GraphNtOutput::Document(text) = dump_graph_nt(transaction.quads_for_pattern(
+            None,
+            None,
+            None,
+            Some(GraphName::DefaultGraph.as_ref()),
+        ))
+        .unwrap() else {
+            panic!("Valid pending triple must serialize");
+        };
+        assert_eq!(text, "<urn:s> <urn:p> \"pending\" .\n");
+        assert!(
+            matches!(dump_graph_nt(store.iter()).unwrap(), GraphNtOutput::Document(text) if text.is_empty())
+        );
+        drop(transaction);
+        assert!(
+            matches!(dump_graph_nt(store.iter()).unwrap(), GraphNtOutput::Document(text) if text.is_empty())
+        );
+    }
 }

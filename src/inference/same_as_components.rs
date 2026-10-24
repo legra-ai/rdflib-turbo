@@ -19,7 +19,7 @@ pub(super) struct Components {
 fn group(rows: &Rows, term: &Term) -> Option<usize> {
     NamedOrBlankNode::try_from(term.clone())
         .ok()
-        .and_then(|subject| rows.subjects.get(&subject).copied())
+        .and_then(|subject| rows.subjects.get(&subject).map(|row| row.group()))
 }
 
 fn explore(

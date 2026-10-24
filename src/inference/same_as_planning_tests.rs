@@ -13,13 +13,13 @@ struct Reads<'a> {
     incoming_rows: Cell<usize>,
 }
 
-impl Graph for Reads<'_> {
+impl<'data> Graph for Reads<'data> {
     fn quads<'a>(
         &'a self,
-        s: Option<NamedOrBlankNodeRef<'a>>,
-        p: Option<NamedNodeRef<'a>>,
-        o: Option<TermRef<'a>>,
-    ) -> impl Iterator<Item = Result<Quad>> + 'a {
+        s: Option<NamedOrBlankNodeRef<'_>>,
+        p: Option<NamedNodeRef<'_>>,
+        o: Option<TermRef<'_>>,
+    ) -> impl Iterator<Item = Result<Quad>> + use<'a, 'data> {
         let incoming = s.is_none() && o.is_some();
         if incoming {
             self.incoming_calls.set(self.incoming_calls.get() + 1);

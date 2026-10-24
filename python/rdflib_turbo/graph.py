@@ -22,6 +22,7 @@ from ._operations import _encode, _term
 from ._ownership import GraphOwnership
 from ._parsing import JsonLdOptions
 from ._reads import ProjectedReads, encode, encode_graph, scoped_rows
+from ._serialization import GraphSerialization
 from ._validation import GraphValidation
 from .store import Store, Transaction
 
@@ -218,7 +219,9 @@ class RDFLibStore(ReferenceStore):
         self.backend.close()
 
 
-class Graph(GraphOwnership, GraphInference, GraphValidation, ProjectedReads, RDFLibGraph):
+class Graph(
+    GraphOwnership, GraphInference, GraphValidation, GraphSerialization, ProjectedReads, RDFLibGraph
+):
     """RDFLib Graph facade with exact-term native storage and native SPARQL."""
 
     _turbo_native_graph = True

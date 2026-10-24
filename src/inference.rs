@@ -1,4 +1,5 @@
-use std::collections::HashSet;
+use std::collections::{HashSet, hash_map::RandomState};
+use std::hash::BuildHasher;
 
 use oxigraph::model::*;
 use oxigraph::sparql::{PreparedSparqlQuery, QueryResults, SparqlEvaluator};
@@ -14,10 +15,13 @@ pub(crate) use outcome::bind_error_namespace;
 mod delta;
 mod diagnostic_datatypes;
 mod diagnostics;
+mod generalized;
 mod intersections;
 mod literal_values;
 mod options;
 mod outcome;
+#[cfg(test)]
+mod pending_query_tests;
 mod request;
 mod same_as;
 pub(crate) mod scoped;
@@ -105,11 +109,26 @@ pub(crate) fn expand_into(
 
 /// One round retains only distinct statements absent from its read snapshot.
 /// Existing facts and duplicate rule results never enter the retained buffer.
-#[derive(Default)]
-struct Pending(HashSet<Quad>);
+struct Pending<H = RandomState>(HashSet<Quad, H>);
 
-impl Pending {
+impl Default for Pending {
+    fn default() -> Self {
+        Self(HashSet::new())
+    }
+}
+
+impl<H: BuildHasher> Pending<H> {
+    // Equality kernels can emit the same missing head through many witnesses.
     fn push(&mut self, data: &impl Graph, quad: Quad) -> Result<()> {
+        if !self.0.contains(&quad) && !data.contains(&quad)? {
+            self.0.insert(quad);
+        }
+        Ok(())
+    }
+
+    fn push_query_head(&mut self, data: &impl Graph, quad: Quad) -> Result<()> {
+        // The CONSTRUCT iterator already deduplicates this query's output.
+        // Existing heads need no hash lookup in the unrelated missing-fact set.
         if !data.contains(&quad)? {
             self.0.insert(quad);
         }
@@ -126,13 +145,21 @@ fn apply_rules(
     if owl {
         same_as::apply(data, additions)?;
     }
+    apply_queries(data, queries, additions)
+}
+
+fn apply_queries<H: BuildHasher>(
+    data: &impl Graph,
+    queries: &[PreparedSparqlQuery],
+    additions: &mut Pending<H>,
+) -> Result<()> {
     for query in queries {
         let QueryResults::Graph(triples) = data.query(query.clone())? else {
             unreachable!("Inference rules are CONSTRUCT queries")
         };
         for triple in triples {
             let triple = triple?;
-            additions.push(
+            additions.push_query_head(
                 data,
                 Quad::new(
                     triple.subject,
@@ -192,24 +219,24 @@ fn expand_inner(
         }
     }
     // bounded: one prepared query per built-in rule.
-    let mut queries = shared::CompiledRule::for_mode(mode)?;
-    queries.extend(
-        rules
-            .iter()
-            .map(|(template, pattern)| {
-                SparqlEvaluator::new()
-                    .parse_query(&format!(
-                        "{PREFIXES}\nCONSTRUCT {{ {template} }} WHERE {{ {pattern} }}"
-                    ))
-                    .map_err(|e| Error::Runtime(format!("Invalid inference rule: {e}")))
-            })
-            .collect::<Result<Vec<_>>>()?,
-    );
+    let shared_queries = shared::CompiledRule::for_mode(mode)?;
+    let queries = rules
+        .iter()
+        .map(|(template, pattern)| {
+            SparqlEvaluator::new()
+                .parse_query(&format!(
+                    "{PREFIXES}\nCONSTRUCT {{ {template} }} WHERE {{ {pattern} }}"
+                ))
+                .map_err(|e| Error::Runtime(format!("Invalid inference rule: {e}")))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let mut generalized = generalized::Generalized::default();
     loop {
         if mode != "rdfs" {
             diagnostics.round(data)?;
         }
         let mut additions = std::mem::take(&mut initial_resources);
+        let generalized_additions = generalized.apply(data, &shared_queries, &mut additions)?;
         apply_rules(data, &queries, &mut additions, mode != "rdfs")?;
         if mode != "rdfs" {
             // Lists can themselves be inferred, so discover them each round.
@@ -217,7 +244,8 @@ fn expand_inner(
             traversal::chains(data, &mut additions)?;
             traversal::keys(data, &mut additions)?;
         }
-        if additions.0.is_empty() {
+        let generalized_changed = generalized.extend(generalized_additions);
+        if additions.0.is_empty() && !generalized_changed {
             return diagnostics.finish(data, mode != "rdfs", |term| {
                 diagnostics::cardinality_zero(term, &request.lexical_context)
             });

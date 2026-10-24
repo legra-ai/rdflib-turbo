@@ -42,13 +42,13 @@ impl Node {
     }
 }
 
-impl Graph for Measured<'_> {
+impl<'data> Graph for Measured<'data> {
     fn quads<'a>(
         &'a self,
-        s: Option<NamedOrBlankNodeRef<'a>>,
-        p: Option<NamedNodeRef<'a>>,
-        o: Option<TermRef<'a>>,
-    ) -> impl Iterator<Item = Result<Quad>> + 'a {
+        s: Option<NamedOrBlankNodeRef<'_>>,
+        p: Option<NamedNodeRef<'_>>,
+        o: Option<TermRef<'_>>,
+    ) -> impl Iterator<Item = Result<Quad>> + use<'a, 'data> {
         self.work.set(self.work.get() + 1);
         self.data
             .quads_for_pattern(s, p, o, Some(GraphNameRef::DefaultGraph))
@@ -284,13 +284,18 @@ fn frozen_closure(data: &mut Dataset) {
         )
         .copied()
         .collect();
-    let mut prepared = queries(&rules);
+    let prepared = queries(&rules);
     // Compare independent equality implementations against the same non-equality
     // semantics; the shared catalogue replaced the former local schema clauses.
-    prepared.extend(super::shared::CompiledRule::for_mode("owlrl").unwrap());
+    let shared = super::shared::CompiledRule::for_mode("owlrl").unwrap();
+    let generalized = super::generalized::Generalized::default();
     loop {
         let mut pending = Pending::default();
         apply_rules(&transaction, &prepared, &mut pending, false).unwrap();
+        // This frozen reference deliberately discards non-RDF heads each round.
+        generalized
+            .apply(&transaction, &shared, &mut pending)
+            .unwrap();
         super::traversal::chains(&transaction, &mut pending).unwrap();
         super::traversal::keys(&transaction, &mut pending).unwrap();
         if pending.0.is_empty() {
@@ -356,3 +361,6 @@ fn full_closure_matches_frozen_ordinary_rule_engine() {
 
 #[path = "same_as_dense_tests.rs"]
 mod dense;
+
+#[path = "same_as_pending_tests.rs"]
+mod pending;
