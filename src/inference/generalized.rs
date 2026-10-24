@@ -20,6 +20,11 @@ mod tests;
 pub(super) const GENERALIZED_GRAPH: NamedNodeRef<'static> =
     NamedNodeRef::new_unchecked("urn:rdflib-turbo:inference:generalized");
 
+const REFLEXIVE_SUBJECT: NamedNodeRef<'static> =
+    NamedNodeRef::new_unchecked("urn:rdflib-turbo:inference:literal-reflexivity");
+const SAME_AS: NamedNodeRef<'static> =
+    NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#sameAs");
+
 const COLUMNS: [NamedNodeRef<'static>; 3] = [
     NamedNodeRef::new_unchecked("urn:rdflib-turbo:inference:subject"),
     NamedNodeRef::new_unchecked("urn:rdflib-turbo:inference:predicate"),
@@ -27,7 +32,8 @@ const COLUMNS: [NamedNodeRef<'static>; 3] = [
 ];
 
 /// Only the non-RDF inference delta is stored, using the native indexed dataset.
-/// Each row owns three column values; the input graph is borrowed, never copied.
+/// Literal reflexivity stores its one independent value; other tuples use three
+/// columns. The input graph is borrowed, never copied.
 #[derive(Default)]
 pub(super) struct Generalized {
     rows: Dataset,
@@ -42,27 +48,50 @@ impl Generalized {
         let pattern = pattern.map(|term| term.map(TermRef::into_owned));
         // Choose an object-indexed column when bound; otherwise scan row subjects.
         let column = pattern.iter().position(Option::is_some).unwrap_or(0);
-        self.rows
+        let explicit = self
+            .rows
             .quads_for_pattern(
                 None,
                 Some(COLUMNS[column]),
                 pattern[column].as_ref().map(Term::as_ref),
                 None,
             )
-            .filter_map(move |quad| {
-                let row = std::array::from_fn(|index| {
+            .map(move |quad| {
+                std::array::from_fn(|index| {
                     self.rows
                         .quads_for_pattern(Some(quad.subject), Some(COLUMNS[index]), None, None)
                         .next()
                         .expect("generalized row must have all three columns")
                         .object
-                });
-                pattern
-                    .iter()
-                    .zip(row)
-                    .all(|(bound, term)| bound.as_ref().is_none_or(|bound| bound.as_ref() == term))
-                    .then_some(row)
+                })
+            });
+        // Literal reflexivity has one independent value. Keep one indexed record
+        // per value and reconstruct the same tuple for every query shape.
+        let reflexive_enabled = pattern[1]
+            .as_ref()
+            .is_none_or(|term| term.as_ref() == TermRef::from(SAME_AS));
+        let reflexive_value = pattern[0]
+            .as_ref()
+            .or(pattern[2].as_ref())
+            .map(Term::as_ref);
+        let reflexive = reflexive_enabled
+            .then(|| {
+                self.rows.quads_for_pattern(
+                    Some(REFLEXIVE_SUBJECT.into()),
+                    Some(SAME_AS),
+                    reflexive_value,
+                    None,
+                )
             })
+            .into_iter()
+            .flatten()
+            .map(|quad| [quad.object, SAME_AS.into(), quad.object]);
+        explicit.chain(reflexive).filter(move |row| {
+            pattern
+                .iter()
+                .zip(*row)
+                .all(|(bound, term)| bound.as_ref().is_none_or(|bound| bound.as_ref() == term))
+        })
     }
 
     fn contains(&self, row: &[Term; 3]) -> bool {
@@ -73,6 +102,15 @@ impl Generalized {
 
     fn insert(&mut self, row: [Term; 3]) {
         if self.contains(&row) {
+            return;
+        }
+        if row[0].is_literal() && row[0] == row[2] && row[1].as_ref() == TermRef::from(SAME_AS) {
+            self.rows.insert(QuadRef::new(
+                REFLEXIVE_SUBJECT,
+                SAME_AS,
+                row[0].as_ref(),
+                GraphNameRef::DefaultGraph,
+            ));
             return;
         }
         let subject = BlankNode::default();

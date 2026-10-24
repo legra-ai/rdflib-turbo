@@ -49,6 +49,13 @@ replacement queries. Query tables are finite: four head-filtered queries and
 twelve generalized-premise queries. The generalized materialized relation retains
 the existing memory contract from ADR 0053; arbitrary closure size is not bounded.
 
+Literal reflexivity has one independent value: the literal occupies both ends
+of an `owl:sameAs` tuple. Store one indexed value and reconstruct the full tuple
+for every query shape. Other generalized tuples retain their three-column
+representation. This preserves the literal's exact identity and every observable
+tuple while avoiding redundant row identities and indexes. The existing inference
+heap budget remains unchanged.
+
 ## Evidence and remaining scope
 
 Compare the partition's one-round output with unrestricted shared clauses across
