@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -123,3 +124,16 @@ def test_environment_lines_cannot_inject_other_github_commands(tmp_path):
     assert not destination.exists()
     module.write_environment(destination, {"SHACL_WHEEL": "/tmp/original.whl"})
     assert destination.read_text() == "SHACL_WHEEL=/tmp/original.whl\n"
+
+
+def test_consumer_git_launch_does_not_use_the_posix_only_coverage_launcher(monkeypatch):
+    module = helper()
+    calls = []
+
+    def launch(command, **kwargs):
+        calls.append((command, kwargs))
+        return subprocess.CompletedProcess(command, 0, stdout="immutable-revision\n")
+
+    monkeypatch.setattr(module.subprocess, "run", launch)
+    assert module.run(["git", "rev-parse", "HEAD"], capture=True) == "immutable-revision\n"
+    assert calls[0][1] == {"check": True, "text": True, "stdout": subprocess.PIPE}

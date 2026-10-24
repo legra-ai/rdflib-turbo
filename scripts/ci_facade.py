@@ -5,6 +5,7 @@ import importlib.util
 import json
 import re
 import shutil
+import subprocess
 import sys
 import tomllib
 from pathlib import Path
@@ -43,15 +44,24 @@ def owner_manifest():
     return tomllib.loads((ROOT / "pyproject.toml").read_text())
 
 
+def run(arguments, *, capture=False):
+    """Peer validation runs before native imports and also supports Windows."""
+    result = subprocess.run(
+        list(map(str, arguments)),
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE if capture else None,
+    )
+    return result.stdout if capture else None
+
+
 def owner_input():
     builder = load("build_facade_candidate")
-    run = load("native_coverage").run
     revision = run(["git", "-C", ROOT, "rev-parse", "HEAD"], capture=True).strip()
     return builder.freeze(ROOT, revision, "rdflib-turbo", run)
 
 
 def checkout(selected, destination):
-    run = load("native_coverage").run
     if destination.exists():
         raise ValueError("An immutable peer checkout must have a fresh destination")
     run(["git", "clone", "--no-checkout", selected["repository"], destination])
@@ -156,10 +166,7 @@ def consume(bundle, *, owlrl=False):
         source = bundle.parent / "coverage-companion-owlrl"
         checkout(selected["owlrl"], source)
         environment["OWLRL_SOURCE"] = str(source)
-    if (
-        builder.freeze(ROOT, owner["revision"], "rdflib-turbo", load("native_coverage").run)
-        != owner
-    ):
+    if builder.freeze(ROOT, owner["revision"], "rdflib-turbo", run) != owner:
         raise ValueError("Native provider source changed while arranging CI acceptance")
     return environment
 
