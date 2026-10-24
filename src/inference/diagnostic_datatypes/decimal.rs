@@ -254,3 +254,8 @@ pub(super) fn zero(text: &str, context: &DecimalContext) -> Result<bool, Lexical
         _ => Ok(false),
     }
 }
+
+/// Default Decimal truth checks are quiet, including signaling NaN values.
+pub(super) fn value_is_zero(text: &str) -> bool {
+    matches!(parse(text), Some(Parsed::Finite(value)) if value.digits.is_empty())
+}

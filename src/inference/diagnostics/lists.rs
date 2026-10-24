@@ -8,6 +8,7 @@ use crate::Result;
 use crate::graph::{RDF, iri};
 use crate::inference::OWL;
 use crate::inference::backend::Graph;
+use crate::inference::diagnostic_datatypes::LexicalContext;
 use crate::inference::generalized::Tuples;
 
 #[derive(Clone, Copy)]
@@ -21,6 +22,7 @@ pub(super) fn collect(
     data: &Tuples<'_, impl Graph>,
     errors: &mut Diagnostics,
     witnesses: &ListWitnesses,
+    context: &LexicalContext,
 ) -> Result<()> {
     // bounded: three built-in declaration types and their two possible list properties.
     for (name, kind) in [
@@ -29,14 +31,23 @@ pub(super) fn collect(
         ("AllDisjointClasses", Kind::Classes),
     ] {
         let class: Term = iri(OWL, name).into();
-        for declaration in data.quads(None, Some(iri(RDF, "type").as_ref()), Some(class.as_ref())) {
+        for declaration in data.quads(
+            None,
+            Some(iri(RDF, "type").as_ref().into()),
+            Some(class.as_ref()),
+        ) {
             let node: Term = declaration?.subject;
             for property in ["members", "distinctMembers"] {
                 if property == "distinctMembers" && !matches!(kind, Kind::Different) {
                     continue;
                 }
                 for head in objects(data, &node, &iri(OWL, property)) {
-                    check(data, errors, RdfList::new(data, witnesses, head?)?, kind)?;
+                    check(
+                        data,
+                        errors,
+                        RdfList::new(data, witnesses, head?, context)?,
+                        kind,
+                    )?;
                 }
             }
         }
@@ -90,16 +101,16 @@ fn properties(
     left: &Term,
     right: &Term,
 ) -> Result<()> {
-    let (Term::NamedNode(left), Term::NamedNode(right)) = (left, right) else {
+    if left.is_literal() || right.is_literal() {
         return Ok(());
-    };
+    }
     for quad in data.quads(None, Some(left.as_ref()), None) {
         let quad = quad?;
         let subject: Term = quad.subject;
         if has(data, &subject, right, &quad.object)? {
             errors.add(format!(
                 "Disjoint properties in an 'AllDisjointProperties' are not really disjoint: ({}, {},{}) and ({},{},{})",
-                text(&subject), left.as_str(), text(&quad.object), text(&subject), right.as_str(), text(&quad.object)
+                text(&subject), text(left), text(&quad.object), text(&subject), text(right), text(&quad.object)
             ));
         }
     }
@@ -113,7 +124,7 @@ fn classes(
     right: &Term,
 ) -> Result<()> {
     let predicate = iri(RDF, "type");
-    for quad in data.quads(None, Some(predicate.as_ref()), Some(left.as_ref())) {
+    for quad in data.quads(None, Some(predicate.as_ref().into()), Some(left.as_ref())) {
         let subject: Term = quad?.subject;
         if has(data, &subject, &predicate, right)? {
             errors.add(format!(

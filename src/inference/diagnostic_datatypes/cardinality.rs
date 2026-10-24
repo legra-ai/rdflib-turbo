@@ -3,7 +3,7 @@
 use super::{LexicalContext, LexicalFailure, decimal, integer, unicode};
 use oxigraph::model::Literal;
 
-fn float_zero(text: &str) -> bool {
+pub(super) fn float_zero(text: &str) -> bool {
     let mut value = String::new(); // bounded: this one scalar lexical value.
     let mut chars = text.trim_matches(integer::whitespace).chars().peekable();
     let mut previous_digit = false;

@@ -58,10 +58,15 @@ impl Diagnostics {
         Ok(())
     }
 
-    pub(super) fn round(&mut self, data: &impl Graph, extra: &Generalized) -> Result<()> {
+    pub(super) fn round(
+        &mut self,
+        data: &impl Graph,
+        extra: &Generalized,
+        context: &LexicalContext,
+    ) -> Result<()> {
         let data = &Tuples { data, extra };
         let witnesses = std::mem::take(&mut self.list_witnesses);
-        let result = lists::collect(data, self, &witnesses);
+        let result = lists::collect(data, self, &witnesses, context);
         self.list_witnesses = witnesses;
         result
     }
@@ -112,15 +117,15 @@ fn text(term: &Term) -> &str {
     }
 }
 
-fn has(
+fn has<'p>(
     data: &Tuples<'_, impl Graph>,
     left: &Term,
-    predicate: &NamedNode,
+    predicate: impl Into<TermRef<'p>>,
     right: &Term,
 ) -> Result<bool> {
     data.quads(
         Some(left.as_ref()),
-        Some(predicate.as_ref()),
+        Some(predicate.into()),
         Some(right.as_ref()),
     )
     .next()
@@ -133,7 +138,7 @@ fn objects<'a>(
     node: &'a Term,
     predicate: &'a NamedNode,
 ) -> impl Iterator<Item = Result<Term>> + 'a {
-    data.quads(Some(node.as_ref()), Some(predicate.as_ref()), None)
+    data.quads(Some(node.as_ref()), Some(predicate.as_ref().into()), None)
         .map(|quad| quad.map(|quad| quad.object))
 }
 
