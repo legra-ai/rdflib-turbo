@@ -62,10 +62,20 @@ def supported_python_versions():
     return CPYTHON_VERSIONS
 
 
-def select_wheels(directory, version):
+def selected_versions(versions=None):
+    supported = supported_python_versions()
+    if versions is None:
+        return supported
+    versions = tuple(versions)
+    if not versions or versions != tuple(version for version in supported if version in versions):
+        raise ValueError("Expected distinct supported CPython versions in policy order")
+    return versions
+
+
+def select_wheels(directory, version, *, versions=None):
     wheels = sorted(directory.glob("*.whl"))
     selected = {}
-    for python in supported_python_versions():
+    for python in selected_versions(versions):
         tag = "cp" + python.replace(".", "")
         matches = [
             path for path in wheels if path.name.startswith(f"rdflib_turbo-{version}-{tag}-{tag}-")
@@ -75,7 +85,7 @@ def select_wheels(directory, version):
         selected[python] = matches[0]
     platforms = {path.name.rsplit("-", 1)[1] for path in wheels}
     if len(platforms) != 1 or set(wheels) != set(selected.values()):
-        raise ValueError("Expected five matching CPython wheels for one native platform")
+        raise ValueError("Expected matching cohort wheels for one native platform")
     if any(not path.is_file() for path in wheels):
         raise ValueError("Every wheel must be a regular file")
     return selected
@@ -231,8 +241,11 @@ def test_installed_wheel(wheel, version, shacl_wheel):
             subprocess.run(command, cwd=directory, check=True)
 
 
-def test_matrix(wheels, shacl_wheel):
-    for version in supported_python_versions():
+def test_matrix(wheels, shacl_wheel, *, versions=None):
+    versions = selected_versions(versions)
+    if set(wheels) != set(versions):
+        raise ValueError("Wheel inventory must exactly match the requested interpreter cohort")
+    for version in versions:
         test_installed_wheel(wheels[version], version, shacl_wheel)
 
 
@@ -246,10 +259,13 @@ def main():
         return
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--shacl-wheel", type=Path, required=True)
+    parser.add_argument("--python-versions", nargs="+")
     args = parser.parse_args()
     shacl_wheel = require_facade_wheel(args.shacl_wheel)
     project = tomllib.loads((ROOT / "pyproject.toml").read_text())
-    test_matrix(select_wheels(ROOT / "dist", project["project"]["version"]), shacl_wheel)
+    versions = selected_versions(args.python_versions)
+    wheels = select_wheels(ROOT / "dist", project["project"]["version"], versions=versions)
+    test_matrix(wheels, shacl_wheel, versions=versions)
 
 
 if __name__ == "__main__":
