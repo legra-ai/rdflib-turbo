@@ -17,7 +17,7 @@ impl CompiledRule {
         if !rule.is_safe() {
             return Err(Error::Unsupported("Unsafe shared inference rule".into()));
         }
-        let head = Self::atom(&rule.head)?;
+        Self::atom(&rule.head)?;
         let mut body = String::new();
         for literal in &rule.body {
             match literal {
@@ -37,8 +37,17 @@ impl CompiledRule {
                 }
             }
         }
+        // bounded: exactly three head columns, preserving every RDF term kind.
+        let columns = rule
+            .head
+            .terms
+            .iter()
+            .zip(["__head_s", "__head_p", "__head_o"])
+            .map(|(term, name)| Self::term(term).map(|term| format!("({term} AS ?{name})")))
+            .collect::<Result<Vec<_>>>()?;
+        let text = format!("SELECT {} WHERE {{ {body} }}", columns.join(" "));
         SparqlEvaluator::new()
-            .parse_query(&format!("CONSTRUCT {{ {head} }} WHERE {{ {body} }}"))
+            .parse_query(&text)
             .map(Self)
             .map_err(|error| Error::Runtime(format!("Invalid shared inference rule: {error}")))
     }

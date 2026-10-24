@@ -15,6 +15,7 @@ pub(crate) use outcome::bind_error_namespace;
 mod delta;
 mod diagnostic_datatypes;
 mod diagnostics;
+mod generalized;
 mod intersections;
 mod literal_values;
 mod options;
@@ -218,24 +219,24 @@ fn expand_inner(
         }
     }
     // bounded: one prepared query per built-in rule.
-    let mut queries = shared::CompiledRule::for_mode(mode)?;
-    queries.extend(
-        rules
-            .iter()
-            .map(|(template, pattern)| {
-                SparqlEvaluator::new()
-                    .parse_query(&format!(
-                        "{PREFIXES}\nCONSTRUCT {{ {template} }} WHERE {{ {pattern} }}"
-                    ))
-                    .map_err(|e| Error::Runtime(format!("Invalid inference rule: {e}")))
-            })
-            .collect::<Result<Vec<_>>>()?,
-    );
+    let shared_queries = shared::CompiledRule::for_mode(mode)?;
+    let queries = rules
+        .iter()
+        .map(|(template, pattern)| {
+            SparqlEvaluator::new()
+                .parse_query(&format!(
+                    "{PREFIXES}\nCONSTRUCT {{ {template} }} WHERE {{ {pattern} }}"
+                ))
+                .map_err(|e| Error::Runtime(format!("Invalid inference rule: {e}")))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let mut generalized = generalized::Generalized::default();
     loop {
         if mode != "rdfs" {
             diagnostics.round(data)?;
         }
         let mut additions = std::mem::take(&mut initial_resources);
+        let generalized_additions = generalized.apply(data, &shared_queries, &mut additions)?;
         apply_rules(data, &queries, &mut additions, mode != "rdfs")?;
         if mode != "rdfs" {
             // Lists can themselves be inferred, so discover them each round.
@@ -243,7 +244,8 @@ fn expand_inner(
             traversal::chains(data, &mut additions)?;
             traversal::keys(data, &mut additions)?;
         }
-        if additions.0.is_empty() {
+        let generalized_changed = generalized.extend(generalized_additions);
+        if additions.0.is_empty() && !generalized_changed {
             return diagnostics.finish(data, mode != "rdfs", |term| {
                 diagnostics::cardinality_zero(term, &request.lexical_context)
             });

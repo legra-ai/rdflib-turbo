@@ -13,7 +13,7 @@ struct ScopedGraph<'a, 'store> {
     destination: GraphName,
 }
 
-impl Graph for ScopedGraph<'_, '_> {
+impl<'graph, 'store> Graph for ScopedGraph<'graph, 'store> {
     fn contains_destination(&self, quad: &Quad) -> Result<bool> {
         self.transaction
             .contains(&Quad::new(
@@ -27,10 +27,10 @@ impl Graph for ScopedGraph<'_, '_> {
 
     fn quads<'a>(
         &'a self,
-        subject: Option<NamedOrBlankNodeRef<'a>>,
-        predicate: Option<NamedNodeRef<'a>>,
-        object: Option<TermRef<'a>>,
-    ) -> impl Iterator<Item = Result<Quad>> + 'a {
+        subject: Option<NamedOrBlankNodeRef<'_>>,
+        predicate: Option<NamedNodeRef<'_>>,
+        object: Option<TermRef<'_>>,
+    ) -> impl Iterator<Item = Result<Quad>> + use<'a, 'graph, 'store> {
         self.transaction
             .quads_for_pattern(subject, predicate, object, Some(self.source.as_ref()))
             .map(|quad| quad.map_err(|error| Error::Runtime(error.to_string())))

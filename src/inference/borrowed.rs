@@ -91,13 +91,13 @@ impl<'a, G: GraphRead + ?Sized> BorrowedInference<'a, G> {
     }
 }
 
-impl<G: GraphRead + ?Sized> Graph for BorrowedInference<'_, G> {
+impl<'source, G: GraphRead + ?Sized> Graph for BorrowedInference<'source, G> {
     fn quads<'a>(
         &'a self,
-        subject: Option<NamedOrBlankNodeRef<'a>>,
-        predicate: Option<NamedNodeRef<'a>>,
-        object: Option<TermRef<'a>>,
-    ) -> impl Iterator<Item = Result<Quad>> + 'a {
+        subject: Option<NamedOrBlankNodeRef<'_>>,
+        predicate: Option<NamedNodeRef<'_>>,
+        object: Option<TermRef<'_>>,
+    ) -> impl Iterator<Item = Result<Quad>> + use<'a, 'source, G> {
         self.default_matches(subject, predicate, object)
             .map(|quad| quad.map_err(Into::into))
     }
