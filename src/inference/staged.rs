@@ -92,13 +92,13 @@ impl<'a> JournalGraph<'a> {
     }
 }
 
-impl Graph for JournalGraph<'_> {
+impl<'data> Graph for JournalGraph<'data> {
     fn quads<'a>(
         &'a self,
-        subject: Option<NamedOrBlankNodeRef<'a>>,
-        predicate: Option<NamedNodeRef<'a>>,
-        object: Option<TermRef<'a>>,
-    ) -> impl Iterator<Item = Result<Quad>> + 'a {
+        subject: Option<NamedOrBlankNodeRef<'_>>,
+        predicate: Option<NamedNodeRef<'_>>,
+        object: Option<TermRef<'_>>,
+    ) -> impl Iterator<Item = Result<Quad>> + use<'a, 'data> {
         StagedDataset {
             source: &self.transaction,
         }

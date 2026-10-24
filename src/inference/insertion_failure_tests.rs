@@ -14,13 +14,13 @@ struct InsertionFault<'a, 'data> {
     remaining: usize,
 }
 
-impl Graph for InsertionFault<'_, '_> {
+impl<'graph, 'data> Graph for InsertionFault<'graph, 'data> {
     fn quads<'a>(
         &'a self,
-        subject: Option<NamedOrBlankNodeRef<'a>>,
-        predicate: Option<NamedNodeRef<'a>>,
-        object: Option<TermRef<'a>>,
-    ) -> impl Iterator<Item = Result<Quad>> + 'a {
+        subject: Option<NamedOrBlankNodeRef<'_>>,
+        predicate: Option<NamedNodeRef<'_>>,
+        object: Option<TermRef<'_>>,
+    ) -> impl Iterator<Item = Result<Quad>> + use<'a, 'graph, 'data> {
         self.journal
             .quads_for_pattern(subject, predicate, object, Some(GraphNameRef::DefaultGraph))
             .map(|quad| Ok(quad.into_owned()))

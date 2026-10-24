@@ -9,10 +9,10 @@ use crate::{Error, Result};
 pub(super) trait Graph {
     fn quads<'a>(
         &'a self,
-        subject: Option<NamedOrBlankNodeRef<'a>>,
-        predicate: Option<NamedNodeRef<'a>>,
-        object: Option<TermRef<'a>>,
-    ) -> impl Iterator<Item = Result<Quad>> + 'a;
+        subject: Option<NamedOrBlankNodeRef<'_>>,
+        predicate: Option<NamedNodeRef<'_>>,
+        object: Option<TermRef<'_>>,
+    ) -> impl Iterator<Item = Result<Quad>> + use<'a, Self>;
     fn query(&self, query: PreparedSparqlQuery) -> Result<QueryResults<'_>>;
     fn insert(&mut self, quad: Quad) -> Result<()>;
 
@@ -33,13 +33,13 @@ pub(super) trait Graph {
     }
 }
 
-impl Graph for InsertTransaction<'_> {
+impl<'data> Graph for InsertTransaction<'data> {
     fn quads<'a>(
         &'a self,
-        subject: Option<NamedOrBlankNodeRef<'a>>,
-        predicate: Option<NamedNodeRef<'a>>,
-        object: Option<TermRef<'a>>,
-    ) -> impl Iterator<Item = Result<Quad>> + 'a {
+        subject: Option<NamedOrBlankNodeRef<'_>>,
+        predicate: Option<NamedNodeRef<'_>>,
+        object: Option<TermRef<'_>>,
+    ) -> impl Iterator<Item = Result<Quad>> + use<'a, 'data> {
         self.quads_for_pattern(subject, predicate, object, Some(GraphNameRef::DefaultGraph))
             .map(|q| Ok(q.into_owned()))
     }
@@ -59,7 +59,7 @@ pub(crate) struct TransactionGraph<'a, 'store> {
     pub destination: GraphName,
 }
 
-impl Graph for TransactionGraph<'_, '_> {
+impl<'graph, 'store> Graph for TransactionGraph<'graph, 'store> {
     fn contains_destination(&self, quad: &Quad) -> Result<bool> {
         self.transaction
             .contains(&Quad::new(
@@ -73,10 +73,10 @@ impl Graph for TransactionGraph<'_, '_> {
 
     fn quads<'a>(
         &'a self,
-        subject: Option<NamedOrBlankNodeRef<'a>>,
-        predicate: Option<NamedNodeRef<'a>>,
-        object: Option<TermRef<'a>>,
-    ) -> impl Iterator<Item = Result<Quad>> + 'a {
+        subject: Option<NamedOrBlankNodeRef<'_>>,
+        predicate: Option<NamedNodeRef<'_>>,
+        object: Option<TermRef<'_>>,
+    ) -> impl Iterator<Item = Result<Quad>> + use<'a, 'graph, 'store> {
         self.transaction
             .quads_for_pattern(subject, predicate, object, None)
             .map(|q| q.map_err(|e| Error::Runtime(e.to_string())))
