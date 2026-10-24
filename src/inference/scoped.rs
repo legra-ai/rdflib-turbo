@@ -103,3 +103,7 @@ pub(crate) fn expand(
 #[cfg(test)]
 #[path = "scoped_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "scoped_difference_tests.rs"]
+mod difference_tests;

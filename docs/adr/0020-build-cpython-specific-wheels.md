@@ -13,8 +13,9 @@ The installed PyO3 version supports CPython through 3.15 without a forward
 compatibility flag. Free-threaded, debug and development interpreter ABIs are
 outside this matrix.
 
-Keep one job per platform. Extract the verified source archive once, then build
-all five interpreter wheels from that stable directory with `uv build --python`.
+Keep one job per platform except Intel macOS, which uses two disjoint interpreter
+cohorts (3.11–3.13 and 3.14–3.15). Extract the verified source archive once per
+job, then build its interpreter wheels from that stable directory with `uv build --python`.
 Reuse the same Cargo target and vendor paths. Manylinux builds run all five
 interpreter builds inside one container, retaining dependency and compiler caches
 without mounting the parent checkout (ADR 0003).
@@ -31,3 +32,12 @@ CPython ABIs and five platforms: 26 archives. Reject missing, additional, ABI3 o
 mismatched artifacts. Publication still restores and publishes original tested
 archives with exact hashes through `ci.yml`; it does not rebuild them. An existing
 published release bundle cannot be replaced with a different wheel inventory.
+
+Intel run 39985683383 built all five wheels in approximately 96 minutes, then
+exceeded its existing two-hour limit during installed-wheel verification. Keep
+that limit and split the serial work instead of increasing it or removing tests.
+Each cohort declares its interpreters explicitly; the driver rejects unsupported,
+repeated, unordered, missing or additional interpreter archives. Default driver
+invocation still requires all five wheels. Cohort artifact names are unique;
+the aggregate requires every matrix job and independently verifies the complete
+25-wheel plus source-archive inventory before the single existing publisher.

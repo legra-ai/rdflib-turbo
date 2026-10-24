@@ -17,8 +17,36 @@ struct RowGroup {
     members: Vec<NamedOrBlankNode>,
 }
 
+#[derive(Clone, Copy)]
+#[repr(transparent)]
+struct SubjectRow(usize);
+
+impl SubjectRow {
+    fn new(group: usize) -> Self {
+        // A physical Vec<RowGroup> already bounds indices below
+        // isize::MAX / size_of::<RowGroup>(), leaving room for one flag bit.
+        Self(
+            group
+                .checked_mul(2)
+                .expect("equality row index exceeds its subject slot"),
+        )
+    }
+
+    fn group(self) -> usize {
+        self.0 >> 1
+    }
+
+    fn has_cross_group_incoming(self) -> bool {
+        self.0 & 1 != 0
+    }
+
+    fn mark_cross_group_incoming(&mut self) {
+        self.0 |= 1;
+    }
+}
+
 struct Rows {
-    subjects: HashMap<NamedOrBlankNode, usize>,
+    subjects: HashMap<NamedOrBlankNode, SubjectRow>,
     groups: Vec<RowGroup>,
     components: Components,
 }
@@ -101,14 +129,14 @@ impl Rows {
                 index
             });
             output.groups[group].members.push(quad.subject.clone());
-            output.subjects.insert(quad.subject, group);
+            output.subjects.insert(quad.subject, SubjectRow::new(group));
         }
         output.components = Components::discover(data, predicate, &output, &signatures)?;
         Ok(output)
     }
 
     fn extend(
-        &self,
+        &mut self,
         data: &impl Graph,
         predicate: &NamedNode,
         pending: &mut Pending,
@@ -125,12 +153,21 @@ impl Rows {
                 let Ok(intermediate) = NamedOrBlankNode::try_from(intermediate.clone()) else {
                     continue;
                 };
-                if self.subjects.get(&intermediate) == Some(&id) {
+                if self
+                    .subjects
+                    .get(&intermediate)
+                    .is_some_and(|row| row.group() == id)
+                {
                     continue;
                 }
-                // R^-1 R: subject replacement on an equality predicate. The inverse
-                // edge itself is pending and must not become visible to this pass.
-                if !self.dense(&intermediate) {
+                // This representative row proves an incoming witness from this
+                // source group. Mark before dense-source early continuation.
+                if let Some(row) = self.subjects.get_mut(&intermediate) {
+                    row.mark_cross_group_incoming();
+                }
+                // A terminal subject has no outgoing row to subtract. Its
+                // common-predecessor consequences remain grouped by this row.
+                if !self.subjects.contains_key(&intermediate) {
                     for target in &values {
                         pending.push(
                             data,
@@ -157,6 +194,71 @@ impl Rows {
                 }
             }
             for member in &group.members {
+                for target in &missing {
+                    pending.push(
+                        data,
+                        Quad::new(
+                            member.clone(),
+                            predicate.clone(),
+                            target.clone(),
+                            GraphName::DefaultGraph,
+                        ),
+                    )?;
+                }
+            }
+        }
+        self.extend_inverse(data, predicate, pending)
+    }
+
+    fn extend_inverse(
+        &self,
+        data: &impl Graph,
+        predicate: &NamedNode,
+        pending: &mut Pending,
+    ) -> Result<()> {
+        for (id, group) in self.groups.iter().enumerate() {
+            // All representative outgoing rows have marked their actual source
+            // witnesses. Closed groups need no second outgoing or incoming read.
+            if self.components.is_dense(id)
+                || group
+                    .members
+                    .iter()
+                    .all(|member| !self.subjects[member].has_cross_group_incoming())
+            {
+                continue;
+            }
+            let values = row(data, &group.members[0], predicate)?;
+            // First-phase rows/deltas have been dropped. Retain only this row
+            // and its missing-target delta while evaluating source witnesses.
+            let mut missing = HashSet::new();
+            for member in &group.members {
+                // Without a cross-group incoming edge, every predecessor has
+                // exactly values as its outgoing row; no new head can exist.
+                if !self.subjects[member].has_cross_group_incoming() {
+                    continue;
+                }
+                missing.clear();
+                for predecessor in
+                    data.quads(None, Some(predicate.as_ref()), Some(member.as_ref().into()))
+                {
+                    let predecessor = predecessor?.subject;
+                    let predecessor_group = self.subjects[&predecessor].group();
+                    if predecessor_group == id
+                        || predecessor != self.groups[predecessor_group].members[0]
+                    {
+                        continue;
+                    }
+                    // Identical predecessor rows all contain this member; their
+                    // representative is therefore an actual source witness too.
+                    for target in
+                        data.quads(Some(predecessor.as_ref()), Some(predicate.as_ref()), None)
+                    {
+                        let target = target?.object;
+                        if !values.contains(&target) {
+                            missing.insert(target);
+                        }
+                    }
+                }
                 for target in &missing {
                     pending.push(
                         data,
@@ -214,10 +316,14 @@ fn replacements(data: &impl Graph, predicate: &NamedNode, pending: &mut Pending)
 
 pub(super) fn apply(data: &impl Graph, pending: &mut Pending) -> Result<()> {
     let predicate = NamedNode::new_unchecked(format!("{OWL}sameAs"));
-    let rows = Rows::new(data, &predicate, pending)?;
+    let mut rows = Rows::new(data, &predicate, pending)?;
     if rows.groups.is_empty() {
         return Ok(());
     }
     rows.extend(data, &predicate, pending)?;
     replacements(data, &predicate, pending)
 }
+
+#[cfg(test)]
+#[path = "same_as_difference_tests.rs"]
+mod difference_tests;

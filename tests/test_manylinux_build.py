@@ -96,7 +96,7 @@ def test_manylinux_outer_enters_one_container_for_all_five_abis(tmp_path):
     assert "sh /build-wheel.sh x86_64-unknown-linux-gnu " + " ".join(ABIS) in calls[1]
 
 
-def test_wheel_job_budget_covers_five_interpreters_and_verification():
+def test_wheel_job_budget_covers_its_interpreters_and_verification():
     import re
 
     workflow = (ROOT / ".github/workflows/ci.yml").read_text()
@@ -113,14 +113,20 @@ def test_wheel_job_budget_covers_five_interpreters_and_verification():
     # installed tests for every wheel, and runner setup without dropping stages.
     required_minutes = 35 + 7 * (len(ABIS) - 1) + 2 * len(ABIS) + 2
     assert required_minutes <= int(timeout.group("default")) <= 90
-    # Intel run 39890667335 needed 24 minutes for the cold build, 10-12
-    # per ABI rebuild and 5-6 per installed suite, exceeding the old 90 minutes.
-    intel_required_minutes = 35 + 12 * (len(ABIS) - 1) + 6 * len(ABIS) + 2
-    assert intel_required_minutes <= int(timeout.group("intel")) <= 120, (
-        "The bounded Intel job must cover every build and installed verification"
-    )
-    versions = " ".join(f"{abi[2]}.{abi.split('-')[0][3:]}" for abi in ABIS)
-    assert f"for python in {versions}; do" in wheels
+    # Run39985683383 exceeded120minutes:35cold+15perABI+8perinstalledsuite.
+    # Partition only Intel into at mostthree interpreters per bounded job.
+    matrix = wheels.split("        include:\n", 1)[1].split("    steps:\n", 1)[0]
+    intel_versions = []
+    for entry in matrix.split("          - ")[1:]:
+        if entry.startswith("os: macos-15-intel\n"):
+            match = re.search(r"python-versions: '([^']+)'", entry)
+            assert match is not None
+            intel_versions.append(match.group(1).split())
+    assert sorted(map(len, intel_versions)) == [2, 3]
+    for versions in intel_versions:
+        required = 35 + 16 * (len(versions) - 1) + 9 * len(versions) + 3
+        assert required <= int(timeout.group("intel")) <= 120
+    assert "for python in ${{ matrix.python-versions }}; do" in wheels
     assert " ".join(ABIS) in wheels
     assert "python scripts/test_wheel.py" in wheels
 
