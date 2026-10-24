@@ -37,7 +37,7 @@ checksum = "8fa3f3d8cbf4dffcfe4991de61d012bef509a409ecbe9dd41049bfe32b4d4653"
 dependencies = [
  "autocfg",
  "libm",
- "num-bigint",
+ "num-bigint 0.4.8",
  "num-integer",
  "num-traits",
 ]
@@ -194,9 +194,9 @@ dependencies = [
 
 [[package]]
 name = "datalog-structural-model"
-version = "1.0.0"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3044a7dd3f85df97b7032b9e0a98b6a90ad9789674860e21ce1c1f9402008c0a"
+checksum = "d56cbba37d44c76f41589878f9a4a86b85f52e8c6f3523ecaf085694fcd870ff"
 dependencies = [
  "rhusky 0.0.6",
  "rustc-hash",
@@ -476,6 +476,16 @@ name = "num-bigint"
 version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c89e69e7e0f03bea5ef08013795c25018e101932225a656383bd384495ecc367"
+dependencies = [
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
+name = "num-bigint"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93e7820bc0a80a0238e650327316f929ba18d5be054b647490a3a6a339f3e7c0"
 dependencies = [
  "num-integer",
  "num-traits",
@@ -830,7 +840,7 @@ dependencies = [
  "bigdecimal",
  "fancy-regex",
  "iri-rfc3987",
- "num-bigint",
+ "num-bigint 0.4.8",
  "oxigraph",
  "oxrdf",
  "oxsdatatypes",
@@ -937,12 +947,13 @@ dependencies = [
 
 [[package]]
 name = "rdf-reasoning"
-version = "0.3.0"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4db048caedf85a8d5bfe06a4efe2541bc6b9ca611f712420a6d7aed2036b1227"
+checksum = "534e173e72bed87770d4809dfdafd35b997579563c9111570de0455e89f54ba0"
 dependencies = [
  "datalog-structural-model",
- "rhusky 0.0.6",
+ "num-bigint 0.5.1",
+ "rhusky 2.0.1",
  "serde",
 ]
 
