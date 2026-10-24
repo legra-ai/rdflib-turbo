@@ -2,6 +2,7 @@
 
 import decimal
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -85,7 +86,7 @@ def test_signaling_nan_raises_reference_exception_and_rolls_back():
 
 @pytest.mark.parametrize("right", ['"1"', '"NaN"', '"INF"', '"bad"'])
 def test_decimal_float_comparison_flags_match_reference(right):
-    source = f'<urn:s> <urn:p> "1.0"^^<http://www.w3.org/2001/XMLSchema#decimal>; <urn:q> {right}^^<http://www.w3.org/2001/XMLSchema#double> .'
+    source = f'<urn:s> <urn:p> "1.0"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n<urn:s> <urn:q> {right}^^<http://www.w3.org/2001/XMLSchema#double> .'
     with decimal.localcontext() as context:
         for api in ["reference", "native"]:
             context.clear_flags()
@@ -100,3 +101,23 @@ def test_decimal_float_comparison_flags_match_reference(right):
             else:
                 graph.infer(inference="rdfs")
                 assert dict(context.flags) == expected
+
+
+def test_numeric_conversion_snapshots_each_callers_integer_limit():
+    source = (
+        f'<urn:integer> <urn:p> "{"0" * 641}"^^<http://www.w3.org/2001/XMLSchema#integer> .\n'
+        '<urn:boolean> <urn:p> "false"^^<http://www.w3.org/2001/XMLSchema#boolean> .'
+    )
+    previous = sys.get_int_max_str_digits()
+    try:
+        for limit, expected in [(640, False), (0, True), (640, False)]:
+            sys.set_int_max_str_digits(limit)
+            graph = Dataset().parse(data=source, format="nt").infer(inference="rdfs")
+            assert (
+                graph.query(
+                    'ASK { <urn:integer> <urn:p> "false"^^<http://www.w3.org/2001/XMLSchema#boolean> }'
+                ).askAnswer
+                is expected
+            )
+    finally:
+        sys.set_int_max_str_digits(previous)
