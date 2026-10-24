@@ -2,9 +2,10 @@
 
 import pytest
 from owlrl import DeductiveClosure, OWLRL_Semantics
-from rdflib import Graph, Literal, URIRef
+from rdflib import BNode, Graph, Literal, URIRef
 from rdflib.compare import isomorphic
 from rdflib_turbo import Dataset, Store
+from rdflib_turbo import Graph as NativeGraph
 
 PREFIX = "@prefix owl: <http://www.w3.org/2002/07/owl#> . "
 CASES = [
@@ -55,3 +56,41 @@ def test_generalized_equality_matches_reference(document, consequence, api, tmp_
                 actual = Graph().parse(data=reopened.serialize(format="ntriples"), format="nt")
                 assert consequence in actual
                 assert isomorphic(actual, expected)
+
+
+@pytest.mark.parametrize("identifier", [URIRef("urn:source"), BNode("source")])
+@pytest.mark.parametrize("inside", [False, True])
+def test_equality_uses_only_the_selected_source_graph(identifier, inside):
+    with Store() as store:
+        source = NativeGraph(store, identifier, bind_namespaces="none")
+        # A caller graph with the internal query-view IRI remains ordinary data.
+        outside = NativeGraph(
+            store, URIRef("urn:rdflib-turbo:inference:generalized"), bind_namespaces="none"
+        )
+        source.parse(data='<urn:a> <urn:p> "shared" .', format="turtle")
+        alias = '<urn:b> <http://www.w3.org/2002/07/owl#sameAs> "shared" .'
+        outside.parse(data=alias, format="turtle")
+        if inside:
+            source.parse(data=alias, format="turtle")
+        source.infer(inference="owlrl")
+        assert ((URIRef("urn:a"), URIRef("urn:p"), URIRef("urn:b")) in source) is inside
+        assert len(outside) == 1
+
+
+def test_generalized_equality_rolls_back_and_can_be_retried():
+    with Store() as store:
+        store.parse(data=PREFIX + CASES[0][0])
+        before = store.serialize(format="ntriples")
+        with pytest.raises(RuntimeError, match="abort"):
+            with store.transaction() as transaction:
+                transaction.infer(inference="owlrl")
+                assert transaction.query("ASK { <urn:b> <urn:p> <urn:value> }").askAnswer
+                raise RuntimeError("abort")
+        assert store.serialize(format="ntriples") == before
+        store.infer(inference="owlrl")
+        assert store.query("ASK { <urn:b> <urn:p> <urn:value> }").askAnswer
+
+
+def test_rdfs_mode_does_not_enable_equality():
+    data = Dataset().parse(data=PREFIX + CASES[1][0]).infer(inference="rdfs")
+    assert not data.query("ASK { <urn:a> <urn:p> <urn:b> }").askAnswer
