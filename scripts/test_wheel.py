@@ -160,6 +160,8 @@ def test_installed_wheel(wheel, version, shacl_wheel):
                 "--no-emit-project",
                 "--no-emit-package",
                 "pyshacl-turbo",
+                "--no-emit-package",
+                "owlrl-turbo",
                 "--no-hashes",
                 "--output-file",
                 str(dependencies),

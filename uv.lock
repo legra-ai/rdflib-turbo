@@ -427,6 +427,18 @@ wheels = [
 ]
 
 [[package]]
+name = "owlrl-turbo"
+version = "0.1.0a3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "rdflib-turbo" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b4/5b/63e998bd7dc1ad21839ba61590271c9f10f45d5b66b47aed053d15b74bea/owlrl_turbo-0.1.0a3.tar.gz", hash = "sha256:d1876bfd3a8a59d0604e29d52e10b0f6ede4b8e300692dfb28e137d8f4ef314c", size = 72608, upload-time = "2026-10-17T20:24:50.313Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c4/5b/cb1e710b1a6b9adc390914f32ec8e26ac554f726f40753817a2c5fa87d22/owlrl_turbo-0.1.0a3-py3-none-any.whl", hash = "sha256:0a93ac9d7bedce17d9d453a49e906dfee8c3d4a4bc16975f7723c183644fe0d9", size = 9728, upload-time = "2026-10-17T20:24:48.99Z" },
+]
+
+[[package]]
 name = "packaging"
 version = "26.3"
 source = { registry = "https://pypi.org/simple" }
@@ -696,6 +708,7 @@ dependencies = [
 [package.optional-dependencies]
 test = [
     { name = "owlrl" },
+    { name = "owlrl-turbo" },
     { name = "packaging" },
     { name = "pyshacl-turbo" },
     { name = "pytest" },
@@ -706,6 +719,7 @@ test = [
 [package.dev-dependencies]
 coverage = [
     { name = "owlrl" },
+    { name = "owlrl-turbo" },
     { name = "pyshacl" },
     { name = "pyshacl-turbo", extra = ["test"] },
     { name = "pytest" },
@@ -721,6 +735,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "owlrl", marker = "extra == 'test'", specifier = "==7.6.2" },
+    { name = "owlrl-turbo", marker = "extra == 'test'", specifier = "==0.1.0a3" },
     { name = "packaging", marker = "extra == 'test'", specifier = ">=26.3" },
     { name = "pyshacl-turbo", marker = "extra == 'test'", editable = "../pyshacl-turbo" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8,<10" },
@@ -733,6 +748,7 @@ provides-extras = ["test"]
 [package.metadata.requires-dev]
 coverage = [
     { name = "owlrl", specifier = "==7.6.2" },
+    { name = "owlrl-turbo", specifier = "==0.1.0a3" },
     { name = "pyshacl", specifier = "==0.40.1" },
     { name = "pyshacl-turbo", extras = ["test"], editable = "../pyshacl-turbo" },
     { name = "pytest", specifier = "==9.1.1" },

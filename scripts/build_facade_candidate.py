@@ -185,6 +185,8 @@ def build(arguments):
             "--no-emit-project",
             "--no-emit-package",
             "pyshacl-turbo",
+            "--no-emit-package",
+            "owlrl-turbo",
             "--no-hashes",
             "--output-file",
             exported,

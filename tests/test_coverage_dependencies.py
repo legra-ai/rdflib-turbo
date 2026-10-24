@@ -54,6 +54,12 @@ def test_locked_export_precedes_isolated_import_and_preserves_source(
             assert args[args.index(selection[0]) : args.index(selection[0]) + 2] == selection
             if project == "rdflib-turbo":
                 assert args[args.index("--no-emit-package") + 1] == "pyshacl-turbo"
+                omitted = {
+                    args[index + 1]
+                    for index, value in enumerate(args)
+                    if value == "--no-emit-package"
+                }
+                assert omitted == {"pyshacl-turbo", "owlrl-turbo"}
             Path(args[args.index("--output-file") + 1]).write_text("current==2\n")
         elif args[:2] == ["uv", "add"]:
             exported = Path(args[args.index("--requirements") + 1])

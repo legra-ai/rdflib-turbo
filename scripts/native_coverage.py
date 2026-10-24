@@ -123,7 +123,11 @@ def initialize_dependencies(root, profiles, output, project, python, environment
     root, profiles, output = root.resolve(), profiles.resolve(), output.resolve()
     selections = {"rdflib-turbo": ["--group", "coverage"], "pyshacl-turbo": ["--extra", "test"]}
     selection = selections[project]
-    omitted = ["--no-emit-package", "pyshacl-turbo"] if project == "rdflib-turbo" else []
+    omitted = (
+        ["--no-emit-package", "pyshacl-turbo", "--no-emit-package", "owlrl-turbo"]
+        if project == "rdflib-turbo"
+        else []
+    )
     sources = {name: (root / name).read_bytes() for name in ("pyproject.toml", "uv.lock")}
     if tomllib.loads(sources["pyproject.toml"].decode())["project"]["name"] != project:
         raise ValueError("Coverage project identity does not match source metadata")
