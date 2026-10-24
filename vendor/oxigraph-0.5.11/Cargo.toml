@@ -91,6 +91,9 @@ version = ">=5.4, <7.0"
 [dependencies.oxiri]
 version = "0.2.11"
 
+[dependencies.parking_lot]
+version = "0.12.5"
+
 [dependencies.oxrdf]
 version = "=0.3.4"
 features = [
@@ -397,3 +400,6 @@ unused_qualifications = "warn"
 
 [build-dependencies.sha2]
 version = "0.11"
+
+# Standalone tests resolve the root fork patches through scripts/vendor_memory_tests.py.
+[workspace]

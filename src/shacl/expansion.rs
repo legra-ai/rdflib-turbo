@@ -53,10 +53,12 @@ impl SharedShapes {
                     .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?
                     .copy_owner();
                 options.namespaces = working.namespaces.clone();
-                let warnings = self
+                let expansion = self
                     .inner
-                    .expand_rules(&mut working, options)
+                    .expand_staged(&working.data, options)
                     .map_err(error)?;
+                working.extend(expansion.graph.iter());
+                let warnings = expansion.recursion_warnings;
                 let result = NativeDataset {
                     inner: RwLock::new(DatasetState::new(working.data, working.namespaces)),
                 };
@@ -87,7 +89,15 @@ mod tests {
             )
             .unwrap();
             let before = data.dump(py, "nquads").unwrap();
-            let shapes = SharedShapes::new(py, RULE, true, vec![], true).unwrap();
+            let shapes = SharedShapes::new(
+                py,
+                RULE,
+                true,
+                vec![],
+                true,
+                crate::native_tests::host_regex_policy(py),
+            )
+            .unwrap();
             let (result, warnings) = shapes.expand(py, &data, "{}", false).unwrap();
             let result = result.unwrap();
             assert!(warnings.is_empty());
@@ -114,7 +124,15 @@ mod tests {
             data.load(py, "<urn:a> <urn:p> <urn:b>.", "turtle", None, true)
                 .unwrap();
             let before = data.dump(py, "nquads").unwrap();
-            let shapes = SharedShapes::new(py, RULE, true, vec![], true).unwrap();
+            let shapes = SharedShapes::new(
+                py,
+                RULE,
+                true,
+                vec![],
+                true,
+                crate::native_tests::host_regex_policy(py),
+            )
+            .unwrap();
             let failure = shapes
                 .expand(
                     py,

@@ -2,13 +2,19 @@ use oxigraph::sparql::QueryResults;
 
 use super::*;
 
+pub(crate) fn host_regex_policy(py: Python<'_>) -> Py<shacl_bindings::NativeRegexPolicy> {
+    let module = pyo3::types::PyModule::new(py, "native_host_policy_fixture").unwrap();
+    shacl_bindings::register(&module, crate::regex_policy::build(py).unwrap()).unwrap();
+    module.getattr("_REGEX_POLICY").unwrap().extract().unwrap()
+}
+
 #[test]
 fn failure_after_an_inference_round_rolls_back_all_axioms_and_derived_facts() {
     Python::initialize();
     Python::attach(|py| {
         for format in ["turtle", "trig"] {
             for destination in [None, Some("urn:destination")] {
-                let statements = "<urn:keyAlias> <http://www.w3.org/2000/01/rdf-schema#subPropertyOf> <http://www.w3.org/2002/07/owl#hasKey> . <urn:C> <urn:keyAlias> <urn:broken> .";
+                let statements = "<urn:keyAlias> <http://www.w3.org/2000/01/rdf-schema#subPropertyOf> <http://www.w3.org/2002/07/owl#hasKey> . <urn:C> <urn:keyAlias> <urn:broken> . <urn:broken> <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <urn:key>; <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <urn:broken> .";
                 let source = if format == "trig" {
                     format!("<urn:original> {{ {statements} }}")
                 } else {
@@ -22,11 +28,21 @@ fn failure_after_an_inference_round_rolls_back_all_axioms_and_derived_facts() {
                         .infer(py, "owlrl", destination, false, false, None)
                         .unwrap_err()
                         .to_string()
-                        .contains("Malformed RDF list")
+                        .contains("List contains a recursive rdf:rest reference")
                 );
                 assert_eq!(native.dump(py, "nquads").unwrap(), before);
                 // The failed round must not leave the newly derived hasKey or
                 // the OWL axioms behind. A corrected input can then succeed.
+                native.inner.write().unwrap().data.remove(QuadRef::new(
+                    NamedNodeRef::new_unchecked("urn:broken"),
+                    NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest"),
+                    NamedNodeRef::new_unchecked("urn:broken"),
+                    if format == "trig" {
+                        GraphNameRef::NamedNode(NamedNodeRef::new_unchecked("urn:original"))
+                    } else {
+                        GraphNameRef::DefaultGraph
+                    },
+                ));
                 native.load(py, "<urn:broken> <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <urn:key>; <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil> .", "turtle", None, true).unwrap();
                 native
                     .infer(py, "owlrl", destination, false, false, None)
@@ -46,21 +62,10 @@ fn dataset(source: &str) -> Dataset {
 }
 
 #[test]
-fn graph_helpers_preserve_context_and_exact_subject_identity() {
+fn frozen_union_preserves_source_contexts_without_mutation() {
     let data = dataset("<urn:s> <urn:p> <urn:o> . _:b <urn:p> <urn:o> .");
     let predicate = NamedNode::new("urn:p").unwrap();
     let object: Term = NamedNode::new("urn:o").unwrap().into();
-    let named: Term = NamedNode::new("urn:s").unwrap().into();
-    let blank: Term = BlankNode::new("b").unwrap().into();
-    let literal: Term = Literal::new_simple_literal("invalid subject").into();
-    assert_eq!(graph::subject(&named).unwrap().to_string(), "<urn:s>");
-    assert_eq!(graph::subject(&blank).unwrap().to_string(), "_:b");
-    assert!(
-        graph::subject(&literal)
-            .unwrap_err()
-            .to_string()
-            .contains("Expected a shape")
-    );
     let mut before = data.clone();
     before.insert(&Quad::new(
         NamedNode::new("urn:n").unwrap(),
@@ -68,7 +73,7 @@ fn graph_helpers_preserve_context_and_exact_subject_identity() {
         object.clone(),
         NamedNode::new("urn:g").unwrap(),
     ));
-    let union = graph::with_union(&before);
+    let union = graph::with_union(&before.clone().into());
     assert_eq!(union.len(), before.len() + 1);
     assert!(!before.contains(QuadRef::new(
         NamedNodeRef::new_unchecked("urn:n"),
@@ -80,7 +85,7 @@ fn graph_helpers_preserve_context_and_exact_subject_identity() {
 
 #[test]
 fn inference_noop_modes_and_invalid_modes_are_explicit() {
-    let original = dataset("<urn:s> <urn:p> <urn:o> .");
+    let original: oxrdf::GeneralizedDataset = dataset("<urn:s> <urn:p> <urn:o> .").into();
     for mode in ["none", ""] {
         for options in [
             Default::default(),
@@ -208,31 +213,17 @@ fn native_input_validation_checks_formats_bases_modes_and_query_failures() {
 }
 
 #[test]
-fn property_chain_validation_and_named_graph_inference_preserve_atomicity() {
+fn generalized_chain_key_schema_and_named_graph_inference_remain_supported() {
     Python::initialize();
     Python::attach(|py| {
-        for (source, message) in [
-            (
-                "_:p <http://www.w3.org/2002/07/owl#propertyChainAxiom> (<urn:p>) .",
-                "predicate must be an IRI",
-            ),
-            (
-                "<urn:p> <http://www.w3.org/2002/07/owl#propertyChainAxiom> (\"literal\") .",
-                "members must be IRIs",
-            ),
-            (
-                "<urn:C> <http://www.w3.org/2002/07/owl#hasKey> (\"literal\") .",
-                "Key properties must be IRIs",
-            ),
+        for source in [
+            "_:p <http://www.w3.org/2002/07/owl#propertyChainAxiom> (<urn:p>) .",
+            "<urn:p> <http://www.w3.org/2002/07/owl#propertyChainAxiom> (\"literal\") .",
+            "<urn:C> <http://www.w3.org/2002/07/owl#hasKey> (\"literal\") .",
         ] {
             let native = NativeDataset::new();
             native.load(py, source, "turtle", None, true).unwrap();
-            let before = native.dump(py, "nquads").unwrap();
-            let failure = native
-                .infer(py, "owlrl", None, false, false, None)
-                .unwrap_err();
-            assert!(failure.to_string().contains(message), "{failure}");
-            assert_eq!(native.dump(py, "nquads").unwrap(), before);
+            native.infer(py, "owlrl", None, false, false, None).unwrap();
         }
         let native = NativeDataset::new();
         native.load(py, "<urn:g> { <urn:C> <http://www.w3.org/2000/01/rdf-schema#subClassOf> <urn:D> . <urn:x> a <urn:C> . }", "trig", None, true).unwrap();
@@ -259,7 +250,7 @@ fn property_chain_validation_and_named_graph_inference_preserve_atomicity() {
 
 #[test]
 fn chain_and_key_entailments_use_every_step_and_every_exact_key_value() {
-    let mut data = dataset(
+    let mut data: oxrdf::GeneralizedDataset = dataset(
         r#"
         @prefix owl: <http://www.w3.org/2002/07/owl#>.
         <urn:ancestor> owl:propertyChainAxiom (<urn:parent> <urn:parent>).
@@ -272,7 +263,8 @@ fn chain_and_key_entailments_use_every_step_and_every_exact_key_value() {
         <urn:z> a <urn:Person>; <urn:first> "a"; <urn:second> "different".
         <urn:missing> a <urn:Person>; <urn:first> "no match".
     "#,
-    );
+    )
+    .into();
     inference::expand(&mut data, "owlrl", Default::default()).unwrap();
     let ask = |query| {
         let QueryResults::Boolean(value) = SparqlEvaluator::new()
@@ -304,7 +296,7 @@ fn failed_inference_preserves_named_contexts_and_inference_destinations() {
             native
                 .load(
                     py,
-                    "<urn:g> { <urn:C> <http://www.w3.org/2002/07/owl#hasKey> _:broken . }",
+                    "<urn:g> { <urn:C> <http://www.w3.org/2002/07/owl#hasKey> _:broken . _:broken <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <urn:key>; <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> _:broken . }",
                     "trig",
                     None,
                     true,

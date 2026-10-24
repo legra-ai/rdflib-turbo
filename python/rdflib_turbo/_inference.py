@@ -4,9 +4,19 @@ from rdflib import BNode, URIRef
 from rdflib import Dataset as RDFLibDataset
 from rdflib import Graph as RDFLibGraph
 
+from ._reads import _TERM_FACTORIES
 from .store import Transaction
 
 _ERROR_NAMESPACE = "http://www.daml.org/2002/03/agents/agent-ont#"
+
+
+def _change_rows(next_batch):
+    # bounded: one native batch (128 rows), plus the consumer's bounded import pins.
+    while True:
+        rows, done = next_batch()
+        yield from rows
+        if done:
+            return
 
 
 class GraphInference:
@@ -46,6 +56,45 @@ class GraphInference:
                 backend._native.rollback()
             raise
         return self
+
+    def _capture_changes(
+        self,
+        *,
+        inference="owlrl",
+        destination=None,
+        axiomatic_triples=False,
+        datatype_axioms=False,
+        prior_error_messages=None,
+    ):
+        """Commit a private imported owner; close both leases in finally.
+
+        Ordinary OWL writeback uses this only after constructing a fresh,
+        unpublished import. Public delta results require prepared acceptance.
+        """
+        backend = self.store.backend
+        if isinstance(backend, Transaction):
+            raise NotImplementedError("Delta capture requires a committed memory Store")
+        source, target, identifier = self._inference_scope(destination)
+        backend._last_inference = None
+        changes = backend._native._infer_changes(
+            inference,
+            (source, target),
+            _TERM_FACTORIES,
+            options=(axiomatic_triples, datatype_axioms),
+            prior_error_messages=prior_error_messages,
+        )
+        try:
+            outcome = changes.outcome
+            if outcome.error_messages:
+                destination = RDFLibGraph(
+                    store=self.store, identifier=identifier, bind_namespaces="none"
+                )
+                destination.bind("err", _ERROR_NAMESPACE)
+            backend._last_inference = outcome
+            return changes
+        except BaseException:
+            changes.close()
+            raise
 
     def _infer_bound_scope(
         self, inference, source, destination_graph, destination_identifier, **options

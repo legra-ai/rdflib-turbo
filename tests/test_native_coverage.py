@@ -16,6 +16,13 @@ def harness():
     return module
 
 
+def test_repository_unmapped_source_inventory_matches_current_sources():
+    root = Path(__file__).resolve().parents[1]
+    inventory = json.loads((root / "native-coverage-sources.json").read_text())
+    for name, entry in inventory.items():
+        assert hashlib.sha256((root / name).read_bytes()).hexdigest() == entry["sha256"]
+
+
 def file_report(path, covered, count=10):
     return {
         "filename": str(path),
@@ -118,6 +125,22 @@ def test_zero_mapping_declarations_require_an_exact_source_hash(tmp_path):
     source.write_text("pub fn now_executable() {}")
     with pytest.raises(RuntimeError, match="source hash"):
         module.summarize({"data": [{"files": []}]}, tmp_path)
+
+
+def test_declaration_inventory_cannot_hide_an_executable_mapping_with_the_same_hash(tmp_path):
+    module = harness()
+    (tmp_path / "src").mkdir()
+    source = tmp_path / "src/types.rs"
+    source.write_text("pub fn typed_error_message() {}")
+    inventory = {
+        "src/types.rs": {
+            "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+            "reason": "Former declaration-only inventory",
+        }
+    }
+    (tmp_path / "native-coverage-sources.json").write_text(json.dumps(inventory))
+    with pytest.raises(RuntimeError, match="now has executable coverage"):
+        module.summarize({"data": [{"files": [file_report(source, covered=1)]}]}, tmp_path)
 
 
 def test_profile_mapping_cannot_shrink_the_owned_denominator():

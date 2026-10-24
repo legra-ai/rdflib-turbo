@@ -2,7 +2,9 @@
 use crate::model::vocab::rdf;
 #[cfg(all(feature = "rdf-12", not(feature = "exact-term-storage")))]
 use crate::model::{BlankNode, GraphName, Term, Triple};
-use crate::model::{GraphNameRef, NamedOrBlankNodeRef, Quad, QuadRef, TermRef};
+#[cfg(test)]
+use crate::model::QuadRef;
+use crate::model::{GeneralizedQuadRef, GraphNameRef, NamedOrBlankNodeRef, Quad, TermRef};
 #[cfg(not(feature = "exact-term-storage"))]
 use crate::storage::binary_encoder::TYPE_STAR_TRIPLE;
 use crate::storage::binary_encoder::{
@@ -232,7 +234,7 @@ impl RocksDbStorage {
             for quad in self.snapshot().quads() {
                 let quad = quad?;
                 if !quad.graph_name.is_default_graph() {
-                    graph_names.insert(quad.graph_name);
+                    graph_names.insert(EncodedTerm::from(quad.graph_name));
                 }
             }
             let mut graph_names = graph_names
@@ -321,7 +323,7 @@ impl RocksDbStorage {
                             &t.subject,
                             &t.predicate,
                             &t.object,
-                            &quad.graph_name,
+                            &quad.graph_name.into(),
                             &snapshot,
                             &mut w,
                         )?;
@@ -331,12 +333,12 @@ impl RocksDbStorage {
                             &t.subject,
                             &t.predicate,
                             &t.object,
-                            &quad.graph_name,
+                            &quad.graph_name.into(),
                             &snapshot,
                             &mut w,
                         )?;
                     }
-                    w.insert(snapshot.decode_quad(&new_quad)?.as_ref());
+                    w.insert(snapshot.decode_generalized_quad(&new_quad)?.as_ref());
                     w.remove_encoded(&quad);
                     w.commit()?;
                 }
@@ -775,7 +777,7 @@ impl<'a> RocksDbStorageReader<'a> {
         }
         for spo in self.dspo_quads(&[]) {
             let spo = spo?;
-            self.decode_quad(&spo)?; // We ensure that the quad is readable
+            self.decode_generalized_quad(&spo)?; // We ensure that the quad is readable
             if !self.storage.db.contains_key(
                 &self.storage.dpos_cf,
                 &encode_term_triple(&spo.predicate, &spo.object, &spo.subject),
@@ -805,11 +807,11 @@ impl<'a> RocksDbStorageReader<'a> {
         }
         for gspo in self.gspo_quads(&[]) {
             let gspo = gspo?;
-            self.decode_quad(&gspo)?; // We ensure that the quad is readable
+            self.decode_generalized_quad(&gspo)?; // We ensure that the quad is readable
             if !self.storage.db.contains_key(
                 &self.storage.gpos_cf,
                 &encode_term_quad(
-                    &gspo.graph_name,
+                    &gspo.graph_name.into(),
                     &gspo.predicate,
                     &gspo.object,
                     &gspo.subject,
@@ -820,7 +822,7 @@ impl<'a> RocksDbStorageReader<'a> {
             if !self.storage.db.contains_key(
                 &self.storage.gosp_cf,
                 &encode_term_quad(
-                    &gspo.graph_name,
+                    &gspo.graph_name.into(),
                     &gspo.object,
                     &gspo.subject,
                     &gspo.predicate,
@@ -834,7 +836,7 @@ impl<'a> RocksDbStorageReader<'a> {
                     &gspo.subject,
                     &gspo.predicate,
                     &gspo.object,
-                    &gspo.graph_name,
+                    &gspo.graph_name.into(),
                 ),
             )? {
                 return Err(CorruptionError::new("Quad in gspo and not in spog").into());
@@ -845,7 +847,7 @@ impl<'a> RocksDbStorageReader<'a> {
                     &gspo.predicate,
                     &gspo.object,
                     &gspo.subject,
-                    &gspo.graph_name,
+                    &gspo.graph_name.into(),
                 ),
             )? {
                 return Err(CorruptionError::new("Quad in gspo and not in posg").into());
@@ -856,7 +858,7 @@ impl<'a> RocksDbStorageReader<'a> {
                     &gspo.object,
                     &gspo.subject,
                     &gspo.predicate,
-                    &gspo.graph_name,
+                    &gspo.graph_name.into(),
                 ),
             )? {
                 return Err(CorruptionError::new("Quad in gspo and not in ospg").into());
@@ -864,7 +866,7 @@ impl<'a> RocksDbStorageReader<'a> {
             if !self
                 .storage
                 .db
-                .contains_key(&self.storage.graphs_cf, &encode_term(&gspo.graph_name))?
+                .contains_key(&self.storage.graphs_cf, &encode_term(&gspo.graph_name.into()))?
             {
                 return Err(
                     CorruptionError::new("Quad graph name in gspo and not in graphs").into(),
@@ -969,7 +971,8 @@ pub struct RocksDbStorageTransaction<'a> {
 }
 
 impl RocksDbStorageTransaction<'_> {
-    pub fn insert(&mut self, quad: QuadRef<'_>) {
+    pub fn insert<'a>(&mut self, quad: impl Into<GeneralizedQuadRef<'a>>) {
+        let quad = quad.into();
         let encoded = quad.into();
         self.buffer.clear();
         if quad.graph_name.is_default_graph() {
@@ -1025,10 +1028,10 @@ impl RocksDbStorageTransaction<'_> {
             self.insert_term(quad.object, &encoded.object);
 
             self.buffer.clear();
-            write_term(&mut self.buffer, &encoded.graph_name);
+            write_term(&mut self.buffer, &encoded.graph_name.into());
             self.transaction
                 .insert_empty(&self.storage.graphs_cf, &self.buffer);
-            self.insert_graph_name(quad.graph_name, &encoded.graph_name);
+            self.insert_graph_name(quad.graph_name, &encoded.graph_name.into());
         }
     }
 
@@ -1062,7 +1065,8 @@ impl RocksDbStorageTransaction<'_> {
         )
     }
 
-    pub fn remove(&mut self, quad: QuadRef<'_>) {
+    pub fn remove<'a>(&mut self, quad: impl Into<GeneralizedQuadRef<'a>>) {
+        let quad = quad.into();
         self.remove_encoded(&quad.into())
     }
 
@@ -1166,7 +1170,8 @@ impl RocksDbStorageReadableTransaction<'_> {
         }
     }
 
-    pub fn insert(&mut self, quad: QuadRef<'_>) {
+    pub fn insert<'a>(&mut self, quad: impl Into<GeneralizedQuadRef<'a>>) {
+        let quad = quad.into();
         let encoded = quad.into();
         self.buffer.clear();
         if quad.graph_name.is_default_graph() {
@@ -1222,10 +1227,10 @@ impl RocksDbStorageReadableTransaction<'_> {
             self.insert_term(quad.object, &encoded.object);
 
             self.buffer.clear();
-            write_term(&mut self.buffer, &encoded.graph_name);
+            write_term(&mut self.buffer, &encoded.graph_name.into());
             self.transaction
                 .insert_empty(&self.storage.graphs_cf, &self.buffer);
-            self.insert_graph_name(quad.graph_name, &encoded.graph_name)
+            self.insert_graph_name(quad.graph_name, &encoded.graph_name.into())
         }
     }
 
@@ -1259,7 +1264,8 @@ impl RocksDbStorageReadableTransaction<'_> {
         );
     }
 
-    pub fn remove(&mut self, quad: QuadRef<'_>) {
+    pub fn remove<'a>(&mut self, quad: impl Into<GeneralizedQuadRef<'a>>) {
+        let quad = quad.into();
         self.remove_encoded(&quad.into())
     }
 
@@ -1566,7 +1572,7 @@ impl<'a> FileBulkLoader<'a> {
                 self.insert_term(quad.predicate.as_ref().into(), &encoded.predicate);
                 self.insert_term(quad.object.as_ref(), &encoded.object);
 
-                if self.graphs.insert(encoded.graph_name.clone()) {
+                if self.graphs.insert(encoded.graph_name.into()) {
                     self.insert_term(
                         match quad.graph_name.as_ref() {
                             GraphNameRef::NamedNode(n) => n.into(),
@@ -1578,7 +1584,7 @@ impl<'a> FileBulkLoader<'a> {
                                 .into());
                             }
                         },
-                        &encoded.graph_name,
+                        &encoded.graph_name.into(),
                     );
                 }
             }
@@ -1646,7 +1652,7 @@ impl<'a> FileBulkLoader<'a> {
                 self.storage.gspo_cf.clone(),
                 self.build_sst_for_keys(self.quads.iter().map(|quad| {
                     encode_term_quad(
-                        &quad.graph_name,
+                        &quad.graph_name.into(),
                         &quad.subject,
                         &quad.predicate,
                         &quad.object,
@@ -1657,7 +1663,7 @@ impl<'a> FileBulkLoader<'a> {
                 self.storage.gpos_cf.clone(),
                 self.build_sst_for_keys(self.quads.iter().map(|quad| {
                     encode_term_quad(
-                        &quad.graph_name,
+                        &quad.graph_name.into(),
                         &quad.predicate,
                         &quad.object,
                         &quad.subject,
@@ -1668,7 +1674,7 @@ impl<'a> FileBulkLoader<'a> {
                 self.storage.gosp_cf.clone(),
                 self.build_sst_for_keys(self.quads.iter().map(|quad| {
                     encode_term_quad(
-                        &quad.graph_name,
+                        &quad.graph_name.into(),
                         &quad.object,
                         &quad.subject,
                         &quad.predicate,
@@ -1683,7 +1689,7 @@ impl<'a> FileBulkLoader<'a> {
                         &quad.subject,
                         &quad.predicate,
                         &quad.object,
-                        &quad.graph_name,
+                        &quad.graph_name.into(),
                     )
                 }))?,
             ));
@@ -1694,7 +1700,7 @@ impl<'a> FileBulkLoader<'a> {
                         &quad.predicate,
                         &quad.object,
                         &quad.subject,
-                        &quad.graph_name,
+                        &quad.graph_name.into(),
                     )
                 }))?,
             ));
@@ -1705,7 +1711,7 @@ impl<'a> FileBulkLoader<'a> {
                         &quad.object,
                         &quad.subject,
                         &quad.predicate,
-                        &quad.graph_name,
+                        &quad.graph_name.into(),
                     )
                 }))?,
             ));

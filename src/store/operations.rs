@@ -12,6 +12,12 @@ use super::pattern::{self, Pattern};
 use super::typed::{self, QuadInput, TermTuple};
 
 pub(super) enum Operation {
+    BeginChanges,
+    ExpandRules {
+        shapes: Arc<CompiledShapes>,
+        options: Options,
+        graph: Option<oxigraph::model::GraphName>,
+    },
     ValidateInferred {
         shapes: Arc<CompiledShapes>,
         options: Options,
@@ -26,8 +32,10 @@ pub(super) enum Operation {
         graph: Option<oxigraph::model::GraphName>,
     },
     InsertTerms(Box<QuadInput>),
+    ImportBatch(super::import::Batch),
     Remove(String),
     Match(String),
+    MatchContexts(String),
     Count(String),
     QueryGraph(String, String, Option<String>),
     QueryPrepared(String, Option<String>, bool, Option<String>),
@@ -64,6 +72,10 @@ pub(super) enum Operation {
 }
 
 pub(super) enum Reply {
+    ChangeBatch(Box<(Vec<oxigraph::store::LexicalQuad>, bool)>),
+    CommittedChanges(Box<oxigraph::store::CommittedChanges>),
+    StagedRules(Box<(Vec<String>, super::shacl::ValidationDelta)>),
+    PreparedRules(Box<(Vec<String>, u64)>),
     Validation(Box<crate::shacl::Report>),
     StagedValidation(Box<(crate::shacl::Report, super::shacl::ValidationDelta)>),
     PreparedValidation(Box<(crate::shacl::Report, u64)>),
@@ -82,6 +94,7 @@ impl Operation {
     pub fn mutates(&self) -> bool {
         match self {
             Self::InsertTerms(_)
+            | Self::ImportBatch(_)
             | Self::Remove(_)
             | Self::LoadGraph { .. }
             | Self::Graph(_, _)
@@ -90,9 +103,12 @@ impl Operation {
             | Self::UpdateGraph(..)
             | Self::Infer(..)
             | Self::InferGraph { .. } => true,
-            Self::Validate { .. }
+            Self::ExpandRules { .. }
+            | Self::BeginChanges
+            | Self::Validate { .. }
             | Self::ValidateInferred { .. }
             | Self::Match(_)
+            | Self::MatchContexts(_)
             | Self::Count(_)
             | Self::QueryGraph(..)
             | Self::Graphs
@@ -109,6 +125,15 @@ impl Operation {
 
     pub fn execute(self, transaction: &mut Transaction<'_>) -> Result<Reply> {
         match self {
+            Self::BeginChanges => transaction
+                .begin_memory_changes()
+                .map(|()| Reply::Done)
+                .map_err(runtime),
+            Self::ExpandRules {
+                shapes,
+                options,
+                graph,
+            } => super::shacl_rules::expand(transaction, &shapes, options, graph),
             Self::ValidateInferred {
                 shapes,
                 options,
@@ -148,20 +173,18 @@ impl Operation {
                     report,
                     super::shacl::ValidationDelta {
                         data: additions,
-                        inference: Dataset::new(),
+                        inference: Default::default(),
                         graph,
                     },
                 ))))
             }
             Self::Count(source) => {
-                let Some(pattern) = Pattern::parse_read(&source)? else {
-                    return Ok(Reply::Count(0));
-                };
+                let pattern = Pattern::parse(&source)?;
                 pattern
                     .count(
                         |graph| transaction.graph_len(graph).map_err(runtime),
                         || {
-                            transaction.quads_for_pattern(
+                            transaction.generalized_quads_for_pattern(
                                 pattern.subject.as_ref().map(|v| v.as_ref()),
                                 pattern.predicate.as_ref().map(|v| v.as_ref()),
                                 pattern.object.as_ref().map(|v| v.as_ref()),
@@ -212,7 +235,7 @@ impl Operation {
                     .map_err(runtime)
             }
             Self::ContainsGraph(source) => transaction
-                .contains_named_graph(&typed::subject(source)?)
+                .contains_named_graph(&typed::graph_name(source)?)
                 .map(Reply::Bool)
                 .map_err(runtime),
             Self::GraphLen(source) => transaction
@@ -229,13 +252,14 @@ impl Operation {
                 Ok(Reply::Done)
             }
             Self::InsertTerms(input) => {
-                transaction.insert(&input.quad()?);
+                transaction.insert_generalized(&input.quad()?);
                 Ok(Reply::Done)
             }
+            Self::ImportBatch(batch) => batch.insert(transaction).map(|()| Reply::Done),
             Self::Remove(source) => {
                 let pattern = Pattern::parse(&source)?;
                 let quads = transaction
-                    .quads_for_pattern(
+                    .generalized_quads_for_pattern(
                         pattern.subject.as_ref().map(|v| v.as_ref()),
                         pattern.predicate.as_ref().map(|v| v.as_ref()),
                         pattern.object.as_ref().map(|v| v.as_ref()),
@@ -244,21 +268,45 @@ impl Operation {
                     .collect::<std::result::Result<Vec<_>, _>>()
                     .map_err(runtime)?;
                 for quad in quads {
-                    transaction.remove(&quad);
+                    transaction.remove_generalized(&quad);
                 }
                 Ok(Reply::Done)
             }
             Self::Match(source) => {
-                let Some(pattern) = Pattern::parse_read(&source)? else {
-                    return Ok(Reply::Text("[]".into()));
-                };
-                pattern::output(transaction.quads_for_pattern(
+                let pattern = Pattern::parse(&source)?;
+                pattern::output(transaction.generalized_quads_for_pattern(
                     pattern.subject.as_ref().map(|v| v.as_ref()),
                     pattern.predicate.as_ref().map(|v| v.as_ref()),
                     pattern.object.as_ref().map(|v| v.as_ref()),
                     pattern.graph.as_ref().map(|v| v.as_ref()),
                 ))
                 .map(Reply::Text)
+            }
+            Self::MatchContexts(source) => {
+                let pattern = Pattern::parse(&source)?;
+                let selected = transaction
+                    .generalized_quads_for_pattern(
+                        pattern.subject.as_ref().map(|v| v.as_ref()),
+                        pattern.predicate.as_ref().map(|v| v.as_ref()),
+                        pattern.object.as_ref().map(|v| v.as_ref()),
+                        pattern.graph.as_ref().map(|v| v.as_ref()),
+                    )
+                    .unique_spo();
+                let mut rows = Vec::new();
+                // This existing transaction transport owns only requested output.
+                // Selection and context expansion execute on the same writer.
+                for statement in selected {
+                    let statement = statement.map_err(runtime)?;
+                    for quad in transaction.generalized_quads_for_pattern(
+                        Some(statement.subject.as_ref()),
+                        Some(statement.predicate.as_ref()),
+                        Some(statement.object.as_ref()),
+                        None,
+                    ) {
+                        rows.push(quad);
+                    }
+                }
+                pattern::output(rows.into_iter()).map(Reply::Text)
             }
             Self::QueryPrepared(source, graph, union, bindings) => {
                 let bindings = super::bindings::InitialBindings::parse(bindings.as_deref())?;
@@ -350,7 +398,7 @@ impl Operation {
             Self::Dump(format) => dump(transaction.iter(), format).map(Reply::Text),
             Self::DumpGraphNt(graph) => {
                 let graph = typed::graph(graph)?;
-                super::output::dump_graph_nt(transaction.quads_for_pattern(
+                super::output::dump_graph_nt(transaction.generalized_quads_for_pattern(
                     None,
                     None,
                     None,

@@ -69,3 +69,22 @@ required. Isolated allocation tests use existing test-only counters and long
 lexical values; they measure requested bytes for one boolean probe, not process
 RSS or end-to-end speed. No storage, dictionary, public API or publication change
 is introduced.
+
+## Generalized staged owner
+
+ADR 0065 extends the shared in-memory core with GeneralizedDataset and a
+change-only journal which can represent removals. The common additive path keeps
+its direct Arc-vector iteration; only actual removals promote changed keys to
+first-presence sets. Borrowed staged union queries and membership avoid the
+historical union materialization described above. Query source scopes and atomic
+publication remain unchanged.
+
+Procedural list reads now share the RDFLib first-witness cursor used by
+diagnostics, including full-Term list nodes, Python default literal truthiness,
+dangling links and the original recursive-rest error. RDFLib Graph.items calls Graph.value with any=True: a
+malformed cell with multiple first/rest values permits any one witness. Native
+index order can choose a different permitted witness than the Memory store;
+regressions require one witness without concatenating alternatives or introducing
+a rejection, rather than adding insertion-order storage metadata.
+Stock datatype truthiness tests do not establish support for arbitrary Python
+conversion bindings or preconstructed literals with a different cached context.

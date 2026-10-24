@@ -26,6 +26,13 @@ result cache; template constant identities remain fixed for the query lifetime.
 No global state, lossy fingerprint comparison or inference-only semantic exception
 is introduced.
 
+On 64-bit targets retain common result keys as three checked u32 identities.
+Use a separate full-width exact set whenever any of the three exceeds u32::MAX;
+never truncate an identity or widen all common keys for an exceptional one.
+Count both disjoint sets toward the existing limit and clear both together.
+32-bit targets keep their existing usize keys. Compare actual requested cache
+allocations with the former full-width set; this is separate from process RSS.
+
 Keep the existing strict inference allocation budget unchanged. Persistent tests
 cover duplicate solutions, mixed variable/constant templates, exact lexical and
 explicit-datatype identity, invalid bindings, generated blank nodes, a backend that

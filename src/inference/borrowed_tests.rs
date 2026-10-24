@@ -11,17 +11,17 @@ fn node(value: &str) -> NamedNode {
     NamedNode::new(format!("urn:{value}")).unwrap()
 }
 
-fn quad(subject: &str, predicate: &str, object: &str, graph: GraphName) -> Quad {
-    Quad::new(node(subject), node(predicate), node(object), graph)
+fn quad(subject: &str, predicate: &str, object: &str, graph: GraphName) -> GeneralizedQuad {
+    GeneralizedQuad::new(node(subject), node(predicate), node(object), graph)
 }
 
 #[test]
 fn borrowed_overlay_queries_one_logical_union_and_retains_physical_contexts() {
     let store = Store::new().unwrap();
     let mut transaction = store.start_transaction().unwrap();
-    transaction.insert(&quad("s", "p", "o", GraphName::DefaultGraph));
-    transaction.insert(&quad("s", "p", "o", node("named").into()));
-    transaction.insert(&quad("other", "p", "o", node("named").into()));
+    transaction.insert_generalized(&quad("s", "p", "o", GraphName::DefaultGraph));
+    transaction.insert_generalized(&quad("s", "p", "o", node("named").into()));
+    transaction.insert_generalized(&quad("other", "p", "o", node("named").into()));
     transaction.insert_named_graph(&node("empty"));
     let mut data = BorrowedInference::new(&transaction, node("inference").into());
     data.insert(quad("derived", "p", "o", GraphName::DefaultGraph))
@@ -61,7 +61,7 @@ fn borrowed_overlay_queries_one_logical_union_and_retains_physical_contexts() {
             .len(),
         3
     );
-    assert_eq!(data.into_additions().len(), 1);
+    assert_eq!(data.into_delta().additions.len(), 1);
     assert_eq!(transaction.len().unwrap(), 3);
 }
 
@@ -70,8 +70,8 @@ fn scoped_overlay_does_not_read_tempting_schema_from_another_graph() {
     let store = Store::new().unwrap();
     let mut transaction = store.start_transaction().unwrap();
     let selected = BlankNode::new("selected").unwrap();
-    transaction.insert(&quad("s", "p", "o", selected.clone().into()));
-    transaction.insert(&quad("wrong", "p", "o", node("outside").into()));
+    transaction.insert_generalized(&quad("s", "p", "o", selected.clone().into()));
+    transaction.insert_generalized(&quad("wrong", "p", "o", node("outside").into()));
     let scoped = pyshacl_turbo_engine::ScopedGraph::new(&transaction, selected.into());
     let mut data = BorrowedInference::new(&scoped, GraphName::DefaultGraph);
     data.insert(quad("derived", "p", "o", GraphName::DefaultGraph))
@@ -85,7 +85,7 @@ fn scoped_overlay_does_not_read_tempting_schema_from_another_graph() {
     };
     assert!(!result);
     assert_eq!(data.named_graphs().count(), 0);
-    assert_eq!(data.into_additions().len(), 1);
+    assert_eq!(data.into_delta().additions.len(), 1);
     assert_eq!(transaction.len().unwrap(), 2);
 }
 
@@ -94,11 +94,11 @@ struct FailedLookup;
 impl GraphRead for FailedLookup {
     fn matching_quads<'a>(
         &'a self,
-        _: Option<NamedOrBlankNodeRef<'_>>,
-        _: Option<NamedNodeRef<'_>>,
+        _: Option<TermRef<'_>>,
+        _: Option<TermRef<'_>>,
         _: Option<TermRef<'_>>,
         _: Option<GraphNameRef<'_>>,
-    ) -> impl Iterator<Item = pyshacl_turbo_engine::Result<Quad>> + use<'a> {
+    ) -> impl Iterator<Item = pyshacl_turbo_engine::Result<GeneralizedQuad>> + use<'a> {
         std::iter::once(Err(ReadError::Runtime("source lookup failed".into())))
     }
     fn named_graphs(
@@ -127,7 +127,7 @@ fn derived_insertion_propagates_borrowed_lookup_errors_without_sticky_state() {
             .execute()
             .is_err()
     );
-    assert_eq!(data.into_additions().len(), 0);
+    assert_eq!(data.into_delta().additions.len(), 0);
 }
 
 #[cfg(feature = "allocation-profiling")]
@@ -139,7 +139,7 @@ fn borrowed_validation_view_does_not_clone_large_base_lexical_storage() {
     let lexical = "x".repeat(4096);
     // bounded: fixed 512-row synthetic source, over 2MiB of unique lexical storage.
     for index in 0..512 {
-        source.insert(&Quad::new(
+        source.insert_generalized(&GeneralizedQuad::new(
             NamedNode::new(format!("urn:{index}:{lexical}")).unwrap(),
             node("p"),
             node("o"),
@@ -147,7 +147,12 @@ fn borrowed_validation_view_does_not_clone_large_base_lexical_storage() {
         ));
     }
     let shapes = pyshacl_turbo_engine::CompiledShapes::compile(
-        pyshacl_turbo_engine::parse_graph("", oxigraph::io::RdfFormat::Turtle, None).unwrap(),
+        pyshacl_turbo_engine::IndexedShapesSource::parse_graph(
+            "",
+            oxigraph::io::RdfFormat::Turtle,
+            None,
+        )
+        .unwrap(),
         false,
     )
     .unwrap();
@@ -162,7 +167,7 @@ fn borrowed_validation_view_does_not_clone_large_base_lexical_storage() {
             .unwrap();
         assert!(result.report.conforms);
         assert!(result.additions.is_empty());
-        assert!(data.into_additions().is_empty());
+        assert!(data.into_delta().additions.is_empty());
     });
     println!(
         "BORROWED_VALIDATION_VIEW allocated_bytes={bytes} base_rows=512 lexical_bytes_min=2097152"

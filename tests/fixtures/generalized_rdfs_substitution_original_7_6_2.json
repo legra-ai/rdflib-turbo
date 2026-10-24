@@ -1,0 +1,1207 @@
+{
+  "original_versions": {
+    "rdflib": "7.6.0",
+    "owlrl": "7.6.2"
+  },
+  "terms": [
+    [
+      "iri",
+      "urn:other",
+      null,
+      null
+    ],
+    [
+      "iri",
+      "urn:other-predicate",
+      null,
+      null
+    ],
+    [
+      "literal",
+      "same",
+      null,
+      "en"
+    ],
+    [
+      "iri",
+      "urn:subject",
+      null,
+      null
+    ],
+    [
+      "iri",
+      "urn:predicate",
+      null,
+      null
+    ],
+    [
+      "literal",
+      "same",
+      null,
+      null
+    ],
+    [
+      "iri",
+      "urn:destination-only",
+      null,
+      null
+    ],
+    [
+      "literal",
+      "unrelated",
+      null,
+      null
+    ],
+    [
+      "blank",
+      "predicate",
+      null,
+      null
+    ],
+    [
+      "literal",
+      "predicate",
+      null,
+      null
+    ],
+    [
+      "blank",
+      "subject",
+      null,
+      null
+    ],
+    [
+      "literal",
+      "subject",
+      null,
+      null
+    ]
+  ],
+  "cases": [
+    {
+      "subject": 3,
+      "predicate": 4,
+      "separate": false,
+      "input": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          3,
+          4,
+          5
+        ]
+      ],
+      "destination_initial": [],
+      "expected_source": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          0,
+          1,
+          5
+        ],
+        [
+          3,
+          4,
+          2
+        ],
+        [
+          3,
+          4,
+          5
+        ]
+      ],
+      "expected_destination": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          0,
+          1,
+          5
+        ],
+        [
+          3,
+          4,
+          2
+        ],
+        [
+          3,
+          4,
+          5
+        ]
+      ]
+    },
+    {
+      "subject": 3,
+      "predicate": 4,
+      "separate": true,
+      "input": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          3,
+          4,
+          5
+        ]
+      ],
+      "destination_initial": [
+        [
+          6,
+          4,
+          7
+        ]
+      ],
+      "expected_source": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          3,
+          4,
+          5
+        ]
+      ],
+      "expected_destination": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          0,
+          1,
+          5
+        ],
+        [
+          3,
+          4,
+          2
+        ],
+        [
+          3,
+          4,
+          5
+        ],
+        [
+          6,
+          4,
+          7
+        ]
+      ]
+    },
+    {
+      "subject": 3,
+      "predicate": 8,
+      "separate": false,
+      "input": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          3,
+          8,
+          5
+        ]
+      ],
+      "destination_initial": [],
+      "expected_source": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          0,
+          1,
+          5
+        ],
+        [
+          3,
+          8,
+          2
+        ],
+        [
+          3,
+          8,
+          5
+        ]
+      ],
+      "expected_destination": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          0,
+          1,
+          5
+        ],
+        [
+          3,
+          8,
+          2
+        ],
+        [
+          3,
+          8,
+          5
+        ]
+      ]
+    },
+    {
+      "subject": 3,
+      "predicate": 8,
+      "separate": true,
+      "input": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          3,
+          8,
+          5
+        ]
+      ],
+      "destination_initial": [
+        [
+          6,
+          8,
+          7
+        ]
+      ],
+      "expected_source": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          3,
+          8,
+          5
+        ]
+      ],
+      "expected_destination": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          0,
+          1,
+          5
+        ],
+        [
+          3,
+          8,
+          2
+        ],
+        [
+          3,
+          8,
+          5
+        ],
+        [
+          6,
+          8,
+          7
+        ]
+      ]
+    },
+    {
+      "subject": 3,
+      "predicate": 9,
+      "separate": false,
+      "input": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          3,
+          9,
+          5
+        ]
+      ],
+      "destination_initial": [],
+      "expected_source": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          0,
+          1,
+          5
+        ],
+        [
+          3,
+          9,
+          2
+        ],
+        [
+          3,
+          9,
+          5
+        ]
+      ],
+      "expected_destination": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          0,
+          1,
+          5
+        ],
+        [
+          3,
+          9,
+          2
+        ],
+        [
+          3,
+          9,
+          5
+        ]
+      ]
+    },
+    {
+      "subject": 3,
+      "predicate": 9,
+      "separate": true,
+      "input": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          3,
+          9,
+          5
+        ]
+      ],
+      "destination_initial": [
+        [
+          6,
+          9,
+          7
+        ]
+      ],
+      "expected_source": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          3,
+          9,
+          5
+        ]
+      ],
+      "expected_destination": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          0,
+          1,
+          5
+        ],
+        [
+          3,
+          9,
+          2
+        ],
+        [
+          3,
+          9,
+          5
+        ],
+        [
+          6,
+          9,
+          7
+        ]
+      ]
+    },
+    {
+      "subject": 10,
+      "predicate": 4,
+      "separate": false,
+      "input": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          10,
+          4,
+          5
+        ]
+      ],
+      "destination_initial": [],
+      "expected_source": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          0,
+          1,
+          5
+        ],
+        [
+          10,
+          4,
+          2
+        ],
+        [
+          10,
+          4,
+          5
+        ]
+      ],
+      "expected_destination": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          0,
+          1,
+          5
+        ],
+        [
+          10,
+          4,
+          2
+        ],
+        [
+          10,
+          4,
+          5
+        ]
+      ]
+    },
+    {
+      "subject": 10,
+      "predicate": 4,
+      "separate": true,
+      "input": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          10,
+          4,
+          5
+        ]
+      ],
+      "destination_initial": [
+        [
+          6,
+          4,
+          7
+        ]
+      ],
+      "expected_source": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          10,
+          4,
+          5
+        ]
+      ],
+      "expected_destination": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          0,
+          1,
+          5
+        ],
+        [
+          6,
+          4,
+          7
+        ],
+        [
+          10,
+          4,
+          2
+        ],
+        [
+          10,
+          4,
+          5
+        ]
+      ]
+    },
+    {
+      "subject": 10,
+      "predicate": 8,
+      "separate": false,
+      "input": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          10,
+          8,
+          5
+        ]
+      ],
+      "destination_initial": [],
+      "expected_source": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          0,
+          1,
+          5
+        ],
+        [
+          10,
+          8,
+          2
+        ],
+        [
+          10,
+          8,
+          5
+        ]
+      ],
+      "expected_destination": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          0,
+          1,
+          5
+        ],
+        [
+          10,
+          8,
+          2
+        ],
+        [
+          10,
+          8,
+          5
+        ]
+      ]
+    },
+    {
+      "subject": 10,
+      "predicate": 8,
+      "separate": true,
+      "input": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          10,
+          8,
+          5
+        ]
+      ],
+      "destination_initial": [
+        [
+          6,
+          8,
+          7
+        ]
+      ],
+      "expected_source": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          10,
+          8,
+          5
+        ]
+      ],
+      "expected_destination": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          0,
+          1,
+          5
+        ],
+        [
+          6,
+          8,
+          7
+        ],
+        [
+          10,
+          8,
+          2
+        ],
+        [
+          10,
+          8,
+          5
+        ]
+      ]
+    },
+    {
+      "subject": 10,
+      "predicate": 9,
+      "separate": false,
+      "input": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          10,
+          9,
+          5
+        ]
+      ],
+      "destination_initial": [],
+      "expected_source": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          0,
+          1,
+          5
+        ],
+        [
+          10,
+          9,
+          2
+        ],
+        [
+          10,
+          9,
+          5
+        ]
+      ],
+      "expected_destination": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          0,
+          1,
+          5
+        ],
+        [
+          10,
+          9,
+          2
+        ],
+        [
+          10,
+          9,
+          5
+        ]
+      ]
+    },
+    {
+      "subject": 10,
+      "predicate": 9,
+      "separate": true,
+      "input": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          10,
+          9,
+          5
+        ]
+      ],
+      "destination_initial": [
+        [
+          6,
+          9,
+          7
+        ]
+      ],
+      "expected_source": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          10,
+          9,
+          5
+        ]
+      ],
+      "expected_destination": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          0,
+          1,
+          5
+        ],
+        [
+          6,
+          9,
+          7
+        ],
+        [
+          10,
+          9,
+          2
+        ],
+        [
+          10,
+          9,
+          5
+        ]
+      ]
+    },
+    {
+      "subject": 11,
+      "predicate": 4,
+      "separate": false,
+      "input": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          11,
+          4,
+          5
+        ]
+      ],
+      "destination_initial": [],
+      "expected_source": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          0,
+          1,
+          5
+        ],
+        [
+          11,
+          4,
+          2
+        ],
+        [
+          11,
+          4,
+          5
+        ]
+      ],
+      "expected_destination": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          0,
+          1,
+          5
+        ],
+        [
+          11,
+          4,
+          2
+        ],
+        [
+          11,
+          4,
+          5
+        ]
+      ]
+    },
+    {
+      "subject": 11,
+      "predicate": 4,
+      "separate": true,
+      "input": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          11,
+          4,
+          5
+        ]
+      ],
+      "destination_initial": [
+        [
+          6,
+          4,
+          7
+        ]
+      ],
+      "expected_source": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          11,
+          4,
+          5
+        ]
+      ],
+      "expected_destination": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          0,
+          1,
+          5
+        ],
+        [
+          6,
+          4,
+          7
+        ],
+        [
+          11,
+          4,
+          2
+        ],
+        [
+          11,
+          4,
+          5
+        ]
+      ]
+    },
+    {
+      "subject": 11,
+      "predicate": 8,
+      "separate": false,
+      "input": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          11,
+          8,
+          5
+        ]
+      ],
+      "destination_initial": [],
+      "expected_source": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          0,
+          1,
+          5
+        ],
+        [
+          11,
+          8,
+          2
+        ],
+        [
+          11,
+          8,
+          5
+        ]
+      ],
+      "expected_destination": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          0,
+          1,
+          5
+        ],
+        [
+          11,
+          8,
+          2
+        ],
+        [
+          11,
+          8,
+          5
+        ]
+      ]
+    },
+    {
+      "subject": 11,
+      "predicate": 8,
+      "separate": true,
+      "input": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          11,
+          8,
+          5
+        ]
+      ],
+      "destination_initial": [
+        [
+          6,
+          8,
+          7
+        ]
+      ],
+      "expected_source": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          11,
+          8,
+          5
+        ]
+      ],
+      "expected_destination": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          0,
+          1,
+          5
+        ],
+        [
+          6,
+          8,
+          7
+        ],
+        [
+          11,
+          8,
+          2
+        ],
+        [
+          11,
+          8,
+          5
+        ]
+      ]
+    },
+    {
+      "subject": 11,
+      "predicate": 9,
+      "separate": false,
+      "input": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          11,
+          9,
+          5
+        ]
+      ],
+      "destination_initial": [],
+      "expected_source": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          0,
+          1,
+          5
+        ],
+        [
+          11,
+          9,
+          2
+        ],
+        [
+          11,
+          9,
+          5
+        ]
+      ],
+      "expected_destination": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          0,
+          1,
+          5
+        ],
+        [
+          11,
+          9,
+          2
+        ],
+        [
+          11,
+          9,
+          5
+        ]
+      ]
+    },
+    {
+      "subject": 11,
+      "predicate": 9,
+      "separate": true,
+      "input": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          11,
+          9,
+          5
+        ]
+      ],
+      "destination_initial": [
+        [
+          6,
+          9,
+          7
+        ]
+      ],
+      "expected_source": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          11,
+          9,
+          5
+        ]
+      ],
+      "expected_destination": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          0,
+          1,
+          5
+        ],
+        [
+          6,
+          9,
+          7
+        ],
+        [
+          11,
+          9,
+          2
+        ],
+        [
+          11,
+          9,
+          5
+        ]
+      ]
+    }
+  ]
+}

@@ -8,6 +8,8 @@ import argparse
 import errno
 import gzip
 import hashlib
+import importlib
+import importlib.util
 import json
 import os
 import re
@@ -21,10 +23,28 @@ import tomllib
 import uuid
 import zipfile
 from datetime import UTC, datetime
+from email.parser import Parser
 from pathlib import Path
 
 METRICS = ("lines", "regions", "functions")
 TOOL_VERSION = "0.9.1"
+
+
+def source_authority(root, archive, archive_sha256, *, project="rdflib-turbo"):
+    """Keep immutable Git and published original-archive authority distinct."""
+    if (archive is None) != (archive_sha256 is None):
+        raise ValueError("Both source archive and original SHA-256 are required")
+    if archive is None:
+        return {
+            "kind": "git",
+            "revision": run(["git", "-C", root, "rev-parse", "HEAD"], capture=True).strip(),
+        }
+    spec = importlib.util.spec_from_file_location(
+        "coverage_archive", Path(__file__).with_name("coverage_archive.py")
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.freeze(Path(archive), root, archive_sha256, project=project)
 
 
 def run(arguments, environment=None, *, capture=False):
@@ -103,6 +123,7 @@ def initialize_dependencies(root, profiles, output, project, python, environment
     root, profiles, output = root.resolve(), profiles.resolve(), output.resolve()
     selections = {"rdflib-turbo": ["--group", "coverage"], "pyshacl-turbo": ["--extra", "test"]}
     selection = selections[project]
+    omitted = ["--no-emit-package", "pyshacl-turbo"] if project == "rdflib-turbo" else []
     sources = {name: (root / name).read_bytes() for name in ("pyproject.toml", "uv.lock")}
     if tomllib.loads(sources["pyproject.toml"].decode())["project"]["name"] != project:
         raise ValueError("Coverage project identity does not match source metadata")
@@ -118,6 +139,7 @@ def initialize_dependencies(root, profiles, output, project, python, environment
             *selection,
             "--no-dev",
             "--no-emit-project",
+            *omitted,
             "--no-hashes",
             "--output-file",
             lock,
@@ -147,6 +169,166 @@ def initialize_dependencies(root, profiles, output, project, python, environment
     run(["uv", "sync", "--project", project_environment, "--locked"], environment)
     verify_dependency_inputs(root, profiles, output, provenance)
     return provenance
+
+
+def facade_payload(wheel):
+    """Require a universal facade and retain hashes for every package payload."""
+    with zipfile.ZipFile(wheel) as archive:
+        names = archive.namelist()
+        metadata = [name for name in names if name.endswith(".dist-info/WHEEL")]
+        if len(metadata) != 1:
+            raise RuntimeError("Expected one pure facade wheel metadata record")
+        fields = Parser().parsestr(archive.read(metadata[0]).decode())
+        if fields.get("Root-Is-Purelib") != "true" or fields.get_all("Tag") != ["py3-none-any"]:
+            raise RuntimeError("SHACL facade wheel must be pure and universal")
+        if any(re.search(r"\.(?:so(?:\.[^/]*)?|pyd|dylib|dll)$", name) for name in names):
+            raise RuntimeError("SHACL facade wheel contains a second native runtime")
+        payload = {
+            name: hashlib.sha256(archive.read(name)).hexdigest()
+            for name in names
+            if name.startswith("pyshacl_turbo/") and not name.endswith("/")
+        }
+        if not {"pyshacl_turbo/__init__.py", "pyshacl_turbo/_native.py"}.issubset(payload):
+            raise RuntimeError("SHACL facade wheel is missing its Python binding facade")
+        return payload
+
+
+def loaded_facade_record():
+    """Inspect the real loaded Python facade and both native class owners."""
+    package = importlib.import_module("pyshacl_turbo")
+    facade = importlib.import_module("pyshacl_turbo._native")
+    provider = importlib.import_module("rdflib_turbo._native")
+    if (
+        facade.CompiledShapes is not provider.shacl.CompiledShapes
+        or facade.TargetData is not provider.shacl.TargetData
+    ):
+        raise RuntimeError("SHACL facade uses another native provider")
+    directory = Path(package.__file__).resolve().parent
+    return {
+        "package": str(directory),
+        "payload": {
+            "pyshacl_turbo/" + path.relative_to(directory).as_posix(): digest(path)
+            for path in directory.rglob("*")
+            if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc"
+        },
+        "engine_fingerprint": provider.shacl.SHACL_ENGINE_FINGERPRINT,
+    }
+
+
+def candidate_facade_authority(source, wheel, candidate):
+    """Use the candidate's original archive rather than fabricating Git authority."""
+    spec = importlib.util.spec_from_file_location(
+        "facade_candidate", Path(__file__).with_name("facade_candidate.py")
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.freeze_source(source, wheel, payload_reader=facade_payload, **candidate)
+
+
+def candidate_parameters(authority, receipt, base_revision, provider_version):
+    """Keep explicit test-only candidates separate from published package authority."""
+    if (receipt is None) != (base_revision is None):
+        raise ValueError("Both candidate receipt and base revision are required")
+    if receipt is None:
+        return None
+    if authority["kind"] != "git" or not re.fullmatch(r"[0-9a-f]{40}", authority["revision"]):
+        raise ValueError("Facade candidates require an immutable Git provider")
+    if not re.fullmatch(r"[0-9a-f]{40}", base_revision):
+        raise ValueError("An immutable facade base revision is required")
+    return {
+        "receipt": Path(receipt),
+        "facade_revision": base_revision,
+        "provider_revision": authority["revision"],
+        "provider_version": provider_version,
+    }
+
+
+def facade_source_payload(source, wheel):
+    """Verify original facade source/wheel package bytes without process launches."""
+    package = source.resolve(strict=True) / "python/pyshacl_turbo"
+    payload = {}
+    for path in package.rglob("*"):
+        if not path.is_file() or "__pycache__" in path.parts or path.suffix == ".pyc":
+            continue
+        if not path.resolve(strict=True).is_relative_to(package.resolve()):
+            raise RuntimeError("SHACL source package payload points outside its package")
+        payload["pyshacl_turbo/" + path.relative_to(package).as_posix()] = digest(path)
+    if payload != facade_payload(wheel):
+        raise RuntimeError("SHACL source package payload differs from the explicit wheel")
+    return payload
+
+
+def freeze_facade_inputs(source, wheel, *, candidate=None):
+    """Freeze acceptance sources separately from byte-equal runtime wheel payload."""
+    source, wheel = source.resolve(strict=True), wheel.resolve(strict=True)
+    manifest = tomllib.loads((source / "pyproject.toml").read_text())
+    if manifest["project"]["name"] != "pyshacl-turbo" or not (source / "tests").is_dir():
+        raise ValueError("SHACL coverage requires the facade acceptance source")
+    authority = candidate_facade_authority(source, wheel, candidate) if candidate else None
+    if authority:
+        revision = "candidate-sdist-sha256:" + authority["sha256"]
+        source_hashes = authority["files"]
+    else:
+        if run(
+            ["git", "-C", source, "status", "--porcelain", "--untracked-files=all"], capture=True
+        ):
+            raise RuntimeError("SHACL acceptance source must be a clean frozen checkout")
+        revision = run(["git", "-C", source, "rev-parse", "HEAD"], capture=True).strip()
+        tracked = run(["git", "-C", source, "ls-files", "-z"], capture=True).split("\0")
+        source_hashes = {}
+        for name in filter(None, tracked):
+            path = source / name
+            if not path.resolve(strict=True).is_relative_to(source):
+                raise RuntimeError("SHACL acceptance source points outside its frozen checkout")
+            source_hashes[name] = digest(path)
+    payload = facade_source_payload(source, wheel)
+    return {
+        "revision": revision,
+        "source_sha256": source_hashes,
+        "package_payload": payload,
+        "wheel_sha256": digest(wheel),
+        **({"source_authority": authority} if authority else {}),
+    }
+
+
+def verify_facade_inputs(source, wheel, frozen, *, candidate=None):
+    """Reject changed tests, source inputs or wheel bytes during measurement."""
+    if freeze_facade_inputs(source, wheel, candidate=candidate) != frozen:
+        raise RuntimeError("Frozen SHACL acceptance source or explicit wheel changed")
+
+
+def verify_facade_record(wheel, actual, venv):
+    """Compare a loaded record with every original pure-wheel package byte."""
+    expected = facade_payload(wheel)
+    if not Path(actual["package"]).is_relative_to(venv.resolve()):
+        raise RuntimeError("SHACL facade loaded outside the isolated coverage environment")
+    if actual["payload"] != expected:
+        raise RuntimeError("Installed SHACL facade payload differs from its wheel")
+    return {**actual, "wheel_sha256": digest(wheel)}
+
+
+def verify_loaded_facade(wheel, venv):
+    """Portable in-process verifier for an isolated wheel interpreter."""
+    return verify_facade_record(wheel, loaded_facade_record(), venv)
+
+
+def verify_installed_facade(wheel, project_run, venv, environment):
+    """Attest installed bytes and classes without importing a source facade."""
+    probe = """
+import importlib.util, json, sys
+spec = importlib.util.spec_from_file_location('installed_facade_checker', sys.argv[1])
+checker = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(checker)
+print(json.dumps(checker.loaded_facade_record()))
+"""
+    actual = json.loads(
+        run(
+            [*project_run, "python", "-I", "-c", probe, Path(__file__).resolve()],
+            environment,
+            capture=True,
+        )
+    )
+    return verify_facade_record(wheel, actual, venv)
 
 
 def verify_dependency_inputs(root, profiles, output, provenance):
@@ -333,6 +515,14 @@ def main():
     parser.add_argument("--output", type=Path, default=Path("native-coverage"))
     parser.add_argument("--python", default="3.13")
     parser.add_argument("--owlrl-source", type=Path)
+    parser.add_argument("--owlrl-archive", type=Path)
+    parser.add_argument("--owlrl-sha256")
+    parser.add_argument("--shacl-source", type=Path)
+    parser.add_argument("--shacl-wheel", type=Path)
+    parser.add_argument("--shacl-candidate-receipt", type=Path)
+    parser.add_argument("--shacl-base-revision")
+    parser.add_argument("--source-archive", type=Path)
+    parser.add_argument("--source-sha256")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     os.chdir(root)
@@ -343,9 +533,40 @@ def main():
     if project not in {"pyshacl-turbo", "rdflib-turbo"}:
         raise ValueError(f"Unsupported project: {project}")
     owlrl = args.owlrl_source.resolve() if args.owlrl_source else None
+    shacl = args.shacl_source.resolve() if args.shacl_source else None
+    facade_wheel = args.shacl_wheel.resolve(strict=True) if args.shacl_wheel else None
+    facade_inputs = None
+    candidate = None
+    authority = None
+    if project == "rdflib-turbo":
+        if facade_wheel is None:
+            raise ValueError(
+                "Provider coverage requires --shacl-wheel with the exact pure artifact"
+            )
+        if shacl is None or not (shacl / "tests").is_dir():
+            raise ValueError("Provider coverage requires --shacl-source with the facade test suite")
+        facade_manifest = tomllib.loads((shacl / "pyproject.toml").read_text())
+        if facade_manifest["project"]["name"] != "pyshacl-turbo":
+            raise ValueError("SHACL coverage source has the wrong project identity")
+        authority = source_authority(root, args.source_archive, args.source_sha256)
+        candidate = candidate_parameters(
+            authority,
+            args.shacl_candidate_receipt,
+            args.shacl_base_revision,
+            manifest["project"]["version"],
+        )
+        facade_inputs = freeze_facade_inputs(shacl, facade_wheel, candidate=candidate)
+        (output / "facade-inputs.json").write_text(json.dumps(facade_inputs, indent=2))
     if project == "rdflib-turbo" and (owlrl is None or not (owlrl / "tests").is_dir()):
         raise ValueError(
             "rdflib-turbo coverage requires --owlrl-source with the companion test suite"
+        )
+    if authority is None:
+        authority = source_authority(root, args.source_archive, args.source_sha256)
+    owlrl_authority = None
+    if owlrl:
+        owlrl_authority = source_authority(
+            owlrl, args.owlrl_archive, args.owlrl_sha256, project="owlrl-turbo"
         )
     environment = dict(os.environ)
     environment.pop("PYTHONPATH", None)
@@ -375,7 +596,7 @@ def main():
                 f"Install llvm-tools-preview for this Rust toolchain: {llvm / name}"
             )
     profiles = target / "profiles" / uuid.uuid4().hex
-    for name in ("build", "rust", "python", "owlrl"):
+    for name in ("build", "rust", "python", "shacl", "owlrl"):
         (profiles / name).mkdir(parents=True)
     environment["LLVM_PROFILE_FILE"] = str(profiles / "build/%p-%m.profraw")
     project_environment = profiles / "project"
@@ -431,7 +652,11 @@ def main():
     if len(wheel_files) != 1:
         raise RuntimeError("Expected exactly one instrumented wheel")
     wheel = wheel_files[0]
-    run(["uv", "add", "--project", project_environment, "--no-sync", wheel], environment)
+    installation = [wheel]
+    if shacl:
+        verify_facade_inputs(shacl, facade_wheel, facade_inputs, candidate=candidate)
+        installation.append(facade_wheel)
+    run(["uv", "add", "--project", project_environment, "--no-sync", *installation], environment)
     run(["uv", "sync", "--project", project_environment, "--locked"], environment)
     module = project.replace("-", "_") + "._native"
     loaded = Path(
@@ -459,7 +684,12 @@ def main():
         "date": datetime.now(UTC).isoformat(),
         "rustc": rustc,
         "cargo_llvm_cov": TOOL_VERSION,
-        "revision": run(["git", "rev-parse", "HEAD"], capture=True).strip(),
+        "revision": (
+            authority["revision"]
+            if authority["kind"] == "git"
+            else "sdist-sha256:" + authority["sha256"]
+        ),
+        "source_authority": authority,
         "source_sha256": {name: digest(root / name) for name in sorted(owned_sources(root))},
         "harness_sha256": digest(Path(__file__)),
         "test_lock_sha256": dependencies["export_sha256"],
@@ -496,6 +726,38 @@ def main():
     result["stages"]["python"]["environment_lock_sha256"] = python_lock
     require_python_execution(result["stages"]["python"], binding)
     stages = [profiles / "rust", profiles / "python"]
+    if shacl:
+        result["shacl_inputs"] = facade_inputs
+        result["shacl_facade"] = verify_installed_facade(
+            facade_wheel, project_run, venv, environment
+        )
+        result["shacl_revision"] = facade_inputs.get("source_authority", {}).get(
+            "base_revision", facade_inputs["revision"]
+        )
+        shacl_lock = record_environment_lock(project_environment, output, "shacl")
+        run(
+            [
+                *project_run,
+                "python",
+                "-I",
+                "-m",
+                "pytest",
+                shacl / "tests",
+                "-q",
+                "--cov=pyshacl_turbo",
+                "--cov-branch",
+                "--cov-fail-under=100",
+                f"--cov-report=json:{output / 'shacl-python-coverage.json'}",
+                f"--cov-report=html:{output / 'shacl-python-html'}",
+            ],
+            {**environment, "LLVM_PROFILE_FILE": str(profiles / "shacl/%p-%m.profraw")},
+        )
+        result["stages"]["shacl"], _ = export(
+            llvm, [profiles / "shacl"], objects, output / "shacl", root
+        )
+        result["stages"]["shacl"]["environment_lock_sha256"] = shacl_lock
+        require_python_execution(result["stages"]["shacl"], "crates/python/src/lib.rs")
+        stages.append(profiles / "shacl")
     if owlrl:
         companion_wheels = profiles / "companion-wheels"
         run(
@@ -529,9 +791,12 @@ def main():
             ],
             {**environment, "LLVM_PROFILE_FILE": str(profiles / "owlrl/%p-%m.profraw")},
         )
-        result["owlrl_revision"] = run(
-            ["git", "-C", owlrl, "rev-parse", "HEAD"], capture=True
-        ).strip()
+        result["owlrl_source_authority"] = owlrl_authority
+        result["owlrl_revision"] = (
+            owlrl_authority["revision"]
+            if owlrl_authority["kind"] == "git"
+            else "sdist-sha256:" + owlrl_authority["sha256"]
+        )
         result["stages"]["owlrl"], _ = export(
             llvm, [profiles / "owlrl"], objects, output / "owlrl", root
         )
@@ -551,6 +816,16 @@ def main():
         capture=True,
     )
     verify_dependency_inputs(root, profiles, output, dependencies)
+    if source_authority(root, args.source_archive, args.source_sha256) != authority:
+        raise RuntimeError("Native provider source authority changed during measurement")
+    if (
+        owlrl
+        and source_authority(owlrl, args.owlrl_archive, args.owlrl_sha256, project="owlrl-turbo")
+        != owlrl_authority
+    ):
+        raise RuntimeError("OWL-RL source authority changed during measurement")
+    if shacl:
+        verify_facade_inputs(shacl, facade_wheel, facade_inputs, candidate=candidate)
     result["environment_lock_sha256"] = digest(project_environment / "uv.lock")
     (output / "summary.json").write_text(json.dumps(result, indent=2) + "\n")
     write_markdown(result, output / "summary.md")

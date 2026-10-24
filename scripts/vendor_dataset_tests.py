@@ -7,6 +7,9 @@ from scripts.vendor_memory_tests import patch_arguments
 
 # bounded: critical storage, ownership and ordering regression test names.
 REQUIRED_TESTS = (
+    "dataset::generalized_remove_tests::generalized_streaming_removal_preserves_first_arcs_and_current_insertions_on_rollback",
+    "dataset::generalized_remove_tests::generalized_streaming_removal_keeps_exact_graph_kinds_and_all_pattern_masks",
+    "dataset::generalized_remove_tests::generalized_streaming_removal_absence_keeps_additive_fast_path_and_unwind_restores_words",
     "dataset::shared_record_layout_tests::stored_index_entries_are_one_pointer",
     "dataset::shared_tests::all_ranges_and_mutations_match_exact_quad_reference",
     "dataset::shared_tests::all_six_indexes_and_journal_share_one_immutable_record",
@@ -19,6 +22,17 @@ REQUIRED_TESTS = (
     "dataset::scoped_pattern_tests::scoped_patterns_do_not_decode_unrelated_graph_rows",
     "dataset::scoped_pattern_tests::iterator_retains_dataset_terms_after_temporary_patterns_drop",
     "dataset::scoped_pattern_tests::pattern_encodes_each_supplied_component_once_for_every_mask",
+    "dataset::generalized_tests::generalized_equality_compares_full_roles_and_graph_kinds_independent_of_insert_order",
+    "dataset::mutation_tests::absent_removal_does_not_promote_additive_journal",
+    "dataset::mutation_tests::first_state_sets_and_delta_follow_current_presence",
+    "dataset::mutation_tests::alias_reinsert_rollback_restores_original_arc_in_all_indexes",
+    "dataset::mutation_tests::mutation_unwind_restores_graph_kinds_before_releasing_new_words",
+    "dataset::generalized_tests::generalized_storage_preserves_every_role_and_all_pattern_masks",
+    "dataset::generalized_tests::generalized_record_layout_hash_order_and_six_shared_indexes",
+    "dataset::generalized_tests::generalized_journal_restores_original_incarnations_and_current_delta",
+    "dataset::generalized_tests::generalized_unwind_and_commit_preserve_literal_roles_and_dictionary_lifetime",
+    "dataset::generalized_tests::six_generalized_orders_and_hashes_match_canonical_term_tuples",
+    "dataset::generalized_tests::every_small_mutation_sequence_keeps_first_state_delta_and_undo",
 )
 
 

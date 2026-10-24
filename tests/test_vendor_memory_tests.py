@@ -11,13 +11,45 @@ import pytest
 
 
 @pytest.mark.parametrize("crate", ["oxrdf-0.3.4", "oxigraph-0.5.11", "spareval-0.2.7"])
-def test_vendor_lockfiles_keep_the_root_git_patch_revision(crate):
+def test_vendor_lockfiles_resolve_current_local_patches(crate, vendor_memory_tests):
     root = Path(__file__).resolve().parents[1]
-    patch = tomllib.loads((root / "Cargo.toml").read_text())["patch"]["crates-io"]["fancy-regex"]
+    patches = tomllib.loads((root / "Cargo.toml").read_text())["patch"]["crates-io"]
     lock = tomllib.loads((root / "vendor" / crate / "Cargo.lock").read_text())
     packages = lock["package"] + lock.get("patch", {}).get("unused", [])
-    sources = [item["source"] for item in packages if item["name"] == "fancy-regex"]
-    assert sources == [f"git+{patch['git']}?rev={patch['rev']}#{patch['rev']}"]
+    for name, patch in patches.items():
+        manifest = (root / patch["path"] / "Cargo.toml").resolve()
+        version = tomllib.loads(manifest.read_text())["package"]["version"]
+        selected = [item for item in packages if item["name"] == name]
+        assert len(selected) == 1, name
+        assert selected[0]["version"] == version, name
+        assert "source" not in selected[0], name
+    arguments = [
+        "cargo",
+        *vendor_memory_tests.patch_arguments(root),
+        "metadata",
+        "--locked",
+        "--manifest-path",
+        str(root / "vendor" / crate / "Cargo.toml"),
+        "--format-version=1",
+        "--no-default-features",
+    ]
+    if crate == "oxigraph-0.5.11":
+        arguments.extend(["--features", "exact-term-storage,rocksdb"])
+    metadata = json.loads(
+        subprocess.run(arguments, cwd=root, check=True, capture_output=True).stdout
+    )
+    for name, patch in patches.items():
+        selected = [item for item in metadata["packages"] if item["name"] == name]
+        if selected:
+            assert len(selected) == 1, name
+            assert selected[0]["source"] is None, name
+            assert (
+                Path(selected[0]["manifest_path"])
+                == (root / patch["path"] / "Cargo.toml").resolve()
+            )
+    if crate == "oxigraph-0.5.11":
+        required = {"oxrdf", "oxsdatatypes", "spargebra", "sparopt", "spareval", "oxrocksdb-sys"}
+        assert required <= {item["name"] for item in metadata["packages"]}
 
 
 @pytest.fixture
@@ -52,15 +84,16 @@ def test_vendor_memory_runner_applies_current_root_patches_and_locked_native_tes
 
     monkeypatch.setattr(vendor_memory_tests.subprocess, "run", cargo)
     vendor_memory_tests.run(root)
-    assert len(calls) == 4
-    assert calls[0][0][-2:] == ["--", "--list"]
-    arguments, directory, checked = calls[1]
+    assert len(calls) == 8
+    assert "build" in calls[0][0] and calls[0][0][-1] == "--lib"
+    assert calls[1][0][-2:] == ["--", "--list"]
+    arguments, directory, checked = calls[2]
     assert directory == root and checked is True
     assert arguments[0] == "cargo"
     assert "--locked" in arguments and "--lib" in arguments
     assert "storage::" in arguments
     assert arguments[arguments.index("--features") + 1] == "exact-term-storage,rocksdb"
-    assert calls[3][0][calls[3][0].index("--features") + 1] == "rocksdb"
+    assert calls[7][0][calls[7][0].index("--features") + 1] == "rocksdb"
     assert arguments[arguments.index("--manifest-path") + 1] == str(
         root / "vendor/oxigraph-0.5.11/Cargo.toml"
     )
@@ -68,6 +101,30 @@ def test_vendor_memory_runner_applies_current_root_patches_and_locked_native_tes
     assert f"patch.crates-io.oxrdf.path={json.dumps(str(root / 'vendor/custom-rdf'))}" in config
     assert 'patch.crates-io.fancy-regex.git="https://example.org/engine"' in config
     assert 'patch.crates-io.fancy-regex.rev="abc123"' in config
+
+
+def test_native_inventory_respects_real_filtering_and_runs_both_owning_cohorts(
+    tmp_path, monkeypatch, vendor_memory_tests
+):
+    (tmp_path / "Cargo.toml").write_text("[patch.crates-io]\n")
+    executed = []
+    names = set(vendor_memory_tests.REQUIRED_TESTS) | {
+        "storage::numeric_encoder::tests::str_hash_stability",
+        "storage::rocksdb::upstream_hash_tests::exact_hash_declarations_are_rejected_before_upstream_migration",
+    }
+
+    def cargo(arguments, **kwargs):
+        if "--list" in arguments:
+            between = arguments[arguments.index("--lib") + 1 : arguments.index("--")]
+            selected = {name for name in names if not between or between[0] in name}
+            return SimpleNamespace(stdout="\n".join(f"{name}: test" for name in selected))
+        if "test" in arguments:
+            executed.append(arguments[arguments.index("--lib") + 1])
+        return SimpleNamespace(stdout="")
+
+    monkeypatch.setattr(vendor_memory_tests.subprocess, "run", cargo)
+    vendor_memory_tests.run(tmp_path)
+    assert executed == ["storage::", "store::generalized::"] * 2
 
 
 def test_vendor_memory_runner_preserves_native_failure(tmp_path, monkeypatch, vendor_memory_tests):
@@ -83,6 +140,37 @@ def test_vendor_memory_runner_preserves_native_failure(tmp_path, monkeypatch, ve
     assert captured.value is failure
 
 
+def test_production_library_failure_stops_before_unit_test_inventory(
+    tmp_path, monkeypatch, vendor_memory_tests
+):
+    (tmp_path / "Cargo.toml").write_text("[patch.crates-io]\n")
+    failure = subprocess.CalledProcessError(9, ["cargo", "build"])
+    calls = []
+
+    def cargo(arguments, **kwargs):
+        calls.append(arguments)
+        if "build" in arguments:
+            raise failure
+        return SimpleNamespace(
+            stdout="\n".join(
+                f"{name}: test"
+                for name in (
+                    *vendor_memory_tests.REQUIRED_TESTS,
+                    "storage::numeric_encoder::tests::str_hash_stability",
+                    "storage::rocksdb::upstream_hash_tests::exact_hash_declarations_are_rejected_before_upstream_migration",
+                )
+            )
+        )
+
+    monkeypatch.setattr(vendor_memory_tests.subprocess, "run", cargo)
+    with pytest.raises(subprocess.CalledProcessError) as captured:
+        vendor_memory_tests.run(tmp_path)
+    assert captured.value is failure
+    assert len(calls) == 1
+    assert "--locked" in calls[0] and "--lib" in calls[0]
+    assert 'build.warnings="deny"' in calls[0]
+
+
 def test_missing_instrumented_regressions_fail_before_execution(
     tmp_path, monkeypatch, vendor_memory_tests
 ):
@@ -96,7 +184,7 @@ def test_missing_instrumented_regressions_fail_before_execution(
     monkeypatch.setattr(vendor_memory_tests.subprocess, "run", cargo)
     with pytest.raises(RuntimeError, match="Missing native storage regressions"):
         vendor_memory_tests.run(tmp_path)
-    assert len(calls) == 1
+    assert len(calls) == 2
 
 
 def test_missing_upstream_hash_regression_fails_inventory(
@@ -135,7 +223,7 @@ def test_missing_lexical_hash_regression_fails_inventory(
     monkeypatch.setattr(vendor_memory_tests.subprocess, "run", cargo)
     with pytest.raises(RuntimeError, match="Missing native storage regressions"):
         vendor_memory_tests.run(tmp_path)
-    assert len(calls) == 1
+    assert len(calls) == 2
 
 
 def test_missing_upstream_store_guard_fails_inventory(tmp_path, monkeypatch, vendor_memory_tests):
@@ -157,4 +245,103 @@ def test_missing_upstream_store_guard_fails_inventory(tmp_path, monkeypatch, ven
     monkeypatch.setattr(vendor_memory_tests.subprocess, "run", cargo)
     with pytest.raises(RuntimeError, match="Missing native storage regressions"):
         vendor_memory_tests.run(tmp_path)
-    assert len(calls) == 3
+    assert len(calls) == 6
+
+
+@pytest.mark.parametrize(
+    "missing",
+    (
+        "storage::generalized_decoder_tests::generalized_strict_decoder_rejects_first_position_before_later_dictionary_reads",
+        "storage::generalized_decoder_tests::generalized_decoder_propagates_actual_dictionary_read_failure",
+        "storage::generalized_persistent_tests::generalized_persistent_relation_reopens_and_retains_owned_snapshot_after_store_drop",
+        "storage::generalized_persistent_tests::generalized_promotion_preserves_existing_v1_persisted_key_bytes",
+    ),
+)
+def test_missing_generalized_storage_contract_fails_before_execution(
+    tmp_path, monkeypatch, vendor_memory_tests, missing
+):
+    (tmp_path / "Cargo.toml").write_text("[patch.crates-io]\n")
+    calls = []
+
+    def cargo(arguments, **kwargs):
+        calls.append(arguments)
+        names = (
+            *vendor_memory_tests.REQUIRED_TESTS,
+            "storage::numeric_encoder::tests::str_hash_stability",
+            "storage::rocksdb::upstream_hash_tests::exact_hash_declarations_are_rejected_before_upstream_migration",
+        )
+        return SimpleNamespace(
+            stdout="\n".join(f"{name}: test" for name in names if name != missing)
+        )
+
+    monkeypatch.setattr(vendor_memory_tests.subprocess, "run", cargo)
+    with pytest.raises(RuntimeError, match="Missing native storage regressions"):
+        vendor_memory_tests.run(tmp_path)
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize(
+    "missing",
+    (
+        "storage::rocksdb_wrapper::prefix_tests::prefix_scan_carry_excludes_adjacent_keys_and_retains_unbounded_extremes",
+        "storage::rocksdb_wrapper::prefix_tests::maximum_encoded_prefix_scopes_match_memory_through_rollback_snapshot_and_reopen",
+    ),
+)
+def test_missing_prefix_scope_contract_fails_before_execution(
+    tmp_path, monkeypatch, vendor_memory_tests, missing
+):
+    (tmp_path / "Cargo.toml").write_text("[patch.crates-io]\n")
+    calls = []
+
+    def cargo(arguments, **kwargs):
+        calls.append(arguments)
+        names = (
+            *vendor_memory_tests.REQUIRED_TESTS,
+            "storage::numeric_encoder::tests::str_hash_stability",
+            "storage::rocksdb::upstream_hash_tests::exact_hash_declarations_are_rejected_before_upstream_migration",
+        )
+        return SimpleNamespace(
+            stdout="\n".join(f"{name}: test" for name in names if name != missing)
+        )
+
+    monkeypatch.setattr(vendor_memory_tests.subprocess, "run", cargo)
+    with pytest.raises(RuntimeError, match="Missing native storage regressions"):
+        vendor_memory_tests.run(tmp_path)
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize("upstream", (False, True))
+def test_missing_compact_graph_contract_fails_before_execution(
+    tmp_path, monkeypatch, vendor_memory_tests, upstream
+):
+    (tmp_path / "Cargo.toml").write_text("[patch.crates-io]\n")
+    calls = []
+    missing = "storage::compact_graph_codec_tests::compact_graph_name_decoding_rejects_literal_graph_slots_in_all_indexes"
+
+    def cargo(arguments, **kwargs):
+        calls.append(arguments)
+        names = (
+            *vendor_memory_tests.REQUIRED_TESTS,
+            "storage::numeric_encoder::tests::str_hash_stability",
+            "storage::rocksdb::upstream_hash_tests::exact_hash_declarations_are_rejected_before_upstream_migration",
+        )
+        hide = not upstream or "exact-term-storage,rocksdb" not in arguments
+        return SimpleNamespace(
+            stdout="\n".join(f"{name}: test" for name in names if not hide or name != missing)
+        )
+
+    monkeypatch.setattr(vendor_memory_tests.subprocess, "run", cargo)
+    with pytest.raises(RuntimeError, match="Missing native storage regressions"):
+        vendor_memory_tests.run(tmp_path)
+    assert len(calls) == (6 if upstream else 2)
+
+
+@pytest.mark.parametrize(
+    "name",
+    (
+        "generalized_lexical_projection_keeps_every_role_mask_and_strict_projection_errors",
+        "generalized_projected_words_outlive_owner_and_keep_pinned_committed_version",
+    ),
+)
+def test_full_term_lexical_projection_is_a_mandatory_owner_guard(vendor_memory_tests, name):
+    assert f"store::generalized::lexical_tests::{name}" in vendor_memory_tests.REQUIRED_TESTS

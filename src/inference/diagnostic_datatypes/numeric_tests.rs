@@ -76,7 +76,7 @@ fn default_numeric_keys_match_actual_rdflib_value_pairs() {
 
 #[test]
 fn shared_value_query_matches_the_full_untrapped_numeric_oracle() {
-    use oxigraph::model::{Dataset, GraphName, Quad};
+    use oxigraph::model::{GeneralizedDataset as Dataset, GeneralizedQuad as Quad, GraphName};
     let terms: Vec<TermFixture> =
         serde_json::from_str(include_str!("../numeric-reference-terms.json")).unwrap();
     // bounded: the fixed 26-term oracle graph, retaining exact lexical terms.
@@ -99,7 +99,7 @@ fn shared_value_query_matches_the_full_untrapped_numeric_oracle() {
     }));
     let mut context = LexicalContext::default();
     context.decimal.traps[0] = false;
-    let mut transaction = data.insert_transaction();
+    let mut transaction = data.transaction();
     crate::inference::literal_values::substitute(&mut transaction, &context).unwrap();
     transaction.commit();
     for file in [
@@ -122,7 +122,7 @@ fn shared_value_query_matches_the_full_untrapped_numeric_oracle() {
             assert_eq!(
                 data.contains(&quad),
                 pair.left == pair.right || pair.expected == "true",
-                "{quad}"
+                "{quad:?}"
             );
         }
     }

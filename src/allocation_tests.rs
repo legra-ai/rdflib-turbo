@@ -79,7 +79,7 @@ pub(crate) fn measure_allocated<T>(operation: impl FnOnce() -> T) -> (T, usize) 
 #[test]
 #[ignore = "global allocation counters require isolated execution"]
 fn named_inference_does_not_clone_source_lexical_storage() {
-    let mut data = Dataset::new();
+    let mut data = oxrdf::GeneralizedDataset::new();
     let quad = Quad::new(
         NamedNode::new_unchecked("urn:s"),
         NamedNode::new_unchecked("urn:p"),
@@ -110,13 +110,15 @@ fn profile_pipeline_allocations() {
     let mode = std::env::var("MEMORY_INFERENCE").unwrap();
     Python::initialize();
     Python::attach(|py| {
+        let policy = crate::native_tests::host_regex_policy(py);
         let data = NativeDataset::new();
         phase("setup", 0);
         data.load(py, &source, "turtle", None, true).unwrap();
         phase("parse", data.__len__().unwrap());
         data.infer(py, &mode, None, false, false, None).unwrap();
         phase("inference", data.__len__().unwrap());
-        let program = shacl::SharedShapes::new(py, &shapes, false, Vec::new(), false).unwrap();
+        let program =
+            shacl::SharedShapes::new(py, &shapes, false, Vec::new(), false, policy).unwrap();
         phase("compile_shapes", data.__len__().unwrap());
         let report = program.validate(py, &data, "{}", false).unwrap();
         std::hint::black_box(&report);

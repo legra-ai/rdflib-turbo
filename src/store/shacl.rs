@@ -5,7 +5,7 @@ use super::shacl_read::CommittedGraph;
 use super::{NativeStore, NativeTransaction};
 use crate::Result;
 use crate::shacl::Report;
-use oxigraph::model::{Dataset, GraphName, QuadRef};
+use oxigraph::model::{Dataset, GeneralizedQuadRef, GraphName};
 use oxigraph::store::Transaction;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
@@ -15,14 +15,15 @@ use std::sync::Arc;
 /// Derived-only output retains its logical scope until final publication.
 pub(super) struct ValidationDelta {
     pub data: Dataset,
-    pub inference: Dataset,
+    pub inference: crate::inference::InferenceDelta,
     pub graph: Option<GraphName>,
 }
 
 impl ValidationDelta {
     pub fn apply(&self, transaction: &mut Transaction<'_>) {
-        for quad in self.data.iter().chain(self.inference.iter()) {
-            transaction.insert(QuadRef {
+        self.inference.apply_store(transaction, self.graph.as_ref());
+        for quad in self.data.iter().map(GeneralizedQuadRef::from) {
+            transaction.insert_generalized(GeneralizedQuadRef {
                 graph_name: self
                     .graph
                     .as_ref()

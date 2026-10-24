@@ -1,5 +1,6 @@
 //! A pinned committed MVCC version, without acquiring a writer.
-use super::{Store, StorageError};
+use super::{GeneralizedQuadIter, Store, StorageError};
+use std::sync::Arc;
 use crate::model::*;
 use crate::storage::StorageReader;
 use crate::storage::numeric_encoder::{Decoder, EncodedTerm};
@@ -7,19 +8,30 @@ use crate::storage::numeric_encoder::{Decoder, EncodedTerm};
 /// A consistent committed read view. Keeps the storage version alive without
 /// copying quads or blocking a pending write transaction.
 pub struct ReadSnapshot {
-    reader: StorageReader<'static>,
+    reader: Arc<StorageReader<'static>>,
 }
 
 impl Store {
     /// Pin the current committed version for indexed reads without a writer lock.
     pub fn read_snapshot(&self) -> ReadSnapshot {
         ReadSnapshot {
-            reader: self.storage.snapshot(),
+            reader: Arc::new(self.storage.snapshot()),
         }
     }
 }
 
 impl ReadSnapshot {
+    /// Own a cursor over this pinned version, independent of the snapshot handle.
+    pub fn generalized_quads_for_pattern(
+        &self,
+        subject: Option<TermRef<'_>>,
+        predicate: Option<TermRef<'_>>,
+        object: Option<TermRef<'_>>,
+        graph: Option<GraphNameRef<'_>>,
+    ) -> GeneralizedQuadIter<'static> {
+        GeneralizedQuadIter::new(Arc::clone(&self.reader), subject, predicate, object, graph)
+    }
+
     /// Stream matching quads from the pinned version. None matches every graph.
     pub fn quads_for_pattern<'a>(
         &'a self,

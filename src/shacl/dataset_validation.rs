@@ -183,7 +183,15 @@ mod tests {
             let data = owner.bind(py).get();
             data.load(py, "<urn:s> <urn:p> <urn:o>.", "turtle", None, false)
                 .unwrap();
-            let program = SharedShapes::new(py, RULE, true, vec![], true).unwrap();
+            let program = SharedShapes::new(
+                py,
+                RULE,
+                true,
+                vec![],
+                true,
+                crate::native_tests::host_regex_policy(py),
+            )
+            .unwrap();
             let prepared = program
                 .prepare_dataset_validation(py, owner.clone_ref(py), "{}", true)
                 .unwrap();
@@ -227,7 +235,15 @@ mod tests {
             )
             .unwrap();
             let before = data.dump(py, "nquads").unwrap();
-            let program = SharedShapes::new(py, RULE, true, vec![], true).unwrap();
+            let program = SharedShapes::new(
+                py,
+                RULE,
+                true,
+                vec![],
+                true,
+                crate::native_tests::host_regex_policy(py),
+            )
+            .unwrap();
             for consumed in [false, true] {
                 let prepared = program
                     .prepare_dataset_validation(py, owner.clone_ref(py), "{}", true)

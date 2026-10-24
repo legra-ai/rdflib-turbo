@@ -1,6 +1,7 @@
 """Specialized list and cardinality rules retain generalized intermediates."""
 
 import pytest
+from inference_observers import physical_keys, union_graph
 from owlrl import DeductiveClosure, OWLRL_Semantics
 from rdflib import BNode, Graph, Literal, URIRef
 from rdflib.compare import isomorphic
@@ -61,12 +62,11 @@ def test_generalized_lists_match_reference(document, consequence, api, tmp_path)
     assert consequence in reference
     expected = Graph()
     for triple in reference:
-        if not isinstance(triple[0], Literal) and isinstance(triple[1], URIRef):
-            expected.add(triple)
+        expected.add(triple)
 
     def check(graph):
         graph.parse(data=PREFIX + document).infer(inference="owlrl")
-        actual = Graph().parse(data=graph.serialize(format="ntriples"), format="nt")
+        actual = union_graph(graph)
         assert consequence in actual
         assert isomorphic(actual, expected)
 
@@ -82,7 +82,7 @@ def test_generalized_lists_match_reference(document, consequence, api, tmp_path)
                 check(store)
         if api == "persistent":
             with Store(path) as reopened:
-                actual = Graph().parse(data=reopened.serialize(format="ntriples"), format="nt")
+                actual = union_graph(reopened)
                 assert isomorphic(actual, expected)
 
 
@@ -104,14 +104,14 @@ def test_generalized_lists_preserve_source_scope(identifier, document, consequen
 def test_generalized_lists_rollback_and_retry(document, consequence):
     with Store() as store:
         store.parse(data=PREFIX + document)
-        before = store.serialize(format="ntriples")
+        before = physical_keys(store)
         with pytest.raises(RuntimeError, match="abort"):
             with store.transaction() as transaction:
                 transaction.infer(inference="owlrl")
-                actual = Graph().parse(data=transaction.serialize(format="ntriples"), format="nt")
+                actual = union_graph(transaction)
                 assert consequence in actual
                 raise RuntimeError("abort")
-        assert store.serialize(format="ntriples") == before
+        assert physical_keys(store) == before
         store.infer(inference="owlrl")
-        actual = Graph().parse(data=store.serialize(format="ntriples"), format="nt")
+        actual = union_graph(store)
         assert consequence in actual

@@ -1,10 +1,11 @@
 //! Preserve the previous materialized-union algorithm as an independent oracle.
+use oxrdf::GeneralizedDataset;
 use std::time::{Duration, Instant};
 
 use super::*;
 
-fn fixture() -> Dataset {
-    let mut data = Dataset::new();
+fn fixture() -> GeneralizedDataset {
+    let mut data = GeneralizedDataset::new();
     let subject = BlankNode::new("subject").unwrap();
     let class = NamedNode::new_unchecked("urn:Child");
     for graph in [
@@ -12,7 +13,7 @@ fn fixture() -> Dataset {
         NamedNode::new_unchecked("urn:source").into(),
         BlankNode::new("source").unwrap().into(),
     ] {
-        data.insert(&Quad::new(
+        data.insert(&GeneralizedQuad::new(
             subject.clone(),
             crate::graph::iri(crate::graph::RDF, "type"),
             class.clone(),
@@ -22,7 +23,7 @@ fn fixture() -> Dataset {
             Literal::new_simple_literal("word"),
             Literal::new_typed_literal("word", crate::graph::iri(crate::graph::XSD, "string")),
         ] {
-            data.insert(&Quad::new(
+            data.insert(&GeneralizedQuad::new(
                 subject.clone(),
                 NamedNode::new_unchecked("urn:p"),
                 value,
@@ -30,7 +31,7 @@ fn fixture() -> Dataset {
             ));
         }
     }
-    data.insert(&Quad::new(
+    data.insert(&GeneralizedQuad::new(
         class,
         crate::graph::iri(crate::graph::RDFS, "subClassOf"),
         NamedNode::new_unchecked("urn:Parent"),
@@ -40,31 +41,31 @@ fn fixture() -> Dataset {
 }
 
 fn frozen(
-    data: &mut Dataset,
+    data: &mut GeneralizedDataset,
     mode: &str,
     destination: GraphName,
     request: InferenceRequest,
 ) -> InferenceOutcome {
     // bounded: this test's finite synthetic input, retained only as the old oracle.
     let mut union = crate::graph::with_union(data);
-    let mut transaction = union.insert_transaction();
+    let mut transaction = union.transaction();
     let (prepared, outcome) = expand_configured(&mut transaction, mode, request).unwrap();
     // bounded: at most one publication per literal-valued synthetic input quad.
-    let publications: Dataset = if mode == "rdfs" {
+    let publications: GeneralizedDataset = if mode == "rdfs" {
         data.iter()
             .filter(|q| q.object.is_literal())
-            .map(|q| Quad::new(q.subject, q.predicate, q.object, destination.clone()))
+            .map(|q| GeneralizedQuad::new(q.subject, q.predicate, q.object, destination.clone()))
             .filter(|q| !data.contains(q))
             .collect()
     } else {
-        Dataset::new()
+        GeneralizedDataset::new()
     };
-    let mut output = data.insert_transaction();
-    for quad in &publications {
+    let mut output = data.transaction();
+    for quad in publications.iter() {
         output.insert(quad);
     }
     for quad in transaction.inserted() {
-        output.insert(&Quad::new(
+        output.insert(&GeneralizedQuad::new(
             quad.subject,
             quad.predicate,
             quad.object,
@@ -110,7 +111,7 @@ fn borrowed_union_preserves_all_modes_destinations_and_optional_axioms() {
                         "mode={mode}, destination={destination}, axioms={axiomatic_triples}/{datatype_axioms}"
                     );
                     // bounded: differences in the fixed synthetic closure only.
-                    let expected_delta: Dataset =
+                    let expected_delta: GeneralizedDataset =
                         expected.iter().filter(|q| !input.contains(*q)).collect();
                     assert_eq!(delta, expected_delta);
                     assert_eq!(outcome.error_messages, old_outcome.error_messages);
@@ -140,19 +141,19 @@ fn failed_borrowed_inference_preserves_source_and_destination() {
 #[ignore = "explicit local timing comparison against the frozen named-union algorithm"]
 fn benchmark_borrowed_named_union_against_frozen() {
     for subjects in [2000, 20000] {
-        let mut input = Dataset::new();
+        let mut input = GeneralizedDataset::new();
         let class = NamedNode::new_unchecked("urn:Child");
         let graph = NamedNode::new_unchecked("urn:source");
         // bounded: at most 20,000 synthetic subjects, never production input.
         for index in 0..subjects {
-            input.insert(&Quad::new(
+            input.insert(&GeneralizedQuad::new(
                 NamedNode::new_unchecked(format!("urn:s:{index}")),
                 crate::graph::iri(crate::graph::RDF, "type"),
                 class.clone(),
                 graph.clone(),
             ));
         }
-        input.insert(&Quad::new(
+        input.insert(&GeneralizedQuad::new(
             class,
             crate::graph::iri(crate::graph::RDFS, "subClassOf"),
             NamedNode::new_unchecked("urn:Parent"),
@@ -185,7 +186,7 @@ fn benchmark_borrowed_named_union_against_frozen() {
     }
 }
 
-fn timed(input: &Dataset, mode: &str, borrowed: bool) -> (Duration, Dataset) {
+fn timed(input: &GeneralizedDataset, mode: &str, borrowed: bool) -> (Duration, GeneralizedDataset) {
     // bounded: the explicitly capped benchmark fixture, excluded from the timer.
     let mut data = input.clone();
     let start = Instant::now();

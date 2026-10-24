@@ -1,9 +1,58 @@
-use oxigraph::model::{BlankNode, GraphName, Literal, NamedNode, Quad};
+use oxigraph::model::{BlankNode, GeneralizedQuad, GraphName, Literal, NamedNode, Quad};
 use oxigraph::store::Store;
 use std::sync::{Arc, Mutex};
 
 use super::super::operations::{Operation, Reply};
 use super::super::session::{Control, Session};
+
+#[test]
+fn explicit_copy_preserves_generalized_input_roles() {
+    let store = Store::new().unwrap();
+    let mut transaction = store.start_transaction().unwrap();
+    let row = GeneralizedQuad::new(
+        Literal::new_simple_literal("literal subject"),
+        BlankNode::new("predicate").unwrap(),
+        NamedNode::new("urn:value").unwrap(),
+        GraphName::DefaultGraph,
+    );
+    transaction.insert_generalized(&row);
+    let copied = super::fork(&transaction, None).unwrap();
+    let rows = copied
+        .generalized_quads_for_pattern(None, None, None, None)
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(rows, vec![row]);
+    assert_eq!(copied.len().unwrap(), 1);
+}
+
+#[test]
+fn committed_copy_does_not_reserve_a_second_writer_or_read_pending_rows() {
+    pyo3::Python::initialize();
+    pyo3::Python::attach(|py| {
+        let store = Store::new().unwrap();
+        let existing = Quad::new(
+            NamedNode::new("urn:existing").unwrap(),
+            NamedNode::new("urn:p").unwrap(),
+            Literal::new_simple_literal("committed"),
+            GraphName::DefaultGraph,
+        );
+        store.insert(&existing).unwrap();
+        let owner = super::NativeStore::from_store(store);
+        let writer = Session::start(owner.control.clone()).unwrap();
+        writer
+            .execute(Operation::Load {
+                source: "<urn:pending> <urn:p> 'pending'.".into(),
+                format: oxigraph::io::RdfFormat::Turtle,
+                base: None,
+            })
+            .unwrap();
+        let copied = owner.fork_graph(py, None).unwrap();
+        let copied = copied.snapshot().unwrap();
+        assert_eq!(copied.len().unwrap(), 1);
+        assert!(copied.contains(&existing).unwrap());
+        writer.finish(false).unwrap();
+    });
+}
 
 #[test]
 fn copied_native_owner_preserves_empty_contexts_exact_terms_and_pending_rows() {
@@ -86,9 +135,16 @@ fn copying_pending_quads_keeps_prepared_validation_acceptable() {
             None,
         ))
         .unwrap();
-    let shapes =
-        pyshacl_turbo_engine::CompiledShapes::compile(oxigraph::model::Dataset::new(), false)
-            .unwrap();
+    let shapes = pyshacl_turbo_engine::CompiledShapes::compile(
+        pyshacl_turbo_engine::IndexedShapesSource::parse_graph(
+            "",
+            oxigraph::io::RdfFormat::Turtle,
+            None,
+        )
+        .unwrap(),
+        false,
+    )
+    .unwrap();
     let Reply::PreparedValidation(report) = session
         .execute(Operation::Validate {
             shapes: Arc::new(shapes),

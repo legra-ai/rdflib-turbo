@@ -68,3 +68,22 @@ def test_dataset_failure_propagates_without_running_next_mode(runner, monkeypatc
         runner.run(tmp_path)
     assert result.value is failure
     assert len(calls) == 2
+
+
+def test_generalized_equality_is_a_mandatory_dataset_regression(runner):
+    assert (
+        "dataset::generalized_tests::generalized_equality_compares_full_roles_and_graph_kinds_independent_of_insert_order"
+        in runner.REQUIRED_TESTS
+    )
+
+
+@pytest.mark.parametrize(
+    "name",
+    (
+        "generalized_streaming_removal_preserves_first_arcs_and_current_insertions_on_rollback",
+        "generalized_streaming_removal_keeps_exact_graph_kinds_and_all_pattern_masks",
+        "generalized_streaming_removal_absence_keeps_additive_fast_path_and_unwind_restores_words",
+    ),
+)
+def test_streaming_removal_is_a_mandatory_dataset_regression(runner, name):
+    assert f"dataset::generalized_remove_tests::{name}" in runner.REQUIRED_TESTS

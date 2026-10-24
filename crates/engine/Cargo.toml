@@ -1,0 +1,28 @@
+[package]
+name = "pyshacl-turbo-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Native SHACL compilation, validation, rules and inference"
+publish = false
+include = ["src/**", "tests/**", "Cargo.toml", "LICENSE-MIT", "LICENSE-APACHE"]
+
+[dependencies]
+sha2 = "0.11"
+oxigraph.workspace = true
+oxrdf = { version = "=0.3.4", features = ["rdf-10-string-identity"] }
+thiserror.workspace = true
+spargebra = "=0.4.7"
+sparopt = "=0.3.7"
+spareval = { version = "=0.2.7", features = ["undefined-functions-as-expression-errors", "exact-custom-function-terms", "exact-term-builtins", "rdf-set-union", "cached-query-plans"] }
+bigdecimal = "0.4"
+fancy-regex = { version = "=0.19.2", default-features = false, features = ["std", "perf", "unicode", "python-re"] }
+regex-syntax = "0.8"
+unicode-ident = "1"
+unicode_names2 = "4"
+oxsdatatypes = "=0.2.3"
+num-bigint = "0.4"
+shacl-structural-model = "=6.1.0"

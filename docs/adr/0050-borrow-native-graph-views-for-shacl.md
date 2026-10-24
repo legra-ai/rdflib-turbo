@@ -17,8 +17,9 @@ No Python source traversal, document serialization, base clone, independent
 storage owner or new engine implementation is involved.
 
 Graph validation reuses its existing native transaction and staged namespace
-mapping. Namespace mutation attempts advance a mapping-local revision, including
-no-op binds. Source contexts check that revision before accepting report output;
+mapping. After caller argument normalization, namespace mutation attempts advance
+a mapping-local revision, including no-op binds. Source contexts check that
+revision before accepting report output;
 a change aborts pending RDF and rule writes. Namespace changes to the original
 facade during an implicitly owned validation are checked before native commit.
 This complements the native RDF mutation revision in ADR 0043.

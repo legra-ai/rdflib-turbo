@@ -1017,6 +1017,7 @@ dependencies = [
  "oxrdfio",
  "oxrocksdb-sys",
  "oxsdatatypes",
+ "parking_lot",
  "rand",
  "rustc-hash",
  "sha2",
@@ -1124,6 +1125,16 @@ dependencies = [
  "oxiri",
  "oxrdf",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "parking_lot"
+version = "0.12.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93857453250e3077bd71ff98b6a65ea6621a19bb0f559a85248955ac12c45a1a"
+dependencies = [
+ "lock_api",
+ "parking_lot_core",
 ]
 
 [[package]]
@@ -2207,4 +2218,3 @@ checksum = "b8848ee67ecc8aedbaf3e4122217aff892639231befc6a1b58d29fff4c2cabaa"
 [[patch.unused]]
 name = "fancy-regex"
 version = "0.19.2"
-source = "git+https://github.com/legra-ai/pyshacl-turbo?rev=5a5bb294eb0c270c6159e70665f9cf30039e7521#5a5bb294eb0c270c6159e70665f9cf30039e7521"

@@ -301,7 +301,7 @@ fn validation_additions_are_private_until_report_acceptance() {
     let session = Session::start(control()).unwrap();
     session.execute(insert()).unwrap();
     let shapes = pyshacl_turbo_engine::CompiledShapes::compile(
-        pyshacl_turbo_engine::parse_graph(
+        pyshacl_turbo_engine::IndexedShapesSource::parse_graph(
             "@prefix sh:<http://www.w3.org/ns/shacl#>. <urn:S> sh:targetNode <urn:s>; sh:rule [a sh:TripleRule; sh:subject sh:this; sh:predicate <urn:derived>; sh:object true].",
             oxigraph::io::RdfFormat::Turtle,
             None,
@@ -362,9 +362,16 @@ fn every_mutation_attempt_invalidates_prepared_validation() {
         let store = control.lock().unwrap().read().unwrap();
         let session = Session::start(control).unwrap();
         session.execute(insert()).unwrap();
-        let shapes =
-            pyshacl_turbo_engine::CompiledShapes::compile(oxigraph::model::Dataset::new(), false)
-                .unwrap();
+        let shapes = pyshacl_turbo_engine::CompiledShapes::compile(
+            pyshacl_turbo_engine::IndexedShapesSource::parse_graph(
+                "",
+                oxigraph::io::RdfFormat::Turtle,
+                None,
+            )
+            .unwrap(),
+            false,
+        )
+        .unwrap();
         let Reply::PreparedValidation(report) = session
             .execute(Operation::Validate {
                 shapes: Arc::new(shapes),
@@ -387,5 +394,49 @@ fn every_mutation_attempt_invalidates_prepared_validation() {
         );
         assert!(session.finish(true).is_err());
         assert_eq!(store.len().unwrap(), 0);
+    }
+}
+
+#[test]
+fn prepared_changes_freeze_worker_commands_and_commit_only_consumed_rows() {
+    let owner = control();
+    let session = Session::start(owner.clone()).unwrap();
+    session.execute(Operation::BeginChanges).unwrap();
+    session.execute(insert()).unwrap();
+    session.prepare_changes().unwrap();
+    assert_eq!(owner.lock().unwrap().read().unwrap().len().unwrap(), 0);
+    assert!(session.execute(Operation::Len).is_err());
+    assert_eq!(owner.lock().unwrap().read().unwrap().len().unwrap(), 0);
+    let session = Session::start(owner.clone()).unwrap();
+    session.execute(Operation::BeginChanges).unwrap();
+    session.execute(insert()).unwrap();
+    session.prepare_changes().unwrap();
+    for added in [true, false] {
+        let (rows, done) = session.read_changes(added).unwrap();
+        assert_eq!(rows.len(), usize::from(added));
+        assert!(done);
+        let (rows, done) = session.read_changes(added).unwrap();
+        assert!(rows.is_empty() && done);
+    }
+    assert_eq!(owner.lock().unwrap().read().unwrap().len().unwrap(), 0);
+    session.accept_changes().unwrap();
+    assert_eq!(owner.lock().unwrap().read().unwrap().len().unwrap(), 1);
+    assert!(session.accept_changes().is_err());
+}
+
+#[test]
+fn prepared_changes_refuse_generic_finish_and_drop_pending_rows_before_abort() {
+    let owner = control();
+    for captured_finish in [false, true] {
+        let session = Session::start(owner.clone()).unwrap();
+        session.execute(Operation::BeginChanges).unwrap();
+        session.execute(insert()).unwrap();
+        session.prepare_changes().unwrap();
+        if captured_finish {
+            assert!(session.finish_changes().is_err());
+        } else {
+            assert!(session.finish(true).is_err());
+        }
+        assert_eq!(owner.lock().unwrap().read().unwrap().len().unwrap(), 0);
     }
 }

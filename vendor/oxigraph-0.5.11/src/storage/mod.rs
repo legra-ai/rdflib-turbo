@@ -1,10 +1,24 @@
-use crate::model::{GraphNameRef, NamedOrBlankNodeRef, QuadRef};
+use crate::model::{GeneralizedQuadRef, GraphNameRef, NamedOrBlankNodeRef};
+#[cfg(all(test, feature = "rocksdb", not(target_family = "wasm")))]
+mod compact_graph_codec_tests;
+#[cfg(test)]
+mod compact_graph_scope_tests;
+mod encoded_graph_name;
+#[cfg(all(test, feature = "exact-term-storage"))]
+mod generalized_decoder_tests;
+#[cfg(all(
+    test,
+    feature = "exact-term-storage",
+    feature = "rocksdb",
+    not(target_family = "wasm")
+))]
+mod generalized_persistent_tests;
 #[cfg(all(test, feature = "exact-term-storage"))]
 mod lexical_hash_tests;
 pub use crate::storage::error::{CorruptionError, LoaderError, SerializerError, StorageError};
 use crate::storage::memory::{
-    MemoryDecodingGraphIterator, MemoryStorage, MemoryStorageBulkLoader, MemoryStorageReader,
-    MemoryStorageTransaction, QuadIterator,
+    MemoryChangedRows, MemoryDecodingGraphIterator, MemoryPreparedChanges, MemoryStorage,
+    MemoryStorageBulkLoader, MemoryStorageReader, MemoryStorageTransaction, QuadIterator,
 };
 use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, StrHash, StrLookup};
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
@@ -303,6 +317,7 @@ pub struct DecodingQuadIterator<'a> {
 }
 
 enum DecodingQuadIteratorKind<'a> {
+    Changes(MemoryChangedRows),
     #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
     RocksDb(RocksDbChainedDecodingQuadIterator<'a>),
     Memory(QuadIterator<'a>),
@@ -313,6 +328,7 @@ impl Iterator for DecodingQuadIterator<'_> {
 
     fn next(&mut self) -> Option<Self::Item> {
         match &mut self.kind {
+            DecodingQuadIteratorKind::Changes(iter) => iter.next().map(Ok),
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             DecodingQuadIteratorKind::RocksDb(iter) => iter.next(),
             DecodingQuadIteratorKind::Memory(iter) => iter.next().map(Ok),
@@ -389,7 +405,8 @@ enum StorageTransactionKind<'a> {
     expect(clippy::unnecessary_wraps)
 )]
 impl StorageTransaction<'_> {
-    pub fn insert(&mut self, quad: QuadRef<'_>) {
+    pub fn insert<'a>(&mut self, quad: impl Into<GeneralizedQuadRef<'a>>) {
+        let quad = quad.into();
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageTransactionKind::RocksDb(transaction) => transaction.insert(quad),
@@ -411,7 +428,8 @@ impl StorageTransaction<'_> {
         }
     }
 
-    pub fn remove(&mut self, quad: QuadRef<'_>) {
+    pub fn remove<'a>(&mut self, quad: impl Into<GeneralizedQuadRef<'a>>) {
+        let quad = quad.into();
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageTransactionKind::RocksDb(transaction) => transaction.remove(quad),
@@ -488,7 +506,113 @@ enum StorageReadableTransactionKind<'a> {
     not(all(not(target_family = "wasm"), feature = "rocksdb")),
     expect(clippy::unnecessary_wraps)
 )]
+pub(crate) struct PreparedChanges(MemoryPreparedChanges);
+
+impl PreparedChanges {
+    pub(crate) fn discard_removals(&mut self) {
+        self.0.discard_removals();
+    }
+    pub(crate) fn next(&mut self, added: bool) -> Option<EncodedQuad> {
+        self.0.next(added)
+    }
+    pub(crate) fn stream_finished(&self, added: bool) -> bool {
+        self.0.stream_finished(added)
+    }
+}
+
 impl StorageReadableTransaction<'_> {
+    pub fn prepare_memory_changes(&mut self) -> Result<PreparedChanges, StorageError> {
+        match &mut self.kind {
+            StorageReadableTransactionKind::Memory(transaction) => {
+                transaction.prepare_changes().map(PreparedChanges)
+            }
+            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+            StorageReadableTransactionKind::RocksDb(_) => Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "Change capture requires an in-memory transaction",
+            )
+            .into()),
+        }
+    }
+
+    pub fn prepared_reader(
+        &self,
+        changes: &PreparedChanges,
+    ) -> Result<StorageReader<'_>, StorageError> {
+        match &self.kind {
+            StorageReadableTransactionKind::Memory(transaction) => {
+                transaction.validate_prepared(&changes.0)?;
+                Ok(self.reader())
+            }
+            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+            StorageReadableTransactionKind::RocksDb(_) => Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "Change capture requires an in-memory transaction",
+            )
+            .into()),
+        }
+    }
+
+    pub fn commit_prepared_changes(self, changes: PreparedChanges) -> Result<(), StorageError> {
+        match self.kind {
+            StorageReadableTransactionKind::Memory(transaction) => {
+                transaction.commit_prepared_changes(changes.0)
+            }
+            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+            StorageReadableTransactionKind::RocksDb(_) => Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "Change capture requires an in-memory transaction",
+            )
+            .into()),
+        }
+    }
+
+    pub fn begin_memory_changes(&mut self) -> Result<(), StorageError> {
+        match &mut self.kind {
+            StorageReadableTransactionKind::Memory(transaction) => transaction.begin_changes(),
+            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+            StorageReadableTransactionKind::RocksDb(_) => Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "Change capture requires an in-memory transaction",
+            )
+            .into()),
+        }
+    }
+
+    pub fn commit_with_changes(
+        self,
+    ) -> Result<
+        (
+            StorageReader<'static>,
+            DecodingQuadIterator<'static>,
+            DecodingQuadIterator<'static>,
+        ),
+        StorageError,
+    > {
+        match self.kind {
+            StorageReadableTransactionKind::Memory(transaction) => {
+                let (reader, added, removed) = transaction.commit_with_changes()?.into_parts();
+                Ok((
+                    StorageReader {
+                        kind: StorageReaderKind::Memory(reader),
+                    },
+                    DecodingQuadIterator {
+                        kind: DecodingQuadIteratorKind::Changes(added),
+                    },
+                    DecodingQuadIterator {
+                        kind: DecodingQuadIteratorKind::Changes(removed),
+                    },
+                ))
+            }
+            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+            StorageReadableTransactionKind::RocksDb(_) => Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "Change capture requires an in-memory transaction",
+            )
+            .into()),
+        }
+    }
+
     pub fn graph_len(&self, graph: &EncodedTerm) -> Result<usize, StorageError> {
         match &self.kind {
             StorageReadableTransactionKind::Memory(transaction) => Ok(transaction.graph_len(graph)),
@@ -511,7 +635,8 @@ impl StorageReadableTransaction<'_> {
         }
     }
 
-    pub fn insert(&mut self, quad: QuadRef<'_>) {
+    pub fn insert<'a>(&mut self, quad: impl Into<GeneralizedQuadRef<'a>>) {
+        let quad = quad.into();
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageReadableTransactionKind::RocksDb(transaction) => transaction.insert(quad),
@@ -533,7 +658,8 @@ impl StorageReadableTransaction<'_> {
         }
     }
 
-    pub fn remove(&mut self, quad: QuadRef<'_>) {
+    pub fn remove<'a>(&mut self, quad: impl Into<GeneralizedQuadRef<'a>>) {
+        let quad = quad.into();
         match &mut self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageReadableTransactionKind::RocksDb(transaction) => transaction.remove(quad),
@@ -623,6 +749,7 @@ impl StorageReadableTransaction<'_> {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
             StorageReadableTransactionKind::RocksDb(transaction) => transaction.commit(),
             StorageReadableTransactionKind::Memory(transaction) => {
+                transaction.ensure_no_capture()?;
                 transaction.commit();
                 Ok(())
             }

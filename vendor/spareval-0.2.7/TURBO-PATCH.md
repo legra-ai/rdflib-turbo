@@ -83,6 +83,14 @@ Constants and generated blanks do not require dataset internalization. Existing
 validation, blank/quoted bypass and cache clearing remain intact. See rdflib-turbo
 ADR 0028, persistent construct regressions and the unchanged inference heap budget.
 
+On 64-bit targets the result cache stores three checked u32 identities whenever
+all three fit, and keeps larger triples in a separate exact usize-key set. The
+sets are disjoint by key range; no ID is truncated or compared as a fingerprint.
+Both sets share the existing total result-count limit and clear together with
+variable identities. An empty large-ID set allocates no table. 32-bit targets
+retain the original usize keys. Allocation regressions compare actual requested
+cache bytes with the former full-width set, separately from pipeline RSS.
+
 The Dataset adapter delegates validated statement filters to the lifetime-safe
 Dataset pattern iterator, eliminating copied graph bindings and unrelated graph
 decoding. Preserve the SPARQL named-only wildcard graph rule separately. Exact
@@ -112,3 +120,19 @@ algebra is checked before execution. Explicit join/OPTIONAL metadata remains in
 that immutable plan; the evaluator neither reanalyses it nor shares it through
 an object-identity cache. Source-query parsing and ordinary optimizer paths are
 unchanged. Native prepared-query regressions cover the four forms and metadata.
+
+`PreparedQuery::execute_inference_construct` is a separate backend-only head
+capability. It accepts CONSTRUCT only and returns full-Term generalized triples
+through the same template evaluator, constant identities and compact duplicate
+cache. Typed strict/generalized projections keep ordinary execute and
+QueryResults::Graph unchanged. Inference propagates source and externalization
+errors, including nested RDF12 templates; the ordinary projection preserves its
+existing behavior. Missing bindings do not create a term; bound invalid nested RDF
+triple positions fail explicitly for inference, while ordinary CONSTRUCT keeps
+its existing invalid-head omission. Blank labels remain scoped to each solution. Publication
+policy, including new literal-predicate refusal, belongs to inference Pending.
+This capability does not loosen parsers or expose generalized public CONSTRUCT.
+The parallel `explain_inference_construct` path preserves actual body statistics;
+execute delegates to that same evaluation. Measured positive body work and the
+ordinary strict execution remain equal on valid RDF fixtures. Wrong query forms
+remain errors and empty valid CONSTRUCT graphs remain successful empty results.

@@ -1,31 +1,40 @@
-use std::collections::{HashSet, hash_map::RandomState};
-use std::hash::BuildHasher;
+use std::collections::HashSet;
 
 use oxigraph::model::*;
-use oxigraph::sparql::{PreparedSparqlQuery, QueryResults, SparqlEvaluator};
+use oxigraph::sparql::{PreparedSparqlQuery, SparqlEvaluator};
+use oxrdf::GeneralizedDataset;
 
 use crate::{Error, Result};
 
 mod axioms;
 mod backend;
 mod borrowed;
+mod cleanup;
+#[cfg(test)]
+mod cleanup_failure_tests;
 pub(crate) use borrowed::BorrowedInference;
 pub(crate) use diagnostic_datatypes::SignalPublisher;
 pub(crate) use outcome::bind_error_namespace;
 mod delta;
 mod diagnostic_datatypes;
+pub(crate) use diagnostic_datatypes::unicode as python_unicode;
 mod diagnostics;
-mod generalized;
 mod intersections;
 mod literal_values;
 mod options;
 mod outcome;
-#[cfg(test)]
-mod pending_query_tests;
 mod request;
 mod same_as;
+#[cfg(test)]
+mod same_as_reference_tests;
+mod scheduling;
 pub(crate) mod scoped;
+mod semantic_delta;
+#[cfg(test)]
+mod semantic_delta_tests;
 mod shared;
+#[cfg(test)]
+mod shared_group_tests;
 #[cfg(test)]
 mod shared_rule_tests;
 mod staged;
@@ -39,6 +48,7 @@ pub(crate) use options::InferenceOptions;
 use options::expand_configured;
 pub(crate) use outcome::InferenceOutcome;
 pub(crate) use request::InferenceRequest;
+pub(crate) use semantic_delta::InferenceDelta;
 
 #[cfg(test)]
 mod diagnostic_tests;
@@ -46,6 +56,8 @@ mod diagnostic_tests;
 mod failure_tests;
 #[cfg(test)]
 mod intersection_tests;
+#[cfg(test)]
+mod literal_resource_tests;
 #[cfg(test)]
 mod literal_value_tests;
 #[cfg(test)]
@@ -68,9 +80,6 @@ const OWL_RULES: &[(&str, &str)] = &[
         "?s ?p ?o",
     ),
     ("?s ?q ?o", "?p owl:sameAs ?q . ?s ?p ?o"),
-];
-
-const CARDINALITY_RULES: &[(&str, &str)] = &[
     (
         "?y owl:sameAs ?z",
         "?r owl:onProperty ?p ; owl:maxCardinality ?n . FILTER(?n = 1) ?x a ?r ; ?p ?y, ?z",
@@ -86,14 +95,14 @@ const CARDINALITY_RULES: &[(&str, &str)] = &[
 ];
 
 pub(crate) fn expand(
-    data: &mut Dataset,
+    data: &mut GeneralizedDataset,
     mode: &str,
     request: InferenceRequest,
 ) -> Result<InferenceOutcome> {
     if data.iter().any(|q| !q.graph_name.is_default_graph()) {
         return expand_into(data, mode, GraphName::DefaultGraph, request);
     }
-    let mut transaction = data.insert_transaction();
+    let mut transaction = data.transaction();
     let (_, outcome) = expand_configured(&mut transaction, mode, request)?;
     transaction.commit();
     Ok(outcome)
@@ -102,7 +111,7 @@ pub(crate) fn expand(
 /// Infer over the dataset union and put output in the exact destination.
 /// Original graph contexts remain available to callers and report descriptions.
 pub(crate) fn expand_into(
-    data: &mut Dataset,
+    data: &mut GeneralizedDataset,
     mode: &str,
     destination: GraphName,
     request: InferenceRequest,
@@ -112,30 +121,27 @@ pub(crate) fn expand_into(
 
 /// One round retains only distinct statements absent from its read snapshot.
 /// Existing facts and duplicate rule results never enter the retained buffer.
-struct Pending<H = RandomState>(HashSet<Quad, H>);
+#[derive(Default)]
+struct Pending(HashSet<GeneralizedQuad>);
 
-impl Default for Pending {
-    fn default() -> Self {
-        Self(HashSet::new())
-    }
+/// The pinned original's derived-head policy is separate from stored data.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum HeadDisposition {
+    Accepted,
+    AlreadyPresent,
+    RefusedLiteralPredicate,
 }
 
-impl<H: BuildHasher> Pending<H> {
-    // Equality kernels can emit the same missing head through many witnesses.
-    fn push(&mut self, data: &impl Graph, quad: Quad) -> Result<()> {
-        if !self.0.contains(&quad) && !data.contains(&quad)? {
-            self.0.insert(quad);
+impl Pending {
+    fn push(&mut self, data: &impl Graph, quad: GeneralizedQuad) -> Result<HeadDisposition> {
+        if self.0.contains(&quad) || data.contains(quad.as_ref())? {
+            return Ok(HeadDisposition::AlreadyPresent);
         }
-        Ok(())
-    }
-
-    fn push_query_head(&mut self, data: &impl Graph, quad: Quad) -> Result<()> {
-        // The CONSTRUCT iterator already deduplicates this query's output.
-        // Existing heads need no hash lookup in the unrelated missing-fact set.
-        if !data.contains(&quad)? {
-            self.0.insert(quad);
+        if quad.predicate.is_literal() {
+            return Ok(HeadDisposition::RefusedLiteralPredicate);
         }
-        Ok(())
+        self.0.insert(quad);
+        Ok(HeadDisposition::Accepted)
     }
 }
 
@@ -148,23 +154,13 @@ fn apply_rules(
     if owl {
         same_as::apply(data, additions)?;
     }
-    apply_queries(data, queries, additions)
-}
-
-fn apply_queries<H: BuildHasher>(
-    data: &impl Graph,
-    queries: &[PreparedSparqlQuery],
-    additions: &mut Pending<H>,
-) -> Result<()> {
     for query in queries {
-        let QueryResults::Graph(triples) = data.query(query.clone())? else {
-            unreachable!("Inference rules are CONSTRUCT queries")
-        };
+        let triples = data.inference_heads(query.clone())?;
         for triple in triples {
             let triple = triple?;
-            additions.push_query_head(
+            additions.push(
                 data,
-                Quad::new(
+                GeneralizedQuad::new(
                     triple.subject,
                     triple.predicate,
                     triple.object,
@@ -193,7 +189,7 @@ fn expand_inner(
         let mut literal_publications = Pending::default();
         for quad in data.quads(None, None, None) {
             let mut quad = quad?;
-            if quad.object.is_literal() && !data.contains_destination(&quad)? {
+            if quad.object.is_literal() && !data.contains_destination(quad.as_ref())? {
                 quad.graph_name = GraphName::DefaultGraph;
                 literal_publications.0.insert(quad);
             }
@@ -203,10 +199,12 @@ fn expand_inner(
         }
         literal_values::substitute(data, &request.lexical_context)?;
     }
-    let mut diagnostics = diagnostics::Diagnostics::new(request.prior_error_messages);
+    let mut diagnostics = diagnostics::Diagnostics::new(
+        request.prior_error_messages,
+        request.lexical_context.integer_digit_limit,
+    );
     // bounded: the fixed RDFS/OWL rule tables above.
     let mut rules = Vec::new();
-    let mut generalized = generalized::Generalized::default();
     if mode != "rdfs" {
         rules.extend_from_slice(OWL_RULES);
         axioms::owl(
@@ -214,7 +212,6 @@ fn expand_inner(
             mode == "both",
             &mut diagnostics,
             &request.lexical_context,
-            &mut generalized,
         )?;
     }
     let mut initial_resources = Pending::default();
@@ -224,17 +221,7 @@ fn expand_inner(
         }
     }
     // bounded: one prepared query per built-in rule.
-    let mut shared_queries = shared::CompiledRule::for_mode(mode)?;
-    if mode != "rdfs" {
-        for (_, pattern) in CARDINALITY_RULES {
-            shared_queries.push(SparqlEvaluator::new().parse_query(&format!(
-                "{PREFIXES} SELECT (?y AS ?__head_s) (owl:sameAs AS ?__head_p) (?z AS ?__head_o) WHERE {{ {pattern} }}"
-            )).map_err(|error| Error::Runtime(format!("Invalid cardinality rule: {error}")))?);
-        }
-    }
-    let equality = (mode != "rdfs")
-        .then(generalized::EqualityRules::try_new)
-        .transpose()?;
+    let mut schedule = scheduling::Schedule::for_mode(mode)?;
     let queries = rules
         .iter()
         .map(|(template, pattern)| {
@@ -247,38 +234,37 @@ fn expand_inner(
         .collect::<Result<Vec<_>>>()?;
     loop {
         if mode != "rdfs" {
-            diagnostics.round(data, &generalized, &request.lexical_context)?;
+            diagnostics.round(data)?;
         }
         let mut additions = std::mem::take(&mut initial_resources);
-        let mut generalized_additions = generalized.apply(data, &shared_queries, &mut additions)?;
-        if let Some(equality) = &equality {
-            equality.apply(
-                &generalized,
-                data,
-                &mut additions,
-                &mut generalized_additions,
-            )?;
+        if mode != "rdfs" {
+            same_as::apply(data, &mut additions)?;
         }
-        apply_rules(data, &queries, &mut additions, mode != "rdfs")?;
+        schedule.apply(data, &mut additions)?;
+        apply_rules(data, &queries, &mut additions, false)?;
         if mode != "rdfs" {
             // Lists can themselves be inferred, so discover them each round.
-            let tuples = generalized::Tuples {
-                data,
-                extra: &generalized,
-            };
-            intersections::additions(&tuples, &mut additions, &mut generalized_additions)?;
-            traversal::chains(&tuples, &mut additions, &mut generalized_additions)?;
-            traversal::keys(&tuples, &mut additions, &mut generalized_additions)?;
+            intersections::additions(data, &mut additions)?;
+            traversal::chains(data, &mut additions, diagnostics.witnesses())?;
+            traversal::keys(data, &mut additions, diagnostics.witnesses())?;
         }
-        let generalized_changed = generalized.extend(generalized_additions);
-        if additions.0.is_empty() && !generalized_changed {
-            return diagnostics.finish(data, &generalized, mode != "rdfs", |term| {
+        if additions.0.is_empty() {
+            let outcome = diagnostics.finish(data, mode != "rdfs", |term| {
                 diagnostics::cardinality_zero(term, &request.lexical_context)
-            });
+            })?;
+            if mode != "rdfs" {
+                data.cleanup_blank_predicates()?;
+            }
+            return Ok(outcome);
         }
+        let mut dirty = 0;
         for quad in additions.0 {
+            // Conservatively count destination-only publications too. Native
+            // membership kernels still run every round and retain their wider view.
+            dirty |= schedule.changed(&quad.predicate);
             data.insert(quad)?;
         }
+        schedule.advance(dirty);
     }
 }
 
@@ -304,4 +290,12 @@ pub(crate) fn expand_transaction(
 mod insertion_failure_tests;
 
 #[cfg(test)]
+mod borrowed_cleanup_tests;
+#[cfg(test)]
 mod borrowed_tests;
+
+#[cfg(test)]
+mod scheduling_tests;
+
+#[cfg(test)]
+mod generalized_parity_tests;

@@ -37,18 +37,18 @@ fn scoped_boolean_membership_keeps_source_or_destination_and_exact_graph_kinds()
         };
         let candidate = quad(GraphName::DefaultGraph);
         assert_eq!(
-            data.contains(&candidate).unwrap(),
+            data.contains((&candidate).into()).unwrap(),
             physical == source || physical == destination
         );
         assert_eq!(
-            data.contains_destination(&candidate).unwrap(),
+            data.contains_destination((&candidate).into()).unwrap(),
             physical == destination
         );
         let mut other = candidate.clone();
         other.object =
             Literal::new_typed_literal("1", node("http://www.w3.org/2001/XMLSchema#integer"))
                 .into();
-        assert!(!data.contains(&other).unwrap());
+        assert!(!data.contains((&other).into()).unwrap());
     }
 }
 
@@ -65,9 +65,12 @@ fn scoped_boolean_membership_follows_pending_writes_and_rollback() {
             source: source.clone(),
             destination: destination.clone(),
         };
-        assert!(data.contains(&quad(GraphName::DefaultGraph)).unwrap());
         assert!(
-            data.contains_destination(&quad(GraphName::DefaultGraph))
+            data.contains((&quad(GraphName::DefaultGraph)).into())
+                .unwrap()
+        );
+        assert!(
+            data.contains_destination((&quad(GraphName::DefaultGraph)).into())
                 .unwrap()
         );
         assert!(store.is_empty().unwrap());
@@ -78,10 +81,14 @@ fn scoped_boolean_membership_follows_pending_writes_and_rollback() {
         source,
         destination,
     };
-    assert!(!data.contains(&quad(GraphName::DefaultGraph)).unwrap());
     assert!(
         !data
-            .contains_destination(&quad(GraphName::DefaultGraph))
+            .contains((&quad(GraphName::DefaultGraph)).into())
+            .unwrap()
+    );
+    assert!(
+        !data
+            .contains_destination((&quad(GraphName::DefaultGraph)).into())
             .unwrap()
     );
 }
@@ -109,17 +116,18 @@ fn scoped_boolean_probes_do_not_clone_bound_lexical_terms() {
         source: input.graph_name.clone(),
         destination,
     };
-    assert!(data.contains(&input).unwrap()); // warm first-touch synchronization outside measurement.
+    assert!(data.contains((&input).into()).unwrap()); // warm first-touch synchronization outside measurement.
     let (present, allocated) =
-        crate::allocation_tests::measure_allocated(|| data.contains(&input).unwrap());
+        crate::allocation_tests::measure_allocated(|| data.contains((&input).into()).unwrap());
     assert!(present);
     assert_eq!(
         allocated, 0,
         "source-or-destination boolean cloned lexical payload"
     );
-    assert!(data.contains_destination(&input).unwrap()); // warm destination first touch.
-    let (present, allocated) =
-        crate::allocation_tests::measure_allocated(|| data.contains_destination(&input).unwrap());
+    assert!(data.contains_destination((&input).into()).unwrap()); // warm destination first touch.
+    let (present, allocated) = crate::allocation_tests::measure_allocated(|| {
+        data.contains_destination((&input).into()).unwrap()
+    });
     assert!(present);
     assert_eq!(
         allocated, 0,

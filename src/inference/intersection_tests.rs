@@ -4,13 +4,14 @@ use crate::Result;
 use oxigraph::io::{RdfFormat, RdfParser};
 use oxigraph::model::*;
 use oxigraph::sparql::{PreparedSparqlQuery, QueryExplanation, QueryResults, SparqlEvaluator};
+use oxrdf::GeneralizedDataset;
 use serde::Deserialize;
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 
 const ORIGINAL_PATTERN: &str = "?c owl:intersectionOf ?list . ?x a ?any FILTER NOT EXISTS { ?list rdf:rest*/rdf:first ?member FILTER NOT EXISTS { ?x a ?member } }";
 
-fn dataset(source: &str) -> Dataset {
+fn dataset(source: &str) -> GeneralizedDataset {
     RdfParser::from_format(RdfFormat::Turtle)
         .for_slice(source.as_bytes())
         .map(|quad| quad.unwrap())
@@ -38,7 +39,7 @@ impl Plan {
     }
 }
 
-fn evaluate(data: &Dataset, pattern: &str) -> (HashSet<Triple>, Plan) {
+fn evaluate(data: &GeneralizedDataset, pattern: &str) -> (HashSet<Triple>, Plan) {
     let (result, explanation) = SparqlEvaluator::new()
         .parse_query(&format!(
             "{PREFIXES} CONSTRUCT {{ ?x a ?c }} WHERE {{ {pattern} }}"
@@ -60,7 +61,7 @@ fn evaluate(data: &Dataset, pattern: &str) -> (HashSet<Triple>, Plan) {
 }
 
 struct MeasuredGraph<'a> {
-    data: &'a Dataset,
+    data: &'a GeneralizedDataset,
     rows: Cell<u64>,
     explanations: RefCell<Vec<QueryExplanation>>,
 }
@@ -68,10 +69,10 @@ struct MeasuredGraph<'a> {
 impl<'data> Graph for MeasuredGraph<'data> {
     fn quads<'a>(
         &'a self,
-        subject: Option<NamedOrBlankNodeRef<'_>>,
-        predicate: Option<NamedNodeRef<'_>>,
+        subject: Option<TermRef<'_>>,
+        predicate: Option<TermRef<'_>>,
         object: Option<TermRef<'_>>,
-    ) -> impl Iterator<Item = Result<Quad>> + use<'a, 'data> {
+    ) -> impl Iterator<Item = Result<GeneralizedQuad>> + use<'a, 'data> {
         self.data
             .quads_for_pattern(subject, predicate, object, Some(GraphNameRef::DefaultGraph))
             .inspect(|_| self.rows.set(self.rows.get() + 1))
@@ -85,32 +86,46 @@ impl<'data> Graph for MeasuredGraph<'data> {
         self.explanations.borrow_mut().push(explanation);
         Ok(result?)
     }
-    fn insert(&mut self, _: Quad) -> Result<()> {
+
+    fn inference_heads(
+        &self,
+        query: PreparedSparqlQuery,
+    ) -> Result<oxigraph::sparql::QueryTripleIter<'_, GeneralizedTriple>> {
+        let (result, explanation) = query
+            .on_queryable_dataset(self.data)
+            .compute_statistics()
+            .explain_inference_construct();
+        self.explanations.borrow_mut().push(explanation);
+        Ok(result?)
+    }
+    fn cleanup_blank_predicates(&mut self) -> Result<()> {
+        panic!("immutable kernel fixture must not postprocess storage")
+    }
+
+    fn insert(&mut self, _: GeneralizedQuad) -> Result<()> {
         panic!("inference candidates must remain staged");
     }
 }
 
-fn current(data: &Dataset) -> (HashSet<Triple>, u64) {
+fn current(data: &GeneralizedDataset) -> (HashSet<Triple>, u64) {
     let measured = MeasuredGraph {
         data,
         rows: Cell::new(0),
         explanations: RefCell::new(Vec::new()),
     };
     let mut additions = Pending::default();
-    intersections::additions(
-        &super::generalized::Tuples {
-            data: &measured,
-            extra: &super::generalized::Generalized::default(),
-        },
-        &mut additions,
-        &mut super::generalized::Generalized::default(),
-    )
-    .unwrap();
+    intersections::additions(&measured, &mut additions).unwrap();
     // bounded: synthetic fixtures produce at most 65 distinct type additions.
     let triples = additions
         .0
         .into_iter()
-        .map(|quad| Triple::new(quad.subject, quad.predicate, quad.object))
+        .map(|quad| {
+            Triple::new(
+                NamedOrBlankNode::try_from(quad.subject).expect("ordinary subject"),
+                NamedNode::try_from(quad.predicate).expect("ordinary predicate"),
+                quad.object,
+            )
+        })
         .collect();
     let mut work = measured.rows.get();
     for explanation in measured.explanations.into_inner() {

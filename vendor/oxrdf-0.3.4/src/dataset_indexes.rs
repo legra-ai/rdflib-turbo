@@ -2,6 +2,7 @@
 use crate::interning::*;
 use std::borrow::Borrow;
 use std::cmp::Ordering;
+use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 use std::sync::Arc;
 
@@ -12,18 +13,91 @@ type Spog = (
     InternedGraphName,
 );
 type Parts<'a> = (
-    &'a InternedNamedOrBlankNode,
+    InternedNamedOrBlankNode,
     &'a InternedNamedNode,
     &'a InternedTerm,
     &'a InternedGraphName,
 );
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub(super) struct QuadRecord {
-    fields: Spog,
+/// Borrowed canonical term identity without allocating or projecting tuple views.
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
+pub(super) enum RoleRef<'a> {
+    Named(&'a InternedNamedNode),
+    Blank(&'a InternedBlankNode),
+    Literal(&'a InternedLiteral),
+    #[cfg(feature = "rdf-12")]
+    Triple(&'a InternedTerm),
+}
+impl<'a> From<&'a InternedTerm> for RoleRef<'a> {
+    fn from(term: &'a InternedTerm) -> Self {
+        match term {
+            InternedTerm::NamedNode(t) => Self::Named(t),
+            InternedTerm::BlankNode(t) => Self::Blank(t),
+            InternedTerm::Literal(t) => Self::Literal(t),
+            #[cfg(feature = "rdf-12")]
+            InternedTerm::Triple(_) => Self::Triple(term),
+        }
+    }
+}
+impl Hash for RoleRef<'_> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            Self::Named(t) => InternedTerm::NamedNode(**t).hash(state),
+            Self::Blank(t) => InternedTerm::BlankNode(**t).hash(state),
+            Self::Literal(t) => InternedTerm::Literal(**t).hash(state),
+            #[cfg(feature = "rdf-12")]
+            Self::Triple(t) => t.hash(state),
+        }
+    }
+}
+impl RoleRef<'_> {
+    pub(super) fn decode_from<'a>(self, interner: &'a Interner) -> crate::TermRef<'a> {
+        match self {
+            Self::Named(t) => t.decode_from(interner).into(),
+            Self::Blank(t) => t.decode_from(interner).into(),
+            Self::Literal(t) => t.decode_from(interner).into(),
+            #[cfg(feature = "rdf-12")]
+            Self::Triple(t) => t.decode_from(interner),
+        }
+    }
+}
+#[derive(Debug, Clone)]
+pub(super) struct Common {
+    subject: InternedTerm,
+    object: InternedTerm,
+    graph: InternedGraphName,
+    predicate: InternedNamedNode,
+}
+#[derive(Debug, Clone)]
+pub(super) struct Full {
+    fields: (InternedTerm, InternedTerm, InternedTerm, InternedGraphName),
+}
+#[derive(Debug, Clone)]
+pub(super) enum QuadRecord {
+    Common(Common),
+    GeneralizedPredicate(Box<Full>),
 }
 impl QuadRecord {
-    pub(super) fn from_spog(fields: Spog) -> Self {
-        Self { fields }
+    pub(super) fn from_spog((s, p, o, g): Spog) -> Self {
+        let s = match s {
+            InternedNamedOrBlankNode::NamedNode(t) => InternedTerm::NamedNode(t),
+            InternedNamedOrBlankNode::BlankNode(t) => InternedTerm::BlankNode(t),
+        };
+        Self::from_generalized((s, InternedTerm::NamedNode(p), o, g))
+    }
+    pub(super) fn from_generalized(
+        (s, p, o, g): (InternedTerm, InternedTerm, InternedTerm, InternedGraphName),
+    ) -> Self {
+        match p {
+            InternedTerm::NamedNode(predicate) => Self::Common(Common {
+                subject: s,
+                object: o,
+                graph: g,
+                predicate,
+            }),
+            p => Self::GeneralizedPredicate(Box::new(Full {
+                fields: (s, p, o, g),
+            })),
+        }
     }
     pub(super) fn from_gspo(
         (g, s, p, o): (
@@ -35,30 +109,56 @@ impl QuadRecord {
     ) -> Self {
         Self::from_spog((s, p, o, g))
     }
-    pub(super) fn as_tuple(&self) -> &Spog {
-        &self.fields
+    pub(super) fn generalized_parts(
+        &self,
+    ) -> (RoleRef<'_>, RoleRef<'_>, RoleRef<'_>, &InternedGraphName) {
+        match self {
+            Self::Common(c) => (
+                (&c.subject).into(),
+                RoleRef::Named(&c.predicate),
+                (&c.object).into(),
+                &c.graph,
+            ),
+            Self::GeneralizedPredicate(f) => (
+                (&f.fields.0).into(),
+                (&f.fields.1).into(),
+                (&f.fields.2).into(),
+                &f.fields.3,
+            ),
+        }
     }
     pub(super) fn parts(&self) -> Parts<'_> {
-        (
-            &self.fields.0,
-            &self.fields.1,
-            &self.fields.2,
-            &self.fields.3,
-        )
+        let Self::Common(c) = self else {
+            panic!("Generalized predicate reached strict RDF dataset view")
+        };
+        let subject = match c.subject {
+            InternedTerm::NamedNode(t) => InternedNamedOrBlankNode::NamedNode(t),
+            InternedTerm::BlankNode(t) => InternedNamedOrBlankNode::BlankNode(t),
+            _ => panic!("Generalized subject reached strict RDF dataset view"),
+        };
+        (subject, &c.predicate, &c.object, &c.graph)
+    }
+    pub(super) fn as_tuple(&self) -> Spog {
+        let (s, p, o, g) = self.parts();
+        (s, *p, o.clone(), *g)
     }
 }
-impl Deref for QuadRecord {
-    type Target = Spog;
-    fn deref(&self) -> &Spog {
-        &self.fields
+impl PartialEq for QuadRecord {
+    fn eq(&self, other: &Self) -> bool {
+        self.generalized_parts() == other.generalized_parts()
     }
 }
-// This is the canonical GSPO order, also used by GspoKey's borrowed probes.
+impl Eq for QuadRecord {}
+impl Hash for QuadRecord {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.generalized_parts().hash(state);
+    }
+}
 impl Ord for QuadRecord {
     fn cmp(&self, other: &Self) -> Ordering {
-        let a = &self.fields;
-        let b = &other.fields;
-        (&a.3, &a.0, &a.1, &a.2).cmp(&(&b.3, &b.0, &b.1, &b.2))
+        let a = self.generalized_parts();
+        let b = other.generalized_parts();
+        (a.3, a.0, a.1, a.2).cmp(&(b.3, b.0, b.1, b.2))
     }
 }
 impl PartialOrd for QuadRecord {
@@ -92,8 +192,8 @@ macro_rules! key {
         impl Eq for $name {}
         impl Ord for $name {
             fn cmp(&self, other: &Self) -> Ordering {
-                let a = self.record.as_tuple();
-                let b = other.record.as_tuple();
+                let a = self.record.generalized_parts();
+                let b = other.record.generalized_parts();
                 (&a.$i, &a.$j, &a.$k, &a.$l).cmp(&(&b.$i, &b.$j, &b.$k, &b.$l))
             }
         }

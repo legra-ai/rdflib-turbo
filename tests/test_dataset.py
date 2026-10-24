@@ -56,7 +56,8 @@ def test_named_graphs_and_default_union():
     dataset = Dataset().parse(data="<urn:g> { <urn:s> <urn:p> <urn:o> }", format="trig")
     assert bool(dataset.query("ASK { GRAPH <urn:g> { <urn:s> <urn:p> <urn:o> } }"))
     assert not bool(dataset.query("ASK { <urn:s> <urn:p> <urn:o> }"))
-    assert bool(dataset.query("ASK { <urn:s> <urn:p> <urn:o> }", default_union=True))
+    dataset.default_union = True
+    assert bool(dataset.query("ASK { <urn:s> <urn:p> <urn:o> }"))
 
 
 def test_parse_error_does_not_commit_partial_input():
@@ -109,7 +110,7 @@ def test_query_errors_and_unsupported_formats():
         dataset.query("INVALID")
     with pytest.raises(NotImplementedError):
         dataset.parse(data="", format="unknown")
-    with pytest.raises(TypeError):
+    with pytest.raises(ValueError):
         dataset.parse(data="", source="also-specified")
 
 
@@ -150,10 +151,13 @@ def test_computed_strings_match_rdflib_identity(expression):
     assert next(iter(Dataset().query(query))).value == expected
 
 
-def test_graph_only_serializer_rejects_named_graphs():
-    dataset = Dataset().parse(data="<urn:g> { <urn:s> <urn:p> <urn:o> }", format="trig")
-    with pytest.raises(ValueError):
-        dataset.serialize(format="nt")
+def test_graph_only_serializer_matches_reference_dataset_view():
+    document = "<urn:g> { <urn:s> <urn:p> <urn:o> }"
+    dataset = Dataset().parse(data=document, format="trig")
+    reference = ReferenceDataset().parse(data=document, format="trig")
+    for default_union in (False, True):
+        dataset.default_union = reference.default_union = default_union
+        assert dataset.serialize(format="nt") == reference.serialize(format="nt")
 
 
 def test_relative_iris_and_blank_graph_names():
@@ -179,9 +183,13 @@ def test_native_inference(mode):
 
 
 def test_native_inference_error_is_atomic():
-    source = Dataset().parse(data="<urn:C> <http://www.w3.org/2002/07/owl#hasKey> _:broken .")
+    source = Dataset().parse(
+        data="""<urn:C> <http://www.w3.org/2002/07/owl#hasKey> _:broken .
+        _:broken <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <urn:key>;
+          <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> _:broken ."""
+    )
     before = source.serialize()
-    with pytest.raises(ValueError, match="Malformed RDF list"):
+    with pytest.raises(ValueError, match="recursive rdf:rest"):
         source.infer()
     assert source.serialize() == before
 
@@ -196,9 +204,9 @@ def test_utf8_bytes_file_base_override_and_invalid_input(tmp_path):
             "ASK { <https://example.org/s> <https://example.org/p> <https://example.org/o> }"
         )
     )
-    with pytest.raises(TypeError):
+    with pytest.raises(RuntimeError):
         Dataset().parse(data=object())
-    with pytest.raises(TypeError):
+    with pytest.raises(ValueError):
         Dataset().parse()
     with pytest.raises(UnicodeDecodeError):
         Dataset().parse(data=b"\xff")
@@ -216,7 +224,7 @@ def test_graph_conversion_and_unsupported_conversion_inputs():
 
 
 def test_native_term_decoder_rejects_invalid_term_contract():
-    from rdflib_turbo import _term
+    from rdflib_turbo._operations import _term
 
     assert _term(None) is None
     with pytest.raises(ValueError, match="Unknown native RDF term"):

@@ -1,0 +1,27 @@
+@prefix ex: <https://example.com/> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+
+ex:Derive a sh:NodeShape ;
+    sh:order 0 ;
+    sh:targetClass ex:Person ;
+    sh:rule ex:EligibilityRule .
+
+ex:EligibilityRule a sh:SPARQLRule ;
+    sh:condition ex:Enabled ;
+    sh:construct """
+        PREFIX ex: <https://example.com/>
+        CONSTRUCT { $this ex:eligible true } WHERE {}
+    """ .
+
+ex:Enabled a sh:NodeShape ; sh:property ex:EnabledProperty .
+ex:EnabledProperty sh:path ex:enabled ; sh:hasValue true .
+
+ex:EligiblePeople a sh:NodeShape ;
+    sh:order 1 ;
+    sh:target [ a sh:SPARQLTarget ; sh:select """
+        PREFIX ex: <https://example.com/>
+        SELECT ?this WHERE { ?this ex:eligible true }
+    """ ] ;
+    sh:property ex:Email .
+
+ex:Email sh:path ex:email ; sh:minCount 1 ; sh:message "Email is required" .

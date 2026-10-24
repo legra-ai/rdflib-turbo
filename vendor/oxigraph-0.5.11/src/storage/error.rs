@@ -1,4 +1,5 @@
 use crate::io::{RdfFormat, RdfParseError};
+use crate::model::GeneralizedNarrowingError;
 use oxiri::IriParseError;
 use std::error::Error;
 use std::io;
@@ -13,6 +14,9 @@ pub enum StorageError {
     /// Error related to data corruption.
     #[error(transparent)]
     Corruption(#[from] CorruptionError),
+    /// A generalized data row cannot be represented by a strict RDF read.
+    #[error(transparent)]
+    GeneralizedNarrowing(#[from] GeneralizedNarrowingError),
     #[doc(hidden)]
     #[error("{0}")]
     Other(#[source] Box<dyn Error + Send + Sync + 'static>),
@@ -25,6 +29,7 @@ impl From<StorageError> for io::Error {
             StorageError::Io(error) => error,
             StorageError::Corruption(error) => error.into(),
             StorageError::Other(error) => Self::other(error),
+            StorageError::GeneralizedNarrowing(error) => Self::new(io::ErrorKind::InvalidData, error),
         }
     }
 }

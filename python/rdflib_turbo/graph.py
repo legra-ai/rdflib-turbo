@@ -11,17 +11,28 @@ from rdflib import BNode, URIRef, Variable
 from rdflib import Dataset as RDFLibDataset
 from rdflib import Graph as RDFLibGraph
 from rdflib.graph import DATASET_DEFAULT_GRAPH_ID
+from rdflib.namespace import NamespaceManager
 from rdflib.parser import create_input_source
 from rdflib.query import Result
 from rdflib.store import Store as ReferenceStore
 from rdflib.util import from_n3, guess_format
 
-from ._inference import GraphInference
+from ._inference import GraphInference, _change_rows
 from ._namespaces import NamespaceBindings
+from ._native import NativeStore
 from ._operations import _encode, _term
 from ._ownership import GraphOwnership
 from ._parsing import JsonLdOptions
-from ._reads import ProjectedReads, encode, encode_graph, scoped_rows
+from ._reads import (
+    _INPUT_TERMS,
+    _TERM_FACTORIES,
+    ProjectedReads,
+    context_names,
+    encode,
+    encode_graph,
+    physical_rows,
+    union_rows,
+)
 from ._serialization import GraphSerialization
 from ._validation import GraphValidation
 from .store import Store, Transaction
@@ -72,11 +83,19 @@ class RDFLibStore(ReferenceStore):
         self.backend._native.remove_pattern(self._pattern(triple, context))
 
     def triples(self, triple_pattern, context=None):
-        if context is not None and isinstance(self.backend, Store):
-            for triple in scoped_rows(self, triple_pattern, context):
-                yield triple, iter((context,))
+        if isinstance(self.backend, Store):
+            for triple, cursor in union_rows(self, triple_pattern, context):
+                yield (
+                    triple,
+                    (
+                        Graph(store=self, identifier=identifier, bind_namespaces="none")
+                        for identifier in context_names(self, cursor)
+                    ),
+                )
             return
-        rows = json.loads(self.backend._native.match_quads(self._pattern(triple_pattern, context)))
+        rows = json.loads(
+            self.backend._native.match_context_quads(self._pattern(triple_pattern, context))
+        )
         grouped = {}
         for s, p, o, g in rows:
             triple = (_term(s), _term(p), _term(o))
@@ -241,7 +260,7 @@ class Graph(
             if isinstance(identifier, (URIRef, BNode))
             else URIRef(identifier)
         )
-        if store == "default":
+        if isinstance(store, str) and store in {"default", "Memory"}:
             store = RDFLibStore(default_identifier=identifier)
         elif isinstance(store, (Store, Transaction)):
             store = RDFLibStore(store)
@@ -354,15 +373,28 @@ class Graph(
     def transaction(self):
         if isinstance(self.store.backend, Transaction):
             raise RuntimeError("Nested transactions are unsupported")
-        namespaces = self.store._namespaces.copy()
-        with self.store.backend.transaction() as transaction:
-            store = RDFLibStore(
-                transaction, default_identifier=self.store.default_identifier, namespaces=namespaces
-            )
-            yield Graph(
-                store=store, identifier=self.identifier, base=self.base, bind_namespaces="none"
-            )
-        self.store._namespaces.replace(store._namespaces)
+        owner = self.store._namespaces
+        revision = owner.revision
+        namespaces = owner.copy()
+        reserved = False
+        try:
+            with self.store.backend.transaction() as transaction:
+                store = RDFLibStore(
+                    transaction,
+                    default_identifier=self.store.default_identifier,
+                    namespaces=namespaces,
+                )
+                yield Graph(
+                    store=store, identifier=self.identifier, base=self.base, bind_namespaces="none"
+                )
+                prepared = owner.prepare_replacement(store._namespaces)
+                owner.reserve_replacement(prepared, revision)
+                reserved = True
+            owner.publish_replacement(prepared)
+            reserved = False
+        finally:
+            if reserved:
+                owner.cancel_replacement(prepared)
 
 
 class StoreDataset(GraphOwnership, GraphInference, GraphValidation, RDFLibDataset):
@@ -371,7 +403,7 @@ class StoreDataset(GraphOwnership, GraphInference, GraphValidation, RDFLibDatase
     _turbo_native_graph = True
 
     def __init__(self, store="default", default_union=False, default_graph_base=None):
-        if store == "default":
+        if isinstance(store, str) and store in {"default", "Memory"}:
             store = RDFLibStore()
         elif isinstance(store, (Store, Transaction)):
             store = RDFLibStore(store)
@@ -384,10 +416,146 @@ class StoreDataset(GraphOwnership, GraphInference, GraphValidation, RDFLibDatase
             store=self.store, identifier=DATASET_DEFAULT_GRAPH_ID, base=default_graph_base
         )
 
+    @classmethod
+    def _from_store(cls, store, *, default_union=False, default_graph_base=None):
+        """Wrap an existing native owner without injecting new namespace bindings."""
+        result = cls(
+            store=store, default_union=default_union, default_graph_base=default_graph_base
+        )
+        manager = NamespaceManager(result, bind_namespaces="none")
+        result.namespace_manager = manager
+        result.default_graph.namespace_manager = manager
+        return result
+
+    @classmethod
+    def from_rdflib(cls, graph):
+        """Explicitly copy reference RDF terms and graph domains into one native Store."""
+        if getattr(graph, "_turbo_native_graph", False):
+            raise NotImplementedError("Use copy() for native Graph or Dataset inputs")
+        if not isinstance(graph, RDFLibGraph):
+            raise TypeError("Expected an RDFLib Graph or Dataset")
+        dataset = isinstance(graph, RDFLibDataset)
+        if dataset:
+            default = graph.default_graph.identifier
+            records = (
+                (subject, predicate, obj, None if context == default else context)
+                for subject, predicate, obj, context in graph.quads((None,) * 4)
+            )
+            declared_graphs = (
+                context.identifier for context in graph.graphs() if context.identifier != default
+            )
+        elif graph.context_aware:
+            raise NotImplementedError("Convert context-aware graphs to rdflib.Dataset first")
+        else:
+            records = ((subject, predicate, obj, None) for subject, predicate, obj in graph)
+            declared_graphs = ()
+        native = NativeStore.from_records(records, declared_graphs, _INPUT_TERMS)
+        store = RDFLibStore(Store._from_native(native), namespaces=graph.namespaces())
+        return cls._from_store(
+            store,
+            default_union=graph.default_union if dataset else False,
+            default_graph_base=graph.default_graph.base if dataset else graph.base,
+        )
+
+    def infer_delta(
+        self,
+        *,
+        inference="owlrl",
+        destination=None,
+        axiomatic_triples=False,
+        datatype_axioms=False,
+        prior_error_messages=None,
+    ):
+        """Infer atomically and explicitly materialize only newly added quads."""
+        backend = self.store.backend
+        if isinstance(backend, Transaction):
+            raise NotImplementedError("Delta capture requires a committed memory Store")
+        source, target, identifier = self._inference_scope(destination)
+        namespaces = self.store._namespaces
+        revision = namespaces.revision
+        staged = namespaces.copy()
+        backend._last_inference = None
+        changes = backend._native._prepare_inference_changes(
+            inference,
+            (source, target),
+            _TERM_FACTORIES,
+            options=(axiomatic_triples, datatype_axioms),
+            prior_error_messages=prior_error_messages,
+        )
+        reserved = False
+        try:
+            outcome = changes.outcome
+            if outcome.error_messages:
+                metadata_view = RDFLibStore(backend)
+                metadata_view._namespaces = staged
+                RDFLibGraph(
+                    store=metadata_view, identifier=identifier, bind_namespaces="none"
+                ).bind("err", "http://www.daml.org/2002/03/agents/agent-ont#")
+            # An independent indexed result is deliberately requested by this API.
+            # The private OWL path consumes committed fresh-import leases instead.
+            native = NativeStore.from_records(
+                _change_rows(changes.next_additions), (), _INPUT_TERMS
+            )
+            result = type(self)._from_store(
+                RDFLibStore(Store._from_native(native), namespaces=staged.items()),
+                default_union=self.default_union,
+                default_graph_base=self.default_graph.base,
+            )
+            # The caller's pending writer applies cleanup, but removals are not
+            # public output: consume their identities without restoring RDF terms.
+            changes.discard_removals()
+            prepared = namespaces.prepare_replacement(staged)
+            namespaces.reserve_replacement(prepared, revision)
+            reserved = True
+            changes.accept()
+            namespaces.publish_replacement(prepared)
+            reserved = False
+            backend._last_inference = outcome
+            result.store.backend._last_inference = outcome
+            return result
+        finally:
+            if reserved:
+                namespaces.cancel_replacement(prepared)
+            changes.close()
+
+    def to_rdflib(self):
+        """Explicitly copy complete lexical terms and empty graph domains to RDFLib."""
+        result = RDFLibDataset(
+            default_union=self.default_union, default_graph_base=self.default_graph.base
+        )
+        manager = NamespaceManager(result, bind_namespaces="none")
+        result.namespace_manager = manager
+        result.default_graph.namespace_manager = manager
+        for prefix, namespace in self.namespaces():
+            result.bind(prefix, namespace, replace=True)
+        for context in self.graphs():
+            target = (
+                result.default_graph
+                if context.identifier == self.default_graph.identifier
+                else result.graph(context.identifier)
+            )
+            # Each native scoped iterator owns its bounded read batches. Never
+            # hydrate the dataset-wide quad grouping just to copy its output.
+            for triple in context:
+                target.add(triple)
+        return result
+
     def graph(self, identifier=None, base=None):
-        graph = Graph(self.store, identifier, self.namespace_manager, base)
-        self.store.add_graph(graph)
-        return graph
+        return super().graph(identifier, base)
+
+    def quads(self, quad=None):
+        if isinstance(self.store.backend, Transaction):
+            # The existing transaction reader includes its uncommitted writes.
+            # Committed snapshot cursors must never replace that owner.
+            yield from super().quads(quad)
+            return
+        subject, predicate, obj, context = self._spoc(quad)
+        if context is None:
+            yield from physical_rows(self.store, (subject, predicate, obj), context)
+        else:
+            for triple, cursor in union_rows(self.store, (subject, predicate, obj), context):
+                for identifier in context_names(self.store, cursor):
+                    yield (*triple, identifier)
 
     def get_context(self, identifier, quoted=False, base=None):
         if quoted:
@@ -446,8 +614,23 @@ class StoreDataset(GraphOwnership, GraphInference, GraphValidation, RDFLibDatase
     def transaction(self):
         if isinstance(self.store.backend, Transaction):
             raise RuntimeError("Nested transactions are unsupported")
-        namespaces = self.store._namespaces.copy()
-        with self.store.backend.transaction() as transaction:
-            store = RDFLibStore(transaction, namespaces=namespaces)
-            yield StoreDataset(store=store, default_union=self.default_union)
-        self.store._namespaces.replace(store._namespaces)
+        owner = self.store._namespaces
+        revision = owner.revision
+        namespaces = owner.copy()
+        reserved = False
+        try:
+            with self.store.backend.transaction() as transaction:
+                store = RDFLibStore(transaction, namespaces=namespaces)
+                yield StoreDataset._from_store(
+                    store,
+                    default_union=self.default_union,
+                    default_graph_base=self.default_graph.base,
+                )
+                prepared = owner.prepare_replacement(store._namespaces)
+                owner.reserve_replacement(prepared, revision)
+                reserved = True
+            owner.publish_replacement(prepared)
+            reserved = False
+        finally:
+            if reserved:
+                owner.cancel_replacement(prepared)

@@ -24,8 +24,8 @@ class GraphOwnership:
             namespaces=self.store._namespaces,
         )
         if dataset:
-            return StoreDataset(
-                store=store,
+            return StoreDataset._from_store(
+                store,
                 default_union=self.default_union,
                 default_graph_base=self.default_graph.base,
             )

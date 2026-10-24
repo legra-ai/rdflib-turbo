@@ -29,3 +29,13 @@ remain internal shared protocol 1, guarded by exact engine fingerprints.
 
 Only the base-copy cost is removed. Native transaction deltas, target sets,
 per-rule results, reports and query intermediates can still grow with the work.
+
+Core validation (`advanced=False`) follows pySHACL's inactive-feature policy:
+rule bodies, condition/filter references, advanced targets and expression
+constraints are read only when advanced mode is enabled. The four core target
+predicates still execute normally. Advanced targets alone do not register
+their subject as a shape; normal type, core target and shape-reference roles
+determine the executable program. Likewise, decode `sh:path` descriptions for
+shape subjects rather than unrelated parameter/expression metadata. Enabling
+advanced mode still checks and executes accepted features on the same native
+owner; ignoring inactive declarations does not enable a Python execution path.

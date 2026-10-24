@@ -23,7 +23,7 @@ def _encode(value):
         result = {"type": "literal", "value": str(value)}
         if value.language:
             result["xml:lang"] = value.language
-        elif value.datatype:
+        elif value.datatype is not None:
             result["datatype"] = str(value.datatype)
         return result
     raise TypeError(f"Unsupported RDF term: {type(value).__name__}")

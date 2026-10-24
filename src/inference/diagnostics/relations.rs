@@ -5,10 +5,9 @@ use crate::Result;
 use crate::graph::{RDF, iri};
 use crate::inference::OWL;
 use crate::inference::backend::Graph;
-use crate::inference::generalized::Tuples;
 use oxigraph::model::*;
 
-pub(super) fn collect(data: &Tuples<'_, impl Graph>, errors: &mut Diagnostics) -> Result<()> {
+pub(super) fn collect(data: &impl Graph, errors: &mut Diagnostics) -> Result<()> {
     equality(data, errors)?;
     disjoint_classes(data, errors)?;
     properties(data, errors)?;
@@ -16,7 +15,7 @@ pub(super) fn collect(data: &Tuples<'_, impl Graph>, errors: &mut Diagnostics) -
     nothing_and_complements(data, errors)
 }
 
-fn equality(data: &Tuples<'_, impl Graph>, errors: &mut Diagnostics) -> Result<()> {
+fn equality(data: &impl Graph, errors: &mut Diagnostics) -> Result<()> {
     let same = iri(OWL, "sameAs");
     // Start from conflicts, not the potentially quadratic equality closure.
     for quad in data.quads(None, Some(iri(OWL, "differentFrom").as_ref().into()), None) {
@@ -24,7 +23,7 @@ fn equality(data: &Tuples<'_, impl Graph>, errors: &mut Diagnostics) -> Result<(
         let left: Term = quad.subject;
         let right = quad.object;
         for (left, right) in [(&left, &right), (&right, &left)] {
-            if has(data, left, &same, right)? {
+            if has(data, left, same.as_ref().into(), right)? {
                 errors.add(format!(
                     "'sameAs' and 'differentFrom' cannot be used on the same subject-object pair: ({}, {})",
                     text(left), text(right)
@@ -35,7 +34,7 @@ fn equality(data: &Tuples<'_, impl Graph>, errors: &mut Diagnostics) -> Result<(
     Ok(())
 }
 
-fn disjoint_classes(data: &Tuples<'_, impl Graph>, errors: &mut Diagnostics) -> Result<()> {
+fn disjoint_classes(data: &impl Graph, errors: &mut Diagnostics) -> Result<()> {
     let rdf_type = iri(RDF, "type");
     for declaration in data.quads(None, Some(iri(OWL, "disjointWith").as_ref().into()), None) {
         let declaration = declaration?;
@@ -43,7 +42,7 @@ fn disjoint_classes(data: &Tuples<'_, impl Graph>, errors: &mut Diagnostics) -> 
         let right = declaration.object;
         for member in data.quads(None, Some(rdf_type.as_ref().into()), Some(left.as_ref())) {
             let member: Term = member?.subject;
-            if has(data, &member, &rdf_type, &right)? {
+            if has(data, &member, rdf_type.as_ref().into(), &right)? {
                 errors.add(format!(
                     "Disjoint classes {} and {} have a common individual {}",
                     text(&left),
@@ -56,7 +55,7 @@ fn disjoint_classes(data: &Tuples<'_, impl Graph>, errors: &mut Diagnostics) -> 
     Ok(())
 }
 
-fn properties(data: &Tuples<'_, impl Graph>, errors: &mut Diagnostics) -> Result<()> {
+fn properties(data: &impl Graph, errors: &mut Diagnostics) -> Result<()> {
     for (kind, asymmetric) in [("IrreflexiveProperty", false), ("AsymmetricProperty", true)] {
         let class: Term = iri(OWL, kind).into();
         for declaration in data.quads(
@@ -65,14 +64,11 @@ fn properties(data: &Tuples<'_, impl Graph>, errors: &mut Diagnostics) -> Result
             Some(class.as_ref()),
         ) {
             let predicate = declaration?.subject;
-            if predicate.is_literal() {
-                continue;
-            }
             for quad in data.quads(None, Some(predicate.as_ref()), None) {
                 let quad = quad?;
                 let left: Term = quad.subject;
                 if asymmetric {
-                    if has(data, &quad.object, &predicate, &left)? {
+                    if has(data, &quad.object, predicate.as_ref(), &left)? {
                         errors.add(format!(
                             "Erroneous usage of asymmetric property {} on {} and {}",
                             text(&predicate),
@@ -93,7 +89,7 @@ fn properties(data: &Tuples<'_, impl Graph>, errors: &mut Diagnostics) -> Result
     Ok(())
 }
 
-fn disjoint_properties(data: &Tuples<'_, impl Graph>, errors: &mut Diagnostics) -> Result<()> {
+fn disjoint_properties(data: &impl Graph, errors: &mut Diagnostics) -> Result<()> {
     for declaration in data.quads(
         None,
         Some(iri(OWL, "propertyDisjointWith").as_ref().into()),
@@ -102,13 +98,10 @@ fn disjoint_properties(data: &Tuples<'_, impl Graph>, errors: &mut Diagnostics) 
         let declaration = declaration?;
         let left = declaration.subject;
         let right = declaration.object;
-        if left.is_literal() || right.is_literal() {
-            continue;
-        }
         for quad in data.quads(None, Some(left.as_ref()), None) {
             let quad = quad?;
             let member: Term = quad.subject;
-            if has(data, &member, &right, &quad.object)? {
+            if has(data, &member, right.as_ref(), &quad.object)? {
                 errors.add(format!(
                     "Erroneous usage of disjoint properties {} and {} on {} and {}",
                     text(&left),
@@ -122,7 +115,7 @@ fn disjoint_properties(data: &Tuples<'_, impl Graph>, errors: &mut Diagnostics) 
     Ok(())
 }
 
-fn nothing_and_complements(data: &Tuples<'_, impl Graph>, errors: &mut Diagnostics) -> Result<()> {
+fn nothing_and_complements(data: &impl Graph, errors: &mut Diagnostics) -> Result<()> {
     let rdf_type = iri(RDF, "type");
     let nothing: Term = iri(OWL, "Nothing").into();
     for quad in data.quads(None, Some(rdf_type.as_ref().into()), Some(nothing.as_ref())) {
@@ -136,7 +129,7 @@ fn nothing_and_complements(data: &Tuples<'_, impl Graph>, errors: &mut Diagnosti
         let left: Term = declaration.subject;
         let right = declaration.object;
         for member in data.quads(None, Some(rdf_type.as_ref().into()), Some(left.as_ref())) {
-            if has(data, &member?.subject, &rdf_type, &right)? {
+            if has(data, &member?.subject, rdf_type.as_ref().into(), &right)? {
                 // The pinned reference prints the complement class in its
                 // element field, rather than the individual being checked.
                 errors.add(format!(

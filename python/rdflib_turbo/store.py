@@ -19,6 +19,29 @@ class ValidationError(ValueError):
 class InferenceOperations(GraphOperations):
     """Shared inference entry point for a store and its active transaction."""
 
+    @contextmanager
+    def _expand_shared_shapes(self, program, settings, inplace):
+        try:
+            if not inplace:
+                result = Store._from_native(self._native.fork_graph(None))
+                with result._expand_shared_shapes(program, settings, True) as (_, warnings):
+                    yield result, warnings
+            elif isinstance(self, Transaction):
+                prepared = program.prepare_rules_transaction(self._native, settings)
+                yield self, prepared.output()
+                prepared.accept()
+            else:
+                with self.transaction() as transaction:
+                    with transaction._expand_shared_shapes(program, settings, True) as (
+                        _,
+                        warnings,
+                    ):
+                        yield self, warnings
+        except BaseException:
+            if isinstance(self, Transaction):
+                self._native.rollback()
+            raise
+
     def infer(
         self,
         *,

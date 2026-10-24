@@ -10,20 +10,27 @@
 // own declarations; these additional symbols need the same selected DLL name.
 include!(concat!(env!("OUT_DIR"), "/python_scalar_imports.rs"));
 
-pub(super) fn decimal(ch: char) -> Option<u8> {
+pub(crate) fn decimal(ch: char) -> Option<u8> {
     // SAFETY: char is a valid Unicode scalar; this pure const-table lookup
     // accepts Py_UCS4 by value and borrows no Python object or thread state.
     let digit = unsafe { pyo3::ffi::Py_UNICODE_TODECIMAL(ch as u32) };
     u8::try_from(digit).ok()
 }
 
-pub(super) fn word(ch: char) -> bool {
+pub(crate) fn word(ch: char) -> bool {
     // SAFETY: same scalar-only, immutable-table contract as decimal().
     ch == '_'
         || unsafe { _PyUnicode_IsAlpha(ch as u32) != 0 || _PyUnicode_IsNumeric(ch as u32) != 0 }
 }
 
-pub(super) fn whitespace(ch: char) -> bool {
+pub(crate) fn whitespace(ch: char) -> bool {
     // SAFETY: same scalar-only contract; this export is a pure generated switch.
     unsafe { _PyUnicode_IsWhitespace(ch as u32) != 0 }
+}
+
+pub(crate) fn simple_lower(ch: char) -> char {
+    // SAFETY: like the predicates above, this exported scalar operation reads
+    // only CPython's immutable generated Unicode tables; it needs no GIL.
+    char::from_u32(unsafe { _PyUnicode_ToLowercase(ch as u32) })
+        .expect("CPython simple lowercase must return a Unicode scalar")
 }

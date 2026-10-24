@@ -64,7 +64,12 @@ fn invalid_typed_operation_aborts_prior_transaction_writes() {
     session
         .execute(insertion(uri("urn:s"), uri("urn:o"), None))
         .unwrap();
-    let bad_subject = ("literal".into(), "bad".into(), None, None);
+    let bad_subject = (
+        "literal".into(),
+        "bad".into(),
+        Some("urn:datatype".into()),
+        Some("en".into()),
+    );
     assert!(
         session
             .execute(insertion(bad_subject, uri("urn:o"), None))
@@ -77,12 +82,17 @@ fn invalid_typed_operation_aborts_prior_transaction_writes() {
 }
 
 #[test]
-fn shared_validation_rejects_invalid_positions_and_metadata() {
+fn shared_validation_keeps_full_data_roles_and_rejects_invalid_graph_metadata() {
     let literal = || ("literal".into(), "x".into(), None, None);
     assert!(
         QuadInput::new(uri("urn:s"), literal(), uri("urn:o"), None)
             .quad()
-            .is_err()
+            .is_ok()
+    );
+    assert!(
+        QuadInput::new(literal(), uri("urn:p"), uri("urn:o"), None)
+            .quad()
+            .is_ok()
     );
     assert!(
         QuadInput::new(uri("urn:s"), uri("urn:p"), uri("urn:o"), Some(literal()))

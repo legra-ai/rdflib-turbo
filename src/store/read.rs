@@ -1,8 +1,8 @@
 //! Bounded, typed scans of one graph from an owned committed-store snapshot.
 use std::sync::Mutex;
 
-use oxigraph::model::{GraphNameRef, QuadRef};
-use oxigraph::store::{LexicalQuadIter, LexicalTerm, Store};
+use oxigraph::model::{GeneralizedQuadRef, GraphNameRef};
+use oxigraph::store::{GeneralizedLexicalQuadIter, LexicalTerm, Store};
 
 use super::operations::runtime;
 use super::session::lock;
@@ -20,7 +20,7 @@ const BATCH_BYTES: usize = 64 * 1024;
 const INITIAL_ROWS: usize = 16;
 
 struct CursorState {
-    iter: Option<LexicalQuadIter<'static>>,
+    iter: Option<GeneralizedLexicalQuadIter<'static>>,
     pending: Option<Row>,
     capacity_hint: usize,
 }
@@ -57,9 +57,6 @@ pub(super) fn start(
         ));
     }
     let pattern = PreparedRead::new(subject, predicate, object, graph)?;
-    if !pattern.can_match() {
-        return Ok((Vec::new(), None));
-    }
     let cursor = open(store, &pattern, mask)?;
     let (rows, finished) = cursor.batch()?;
     Ok((rows, if finished { None } else { Some(cursor) }))
@@ -73,22 +70,19 @@ pub(super) fn contains_exact(
     graph: Option<TermView<'_>>,
 ) -> Result<bool> {
     let pattern = PreparedRead::new(Some(subject), Some(predicate), Some(object), graph)?;
-    if !pattern.can_match() {
-        return Ok(false);
-    }
     let subject = pattern.subject.as_ref().expect("bound subject");
     let predicate = pattern.predicate.as_ref().expect("bound predicate");
     let object = pattern.object.as_ref().expect("bound object");
     let graph = &pattern.graph;
     store
-        .contains(QuadRef::new(
-            subject.subject_ref(),
-            predicate.predicate_ref(),
-            object.term_ref(),
-            graph.as_ref().map_or(GraphNameRef::DefaultGraph, |value| {
-                value.subject_ref().into()
+        .contains_generalized(GeneralizedQuadRef {
+            subject: subject.term_ref(),
+            predicate: predicate.term_ref(),
+            object: object.term_ref(),
+            graph_name: graph.as_ref().map_or(GraphNameRef::DefaultGraph, |value| {
+                value.graph_name_ref().into()
             }),
-        ))
+        })
         .map_err(runtime)
 }
 
@@ -111,28 +105,18 @@ impl<'a> PreparedRead<'a> {
         // Validate every term before deciding absence, including later metadata.
         Ok(Self {
             subject: subject
-                .map(|v| PreparedTerm::new(v, Position::Object))
+                .map(|v| PreparedTerm::new(v, Position::Data))
                 .transpose()?,
             predicate: predicate
-                .map(|v| PreparedTerm::new(v, Position::Object))
+                .map(|v| PreparedTerm::new(v, Position::Data))
                 .transpose()?,
             object: object
-                .map(|v| PreparedTerm::new(v, Position::Object))
+                .map(|v| PreparedTerm::new(v, Position::Data))
                 .transpose()?,
             graph: graph
-                .map(|v| PreparedTerm::new(v, Position::Subject))
+                .map(|v| PreparedTerm::new(v, Position::GraphName))
                 .transpose()?,
         })
-    }
-
-    fn can_match(&self) -> bool {
-        self.subject
-            .as_ref()
-            .is_none_or(|v| !matches!(v.term_ref(), oxigraph::model::TermRef::Literal(_)))
-            && self
-                .predicate
-                .as_ref()
-                .is_none_or(|v| matches!(v.term_ref(), oxigraph::model::TermRef::NamedNode(_)))
     }
 }
 
@@ -144,12 +128,12 @@ fn open(store: &Store, pattern: &PreparedRead<'_>, mask: u8) -> Result<ReadCurso
         graph,
     } = pattern;
     let iter = store
-        .quads_for_pattern(
-            subject.as_ref().map(PreparedTerm::subject_ref),
-            predicate.as_ref().map(PreparedTerm::predicate_ref),
+        .generalized_quads_for_pattern(
+            subject.as_ref().map(PreparedTerm::term_ref),
+            predicate.as_ref().map(PreparedTerm::term_ref),
             object.as_ref().map(PreparedTerm::term_ref),
             Some(graph.as_ref().map_or(GraphNameRef::DefaultGraph, |value| {
-                value.subject_ref().into()
+                value.graph_name_ref().into()
             })),
         )
         .project_lexical(mask & 1 != 0, mask & 2 != 0, mask & 4 != 0);
@@ -170,21 +154,23 @@ fn row_bytes(row: &Row) -> usize {
     [&row.0, &row.1, &row.2]
         .into_iter()
         .flatten()
-        .map(|term| match term {
-            LexicalTerm::NamedNode(value) | LexicalTerm::BlankNode(value) => {
-                64 + value.as_str().len()
-            }
-            LexicalTerm::Literal {
-                value,
-                datatype,
-                language,
-            } => {
-                64 + value.as_str().len()
-                    + datatype.as_ref().map_or(0, |text| text.as_str().len())
-                    + language.as_ref().map_or(0, |text| text.as_str().len())
-            }
-        })
+        .map(term_bytes)
         .sum()
+}
+
+pub(super) fn term_bytes(term: &LexicalTerm) -> usize {
+    match term {
+        LexicalTerm::NamedNode(value) | LexicalTerm::BlankNode(value) => 64 + value.as_str().len(),
+        LexicalTerm::Literal {
+            value,
+            datatype,
+            language,
+        } => {
+            64 + value.as_str().len()
+                + datatype.as_ref().map_or(0, |text| text.as_str().len())
+                + language.as_ref().map_or(0, |text| text.as_str().len())
+        }
+    }
 }
 
 impl ReadCursor {

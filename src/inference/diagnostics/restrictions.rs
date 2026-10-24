@@ -7,10 +7,9 @@ use crate::Result;
 use crate::graph::{RDF, iri};
 use crate::inference::OWL;
 use crate::inference::backend::Graph;
-use crate::inference::generalized::Tuples;
 
 pub(super) fn collect(
-    data: &Tuples<'_, impl Graph>,
+    data: &impl Graph,
     errors: &mut Diagnostics,
     is_zero: impl Fn(&Term) -> Result<bool>,
 ) -> Result<()> {
@@ -32,20 +31,27 @@ pub(super) fn collect(
             let restriction: Term = declaration.subject;
             for predicate in objects(data, &restriction, &iri(OWL, "onProperty")) {
                 let predicate = predicate?;
-                if predicate.is_literal() {
-                    continue;
-                }
                 for quad in data.quads(None, Some(predicate.as_ref()), None) {
                     let quad = quad?;
                     let subject: Term = quad.subject;
-                    if !has(data, &subject, &iri(RDF, "type"), &restriction)? {
+                    if !has(
+                        data,
+                        &subject,
+                        iri(RDF, "type").as_ref().into(),
+                        &restriction,
+                    )? {
                         continue;
                     }
                     if qualified {
                         for class in objects(data, &restriction, &iri(OWL, "onClass")) {
                             let class = class?;
                             if class == Term::from(iri(OWL, "Thing"))
-                                || has(data, &quad.object, &iri(RDF, "type"), &class)?
+                                || has(
+                                    data,
+                                    &quad.object,
+                                    iri(RDF, "type").as_ref().into(),
+                                    &class,
+                                )?
                             {
                                 errors.add(format!("Erroneous usage of maximum qualified cardinality with {}, {} and {}", text(&restriction), text(&class), text(&quad.object)));
                             }
@@ -64,7 +70,7 @@ pub(super) fn collect(
     Ok(())
 }
 
-fn negative_assertions(data: &Tuples<'_, impl Graph>, errors: &mut Diagnostics) -> Result<()> {
+fn negative_assertions(data: &impl Graph, errors: &mut Diagnostics) -> Result<()> {
     for declaration in data.quads(
         None,
         Some(iri(OWL, "sourceIndividual").as_ref().into()),
@@ -75,13 +81,10 @@ fn negative_assertions(data: &Tuples<'_, impl Graph>, errors: &mut Diagnostics) 
         let source = declaration.object;
         for predicate in objects(data, &assertion, &iri(OWL, "assertionProperty")) {
             let predicate = predicate?;
-            if predicate.is_literal() {
-                continue;
-            }
             for (property, kind) in [("targetIndividual", "object"), ("targetValue", "datatype")] {
                 for target in objects(data, &assertion, &iri(OWL, property)) {
                     let target = target?;
-                    if has(data, &source, &predicate, &target)? {
+                    if has(data, &source, predicate.as_ref(), &target)? {
                         errors.add(format!(
                             "Negative ({kind}) property assertion violated for: ({}, {}, {})",
                             text(&source),

@@ -1,9 +1,11 @@
 """Generalized schema terms keep their diagnostic meanings."""
 
 import pytest
+from inference_observers import inference_outcome, physical_keys, union_graph
 from owlrl import DeductiveClosure, OWLRL_Semantics
-from rdflib import Graph, Literal, Namespace, URIRef
+from rdflib import BNode, Graph, Literal, Namespace, URIRef
 from rdflib.compare import isomorphic
+from rdflib.namespace import OWL, RDF, RDFS
 from rdflib_turbo import Dataset, Store
 from rdflib_turbo import Graph as NativeGraph
 
@@ -49,21 +51,25 @@ def api(request):
 
 
 def compare(document, api, tmp_path):
-    source = Graph().parse(data=PREFIX + document, format="turtle")
+    source = (
+        document
+        if isinstance(document, Graph)
+        else Graph().parse(data=PREFIX + document, format="turtle")
+    )
     expected = Graph()
     for triple in source:
         expected.add(triple)
     DeductiveClosure(OWLRL_Semantics).expand(expected)
-    ordinary = Graph()
-    for triple in expected:
-        if not isinstance(triple[0], Literal) and isinstance(triple[1], URIRef):
-            ordinary.add(triple)
+
+    def observe(native):
+        owner = native if isinstance(native, Dataset) else native.store.backend
+        return union_graph(owner)
 
     def check(native):
         native.infer(inference="owlrl")
-        actual = Graph().parse(data=native.serialize(format="ntriples"), format="nt")
+        actual = observe(native)
         assert messages(actual) == messages(expected)
-        assert isomorphic(actual, ordinary)
+        assert isomorphic(actual, expected)
 
     def graph(owner):
         native = NativeGraph(owner, URIRef("urn:source"), bind_namespaces="none")
@@ -84,14 +90,77 @@ def compare(document, api, tmp_path):
         if api == "persistent":
             with Store(path) as reopened:
                 native = NativeGraph(reopened, URIRef("urn:source"), bind_namespaces="none")
-                actual = Graph().parse(data=native.serialize(format="ntriples"), format="nt")
-                assert isomorphic(actual, ordinary)
+                actual = observe(native)
+                assert isomorphic(actual, expected)
     return expected
 
 
 @pytest.mark.parametrize("case", PREDICATES)
 def test_non_iri_predicates_match_reference(case, api, tmp_path):
     compare(PREDICATES[case], api, tmp_path)
+
+
+def literal_predicate_source(case, derived):
+    source = Graph()
+    left, right = Literal("property"), Literal("other-property")
+    subject, obj, restriction, assertion = map(
+        URIRef, ("urn:x", "urn:y", "urn:restriction", "urn:assertion")
+    )
+    edges = [(subject, left, subject if case == "irreflexive" else obj)]
+    if case == "irreflexive":
+        source.add((left, RDF.type, OWL.IrreflexiveProperty))
+    elif case == "asymmetric":
+        source.add((left, RDF.type, OWL.AsymmetricProperty))
+        edges.append((obj, left, subject))
+    elif case == "disjoint":
+        source.add((left, OWL.propertyDisjointWith, right))
+        edges.append((subject, right, obj))
+    elif case == "negative":
+        source.add((assertion, OWL.sourceIndividual, subject))
+        source.add((assertion, OWL.assertionProperty, left))
+        source.add((assertion, OWL.targetIndividual, obj))
+    elif case == "max-zero":
+        source.add((restriction, OWL.onProperty, left))
+        source.add((restriction, OWL.maxCardinality, Literal(0)))
+        source.add((subject, RDF.type, restriction))
+    elif case == "all-disjoint":
+        head, middle, last = map(BNode, ("first", "middle", "last"))
+        source.add((assertion, RDF.type, OWL.AllDisjointProperties))
+        source.add((assertion, OWL.members, head))
+        for node, value, rest in (
+            (head, left, middle),
+            (middle, right, last),
+            (last, URIRef("urn:unused"), RDF.nil),
+        ):
+            source.add((node, RDF.first, value))
+            source.add((node, RDF.rest, rest))
+        edges.append((subject, right, obj))
+    else:
+        raise AssertionError(f"Unknown diagnostic fixture: {case}")
+    for subject, predicate, obj in edges:
+        if derived:
+            original = URIRef(f"urn:named-{predicate}")
+            source.add((original, RDFS.subPropertyOf, predicate))
+            source.add((subject, original, obj))
+        else:
+            source.add((subject, predicate, obj))
+    return source
+
+
+@pytest.mark.parametrize("case", PREDICATES)
+@pytest.mark.parametrize("derived", [False, True], ids=["asserted", "derived"])
+def test_literal_predicate_diagnostics_preserve_asserted_facts(case, derived, api, tmp_path):
+    source = literal_predicate_source(case, derived)
+    # Core.store_triple rejects derived literal predicates, but an asserted
+    # generalized predicate remains an indexed premise for every collector.
+    reasoner = OWLRL_Semantics(source, False, False)
+    for triple in list(source):
+        reasoner.rules(triple, 1)
+    assert bool(reasoner.error_messages) is not derived
+    assert not any(isinstance(predicate, Literal) for _, predicate, _ in reasoner.added_triples)
+    expected = compare(source, api, tmp_path)
+    assert bool(messages(expected)) is not derived
+    assert bool([triple for triple in expected if isinstance(triple[1], Literal)]) is not derived
 
 
 @pytest.mark.parametrize(
@@ -137,14 +206,14 @@ def test_literal_list_cycles_fail_atomically(head, truthy):
     document = PREFIX + LIST.replace("rdf:rest rdf:nil", "rdf:rest HEAD").replace("HEAD", head)
     source = Graph().parse(data=document, format="turtle")
     native = Dataset.from_rdflib(source)
-    before = native.serialize(format="ntriples")
+    before = physical_keys(native)
     if truthy:
         with pytest.raises(ValueError, match="recursive rdf:rest"):
             DeductiveClosure(OWLRL_Semantics).expand(source)
         with pytest.raises(ValueError, match="recursive rdf:rest"):
             native.infer(inference="owlrl")
-        assert native.serialize(format="ntriples") == before
-        assert native._last_inference is None
+        assert physical_keys(native) == before
+        assert inference_outcome(native) is None
     else:
         DeductiveClosure(OWLRL_Semantics).expand(source)
         native.infer(inference="owlrl")

@@ -3,7 +3,7 @@ use std::cell::Cell;
 
 use oxigraph::model::*;
 use oxigraph::sparql::{PreparedSparqlQuery, QueryResults};
-use oxrdf::dataset::InsertTransaction;
+use oxrdf::dataset::GeneralizedTransaction;
 
 use crate::inference::backend::Graph;
 use crate::{Error, Result};
@@ -12,8 +12,8 @@ pub(super) const FAILURE: &str = "synthetic storage read failure";
 
 #[derive(Clone, PartialEq)]
 pub(super) struct Scan {
-    subject: Option<NamedOrBlankNode>,
-    predicate: Option<NamedNode>,
+    subject: Option<Term>,
+    predicate: Option<Term>,
     object: Option<Term>,
 }
 
@@ -25,15 +25,11 @@ impl Scan {
     ) -> Self {
         Self {
             subject: subject.map(|value| node(value).into()),
-            predicate: predicate.map(node),
+            predicate: predicate.map(|value| node(value).into()),
             object: object.map(|value| node(value).into()),
         }
     }
-    fn selectors(
-        s: Option<NamedOrBlankNodeRef<'_>>,
-        p: Option<NamedNodeRef<'_>>,
-        o: Option<TermRef<'_>>,
-    ) -> Self {
+    fn selectors(s: Option<TermRef<'_>>, p: Option<TermRef<'_>>, o: Option<TermRef<'_>>) -> Self {
         Self {
             subject: s.map(|value| value.into_owned()),
             predicate: p.map(|value| value.into_owned()),
@@ -55,7 +51,7 @@ pub(super) struct Fault {
 }
 
 pub(super) struct Storage<'a, 'data> {
-    data: &'a InsertTransaction<'data>,
+    data: &'a GeneralizedTransaction<'data>,
     fault: Fault,
     triggered: Cell<bool>,
     equality_complete: Cell<bool>,
@@ -63,7 +59,7 @@ pub(super) struct Storage<'a, 'data> {
 }
 
 impl<'a, 'data> Storage<'a, 'data> {
-    pub(super) fn new(data: &'a InsertTransaction<'data>, fault: Fault) -> Self {
+    pub(super) fn new(data: &'a GeneralizedTransaction<'data>, fault: Fault) -> Self {
         Self {
             data,
             fault,
@@ -84,13 +80,13 @@ impl<'a, 'data> Storage<'a, 'data> {
     }
 }
 
-impl<'graph, 'data> Graph for Storage<'graph, 'data> {
+impl<'owner, 'data> Graph for Storage<'owner, 'data> {
     fn quads<'a>(
         &'a self,
-        s: Option<NamedOrBlankNodeRef<'_>>,
-        p: Option<NamedNodeRef<'_>>,
+        s: Option<TermRef<'_>>,
+        p: Option<TermRef<'_>>,
         o: Option<TermRef<'_>>,
-    ) -> impl Iterator<Item = Result<Quad>> + use<'a, 'graph, 'data> {
+    ) -> impl Iterator<Item = Result<GeneralizedQuad>> + use<'a, 'owner, 'data> {
         let scan = Scan::selectors(s, p, o);
         let equality = scan == Scan::new(None, Some("sameAs"), None);
         if scan == Scan::new(None, None, None) {
@@ -128,7 +124,18 @@ impl<'graph, 'data> Graph for Storage<'graph, 'data> {
     fn query(&self, _: PreparedSparqlQuery) -> Result<QueryResults<'_>> {
         panic!("indexed kernels must not evaluate queries")
     }
-    fn insert(&mut self, _: Quad) -> Result<()> {
+
+    fn inference_heads(
+        &self,
+        _: PreparedSparqlQuery,
+    ) -> Result<oxigraph::sparql::QueryTripleIter<'_, GeneralizedTriple>> {
+        panic!("indexed kernels must not evaluate queries")
+    }
+    fn cleanup_blank_predicates(&mut self) -> Result<()> {
+        panic!("immutable kernel fixture must not postprocess storage")
+    }
+
+    fn insert(&mut self, _: GeneralizedQuad) -> Result<()> {
         panic!("a kernel published a fact before its round completed")
     }
 }
@@ -142,6 +149,6 @@ pub(super) fn node(value: &str) -> NamedNode {
     NamedNode::new(format!("{namespace}{value}")).unwrap()
 }
 
-pub(super) fn quad(s: &str, p: &str, o: &str) -> Quad {
-    Quad::new(node(s), node(p), node(o), GraphName::DefaultGraph)
+pub(super) fn quad(s: &str, p: &str, o: &str) -> GeneralizedQuad {
+    GeneralizedQuad::new(node(s), node(p), node(o), GraphName::DefaultGraph)
 }

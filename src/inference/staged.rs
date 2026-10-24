@@ -1,8 +1,10 @@
 //! Infer through the existing insertion journal and a borrowed logical union.
 
 use oxigraph::model::*;
-use oxigraph::sparql::{PreparedSparqlQuery, QueryResults};
-use oxrdf::dataset::InsertTransaction;
+use oxigraph::sparql::PreparedSparqlQuery;
+#[cfg(test)]
+use oxigraph::sparql::QueryResults;
+use oxrdf::{GeneralizedDataset, GeneralizedTransaction};
 
 use super::backend::Graph;
 use super::{InferenceOutcome, InferenceRequest, expand_configured};
@@ -18,25 +20,29 @@ mod allocation_tests;
 /// Read-only virtual default graph over the transaction's existing dictionary.
 #[derive(Clone, Copy)]
 struct StagedDataset<'a> {
-    source: &'a Dataset,
+    source: &'a GeneralizedDataset,
 }
 
 impl<'a> StagedDataset<'a> {
     fn default_refs(
         &self,
-        subject: Option<NamedOrBlankNodeRef<'_>>,
-        predicate: Option<NamedNodeRef<'_>>,
+        subject: Option<TermRef<'_>>,
+        predicate: Option<TermRef<'_>>,
         object: Option<TermRef<'_>>,
-    ) -> impl Iterator<Item = QuadRef<'a>> + use<'a> {
+    ) -> impl Iterator<Item = GeneralizedQuadRef<'a>> + use<'a> {
         // bounded: one borrowed previous SPO; native unscoped indexes order graph last.
         let mut previous = None;
         self.source
             .quads_for_pattern(subject, predicate, object, None)
             .filter(move |quad| {
-                let triple = TripleRef::new(quad.subject, quad.predicate, quad.object);
+                let triple = GeneralizedTripleRef {
+                    subject: quad.subject,
+                    predicate: quad.predicate,
+                    object: quad.object,
+                };
                 previous.replace(triple) != Some(triple)
             })
-            .map(|quad| QuadRef {
+            .map(|quad| GeneralizedQuadRef {
                 graph_name: GraphNameRef::DefaultGraph,
                 ..quad
             })
@@ -44,11 +50,11 @@ impl<'a> StagedDataset<'a> {
 
     fn matching_refs(
         &self,
-        subject: Option<NamedOrBlankNodeRef<'_>>,
-        predicate: Option<NamedNodeRef<'_>>,
+        subject: Option<TermRef<'_>>,
+        predicate: Option<TermRef<'_>>,
         object: Option<TermRef<'_>>,
         graph: Option<GraphNameRef<'_>>,
-    ) -> Box<dyn Iterator<Item = QuadRef<'a>> + 'a> {
+    ) -> Box<dyn Iterator<Item = GeneralizedQuadRef<'a>> + 'a> {
         match graph {
             Some(GraphNameRef::DefaultGraph) => {
                 Box::new(self.default_refs(subject, predicate, object))
@@ -71,19 +77,19 @@ impl<'a> StagedDataset<'a> {
 }
 
 pub(super) struct JournalGraph<'a> {
-    transaction: InsertTransaction<'a>,
+    transaction: GeneralizedTransaction<'a>,
     destination: GraphName,
 }
 
 impl<'a> JournalGraph<'a> {
-    pub(super) fn new(source: &'a mut Dataset, destination: GraphName) -> Self {
+    pub(super) fn new(source: &'a mut GeneralizedDataset, destination: GraphName) -> Self {
         Self {
-            transaction: source.insert_transaction(),
+            transaction: source.transaction(),
             destination,
         }
     }
 
-    pub(super) fn inserted(&self) -> impl Iterator<Item = QuadRef<'_>> {
+    pub(super) fn inserted(&self) -> impl Iterator<Item = GeneralizedQuadRef<'_>> {
         self.transaction.inserted()
     }
 
@@ -93,12 +99,18 @@ impl<'a> JournalGraph<'a> {
 }
 
 impl<'data> Graph for JournalGraph<'data> {
+    fn cleanup_blank_predicates(&mut self) -> Result<()> {
+        self.transaction
+            .remove_where(|quad| quad.predicate.is_blank_node());
+        Ok(())
+    }
+
     fn quads<'a>(
         &'a self,
-        subject: Option<NamedOrBlankNodeRef<'_>>,
-        predicate: Option<NamedNodeRef<'_>>,
+        subject: Option<TermRef<'_>>,
+        predicate: Option<TermRef<'_>>,
         object: Option<TermRef<'_>>,
-    ) -> impl Iterator<Item = Result<Quad>> + use<'a, 'data> {
+    ) -> impl Iterator<Item = Result<GeneralizedQuad>> + use<'a, 'data> {
         StagedDataset {
             source: &self.transaction,
         }
@@ -106,6 +118,7 @@ impl<'data> Graph for JournalGraph<'data> {
         .map(|quad| Ok(quad.into_owned()))
     }
 
+    #[cfg(test)]
     fn query(&self, query: PreparedSparqlQuery) -> Result<QueryResults<'_>> {
         Ok(query
             .on_queryable_dataset(StagedDataset {
@@ -114,31 +127,42 @@ impl<'data> Graph for JournalGraph<'data> {
             .execute()?)
     }
 
-    fn contains_destination(&self, quad: &Quad) -> Result<bool> {
-        Ok(Dataset::contains(
+    fn inference_heads(
+        &self,
+        query: PreparedSparqlQuery,
+    ) -> Result<oxigraph::sparql::QueryTripleIter<'_, GeneralizedTriple>> {
+        Ok(query
+            .on_queryable_dataset(StagedDataset {
+                source: &self.transaction,
+            })
+            .execute_inference_construct()?)
+    }
+
+    fn contains_destination(&self, quad: GeneralizedQuadRef<'_>) -> Result<bool> {
+        Ok(GeneralizedDataset::contains(
             &self.transaction,
-            QuadRef {
+            GeneralizedQuadRef {
                 graph_name: self.destination.as_ref(),
-                ..quad.as_ref()
+                ..quad
             },
         ))
     }
 
-    fn contains(&self, quad: &Quad) -> Result<bool> {
+    fn contains(&self, quad: GeneralizedQuadRef<'_>) -> Result<bool> {
         Ok(self
             .transaction
             .quads_for_pattern(
-                Some(quad.subject.as_ref()),
-                Some(quad.predicate.as_ref()),
-                Some(quad.object.as_ref()),
+                Some(quad.subject),
+                Some(quad.predicate),
+                Some(quad.object),
                 None,
             )
             .next()
             .is_some())
     }
 
-    fn insert(&mut self, quad: Quad) -> Result<()> {
-        self.transaction.insert(QuadRef {
+    fn insert(&mut self, quad: GeneralizedQuad) -> Result<()> {
+        self.transaction.insert(GeneralizedQuadRef {
             graph_name: self.destination.as_ref(),
             ..quad.as_ref()
         });
@@ -147,7 +171,7 @@ impl<'data> Graph for JournalGraph<'data> {
 }
 
 pub(super) fn expand(
-    source: &mut Dataset,
+    source: &mut GeneralizedDataset,
     mode: &str,
     destination: GraphName,
     request: InferenceRequest,

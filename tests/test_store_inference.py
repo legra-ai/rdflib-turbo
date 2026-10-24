@@ -1,6 +1,7 @@
 """Inference reads the native transaction, including pending writes."""
 
 import pytest
+from inference_observers import physical_keys, reference_dataset
 from rdflib_turbo import Dataset, Store
 
 PREFIX = """
@@ -69,10 +70,10 @@ def test_union_inference_streams_graphs_and_writes_only_new_facts(destination):
         assert not store.query(f"ASK {{ {graph} {{ <urn:a> a <urn:Child> }} }}").askAnswer
         # RDFS initializes resources from the terms present at each invocation.
         # Preserve that existing compatibility behavior on repeated calls too.
-        expected = Dataset().parse(data=store.serialize(), format="nquads")
+        expected = Dataset.from_rdflib(reference_dataset(store))
         expected.infer(inference="rdfs", destination=destination)
         store.infer(inference="rdfs", destination=destination)
-        assert set(store.serialize().splitlines()) == set(expected.serialize().splitlines())
+        assert physical_keys(store) == physical_keys(expected)
 
 
 @pytest.mark.parametrize("mode,destination", [("invalid", None), ("rdfs", "not an iri")])
@@ -89,13 +90,17 @@ def test_invalid_inference_aborts_even_when_caught(mode, destination):
 def test_malformed_list_aborts_earlier_inference_and_original_mutations():
     with Store() as store:
         store.parse(data=PREFIX + ":kept :p :value .")
-        with pytest.raises(ValueError, match="list"):
+        with pytest.raises(ValueError, match="recursive rdf:rest"):
             with store.transaction() as transaction:
                 transaction.update("DELETE WHERE { ?s ?p ?o }")
                 transaction.parse(data=PREFIX + ":p owl:propertyChainAxiom (:q) .")
                 transaction.infer(inference="owlrl")
                 # A list inferred/inserted after an earlier successful round also aborts it all.
-                transaction.parse(data=PREFIX + ":broken owl:propertyChainAxiom :missing .")
+                transaction.parse(
+                    data=PREFIX
+                    + ":broken owl:propertyChainAxiom :missing . "
+                    + ":missing rdf:first :q; rdf:rest :missing ."
+                )
                 transaction.infer(inference="owlrl")
         assert len(store) == 1
         assert store.query("ASK { <urn:kept> <urn:p> <urn:value> }").askAnswer

@@ -17,34 +17,30 @@ pub(super) struct Components {
 }
 
 fn group(rows: &Rows, term: &Term) -> Option<usize> {
-    NamedOrBlankNode::try_from(term.clone())
-        .ok()
-        .and_then(|subject| rows.subjects.get(&subject).map(|row| row.group()))
+    rows.subjects.get(term).map(|row| row.group())
 }
 
 fn explore(
     data: &impl Graph,
     predicate: &NamedNode,
-    seed: &NamedOrBlankNode,
+    seed: &Term,
     limit: usize,
 ) -> Result<(HashSet<Term>, bool)> {
     // bounded: at most twice the seed's outgoing degree plus one overflow term.
-    let mut seen = HashSet::from([Term::from(seed.clone())]);
-    let mut frontier = VecDeque::from([Term::from(seed.clone())]);
+    let mut seen = HashSet::from([seed.clone()]);
+    let mut frontier = VecDeque::from([seed.clone()]);
     while let Some(term) = frontier.pop_front() {
-        if let Ok(subject) = NamedOrBlankNode::try_from(term.clone()) {
-            for quad in data.quads(Some(subject.as_ref()), Some(predicate.as_ref()), None) {
-                let target = quad?.object;
-                if seen.insert(target.clone()) {
-                    if seen.len() > limit {
-                        return Ok((seen, false));
-                    }
-                    frontier.push_back(target);
+        for quad in data.quads(Some(term.as_ref()), Some(predicate.as_ref().into()), None) {
+            let target = quad?.object;
+            if seen.insert(target.clone()) {
+                if seen.len() > limit {
+                    return Ok((seen, false));
                 }
+                frontier.push_back(target);
             }
         }
-        for quad in data.quads(None, Some(predicate.as_ref()), Some(term.as_ref())) {
-            let source = Term::from(quad?.subject);
+        for quad in data.quads(None, Some(predicate.as_ref().into()), Some(term.as_ref())) {
+            let source = quad?.subject;
             if seen.insert(source.clone()) {
                 if seen.len() > limit {
                     return Ok((seen, false));
@@ -110,7 +106,12 @@ impl Components {
                     Some(&degree) => degree,
                     None => row(data, &rows.groups[id].members[0], predicate)?.len(),
                 };
-                if degree > terms.len() / 2 {
+                // A completed bounded search already supplies the candidate
+                // domain for unbalanced rows. Requiring a strict majority here
+                // discarded that work at half-connected fixed-point rounds and
+                // sent their repeated witnesses back through enumeration.
+                // Balanced sparse rows retain their cheaper enumeration route.
+                if seeds.contains_key(&id) || degree > terms.len() / 2 {
                     output.dense.insert(id, component);
                     retained = true;
                 }

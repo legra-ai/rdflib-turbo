@@ -76,7 +76,7 @@ fn construct_internal_dedup_keeps_template_blank_nodes_per_solution() {
     }
 }
 
-struct RejectNewNodes;
+pub(super) struct RejectNewNodes;
 
 impl<'a> crate::QueryableDataset<'a> for RejectNewNodes {
     type InternalTerm = Term;

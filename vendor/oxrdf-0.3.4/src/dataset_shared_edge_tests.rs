@@ -117,7 +117,7 @@ fn independent_record_allocations_and_sentinels_keep_each_exact_order() {
     let mut records: Vec<_> = data
         .spog
         .iter()
-        .map(|q| q.as_tuple().clone())
+        .map(|q| q.as_tuple())
         .take(8)
         .collect();
     records.push((

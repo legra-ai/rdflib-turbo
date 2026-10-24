@@ -8,6 +8,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
+from packaging.requirements import Requirement
 
 
 def harness():
@@ -51,6 +52,8 @@ def test_locked_export_precedes_isolated_import_and_preserves_source(
                 for flag in ("--locked", "--no-dev", "--no-emit-project", "--no-hashes")
             )
             assert args[args.index(selection[0]) : args.index(selection[0]) + 2] == selection
+            if project == "rdflib-turbo":
+                assert args[args.index("--no-emit-package") + 1] == "pyshacl-turbo"
             Path(args[args.index("--output-file") + 1]).write_text("current==2\n")
         elif args[:2] == ["uv", "add"]:
             exported = Path(args[args.index("--requirements") + 1])
@@ -199,14 +202,22 @@ def test_source_distribution_uses_uv_lock_without_legacy_dependency_snapshots():
     assert "scripts/**/*" in includes
 
 
-def test_coverage_companion_uses_the_runtime_engine_revision():
+def test_coverage_companion_uses_the_locked_provider_facade():
     root = Path(__file__).resolve().parents[1]
     cargo = tomllib.loads((root / "Cargo.toml").read_text())
     project = tomllib.loads((root / "pyproject.toml").read_text())
     lock = tomllib.loads((root / "uv.lock").read_text())
     engine = cargo["dependencies"]["pyshacl-turbo-engine"]
     companion = project["tool"]["uv"]["sources"]["pyshacl-turbo"]
-    assert companion == engine, "Coverage must exercise the same shared engine as the runtime"
-    assert cargo["patch"]["crates-io"]["fancy-regex"] == engine
+    assert engine == {"path": "crates/engine"}
+    assert cargo["patch"]["crates-io"]["fancy-regex"] == {"path": "vendor/fancy-regex-0.19.2"}
+    assert set(companion) == {"path", "editable"}
+    assert companion["editable"] is True
     package = next(item for item in lock["package"] if item["name"] == "pyshacl-turbo")
-    assert package["source"]["git"] == f"{engine['git']}?rev={engine['rev']}#{engine['rev']}"
+    assert package["source"] == {"editable": companion["path"]}
+    requirement = next(
+        Requirement(value)
+        for value in project["dependency-groups"]["coverage"]
+        if Requirement(value).name == "pyshacl-turbo"
+    )
+    assert "test" in requirement.extras

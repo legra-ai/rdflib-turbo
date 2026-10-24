@@ -1,10 +1,11 @@
-"""Per-call axiom options match the pinned reference's ordinary RDF projection."""
+"""Per-call axiom options match the pinned reference's complete RDF relation."""
 
 from itertools import product
 
 import pytest
+from inference_observers import union_graph
 from owlrl import DeductiveClosure, OWLRL_Semantics, RDFS_OWLRL_Semantics, RDFS_Semantics
-from rdflib import RDF, RDFS, Literal, URIRef
+from rdflib import RDF, RDFS, URIRef
 from rdflib import Dataset as ReferenceDataset
 from rdflib import Graph as ReferenceGraph
 from rdflib_turbo import Dataset, Store
@@ -18,13 +19,11 @@ DOCUMENT = """
 
 
 def ordinary(graph):
-    # Literal subjects are an explicit native RDF model limitation. Standard-RDF
-    # diagnostics/blank nodes are deliberately retained in this comparison.
-    return {(s, p, o) for s, p, o in graph if not isinstance(s, Literal)}
+    return set(graph)
 
 
 def native_graph(graph):
-    return ReferenceGraph().parse(data=graph.serialize(format="ntriples"), format="nt")
+    return union_graph(graph)
 
 
 @pytest.fixture(
@@ -67,7 +66,7 @@ def test_explicit_false_flags_preserve_default_behavior(mode):
 
 
 def quad_set(graph):
-    return {(s, p, o, context) for s, p, o, context in graph.quads() if not isinstance(s, Literal)}
+    return {(s, p, o, context) for s, p, o, context in graph.quads()}
 
 
 @pytest.mark.parametrize(
@@ -126,13 +125,15 @@ def test_optional_axioms_roll_back_with_late_inference_failure(api):
     @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
     <urn:alias> rdfs:subPropertyOf owl:hasKey .
     <urn:Class> <urn:alias> _:missingList .
+    _:missingList <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <urn:key>;
+      <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> _:missingList .
     """
     options = {"axiomatic_triples": True, "datatype_axioms": True}
     if api in ("dataset", "delta"):
         graph = Dataset().parse(data=malformed)
         before = graph.serialize()
         operation = graph.infer if api == "dataset" else graph.infer_delta
-        with pytest.raises(ValueError, match="Malformed RDF list"):
+        with pytest.raises(ValueError, match="recursive rdf:rest"):
             operation(**options)
         assert graph.serialize() == before
         return
@@ -140,13 +141,13 @@ def test_optional_axioms_roll_back_with_late_inference_failure(api):
         if api == "store":
             store.parse(data=malformed)
             before = store.serialize()
-            with pytest.raises(ValueError, match="Malformed RDF list"):
+            with pytest.raises(ValueError, match="recursive rdf:rest"):
                 store.infer(**options)
             assert store.serialize() == before
         else:
             with pytest.raises(RuntimeError, match=r"closed|failed"):
                 with store.transaction() as graph:
                     graph.parse(data=malformed)
-                    with pytest.raises(ValueError, match="Malformed RDF list"):
+                    with pytest.raises(ValueError, match="recursive rdf:rest"):
                         graph.infer(**options)
             assert len(store) == 0

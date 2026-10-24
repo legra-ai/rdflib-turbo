@@ -3,6 +3,7 @@
 import decimal
 
 import pytest
+from owlrl import DeductiveClosure, OWLRL_Semantics
 from rdflib import BNode, Literal, Namespace
 from rdflib import Graph as ReferenceGraph
 from rdflib.namespace import OWL, RDF, RDFS, XSD
@@ -133,11 +134,41 @@ def test_malformed_rule_input_rolls_back_inferred_facts():
     graph = Graph()
     graph.add((EX.C, RDFS.subClassOf, EX.D))
     graph.add((EX.x, RDF.type, EX.C))
-    graph.add((EX.C, OWL.hasKey, BNode("broken")))
-    with pytest.raises(ValueError, match="Malformed RDF list"):
+    head = BNode("broken")
+    graph.add((EX.C, OWL.hasKey, head))
+    graph.add((head, RDF.first, EX.key))
+    graph.add((head, RDF.rest, head))
+    before = set(graph)
+    with pytest.raises(ValueError, match="recursive rdf:rest"):
         graph.infer(inference="both")
-    assert len(graph) == 3
+    assert set(graph) == before
     assert (EX.x, RDF.type, EX.D) not in graph
+
+
+@pytest.mark.parametrize("relation", [OWL.hasKey, OWL.propertyChainAxiom])
+@pytest.mark.parametrize("recursive", [False, True])
+def test_list_failure_fixture_matches_original_semantics(relation, recursive):
+    reference = ReferenceGraph()
+    graph = Graph()
+    head = BNode("failure-fixture")
+    statements = [(EX.C, relation, head)]
+    if recursive:
+        statements.extend([(head, RDF.first, EX.key), (head, RDF.rest, head)])
+    for statement in statements:
+        reference.add(statement)
+        graph.add(statement)
+    # No literals occur here, so disable the reference's global converter swap.
+    original = DeductiveClosure(OWLRL_Semantics, improved_datatypes=False)
+    if recursive:
+        with pytest.raises(ValueError, match="recursive rdf:rest"):
+            original.expand(reference)
+        with pytest.raises(ValueError, match="recursive rdf:rest"):
+            graph.infer(inference="owlrl")
+        assert set(graph) == set(statements)
+    else:
+        original.expand(reference)
+        graph.infer(inference="owlrl")
+        assert set(graph) == set(reference)
 
 
 def test_scoped_inference_persists_without_leaking_other_graphs(tmp_path):

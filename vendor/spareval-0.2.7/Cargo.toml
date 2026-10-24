@@ -334,3 +334,6 @@ unused_qualifications = "warn"
 
 [build-dependencies.sha2]
 version = "0.11"
+
+# Standalone tests resolve the root fork patches through scripts/vendor_memory_tests.py.
+[workspace]

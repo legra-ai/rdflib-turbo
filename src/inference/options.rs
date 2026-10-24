@@ -28,7 +28,7 @@ impl<'a> PreparedOptions<'a> {
             loop {
                 let predicate = iri(RDF, &format!("_{next}"));
                 let mut count = 0;
-                for quad in data.quads(None, Some(predicate.as_ref()), None) {
+                for quad in data.quads(None, Some(predicate.as_ref().into()), None) {
                     let quad = quad?;
                     // A union can repeat SPO in several contexts. An exact indexed
                     // probe chooses one stable representative without retaining a set.
@@ -126,7 +126,117 @@ pub(super) fn expand_configured<'a>(
         _ => return Err(Error::Unsupported(format!("inference: {mode}"))),
     }
     let prepared = PreparedOptions::new(data, mode, request.options)?;
-    prepared.insert(|quad| data.insert(quad))?;
+    if mode != "owlrl" && request.options.datatype_axioms {
+        // Original RDFS add_d_axioms directly publishes each input object's
+        // explicit datatype before adding the finite schema table. Retain only
+        // actual destination-absent output, never a copy of the input relation.
+        let mut additions = super::Pending::default();
+        for quad in data.quads(None, None, None) {
+            let quad = quad?;
+            if let Term::Literal(literal) = &quad.object
+                && literal.language().is_none()
+                && literal.has_explicit_datatype()
+            {
+                let typing = GeneralizedQuad::new(
+                    quad.object.clone(),
+                    iri(RDF, "type"),
+                    literal.datatype(),
+                    GraphName::DefaultGraph,
+                );
+                if !data.contains_destination(typing.as_ref())? {
+                    additions.0.insert(typing);
+                }
+            }
+        }
+        for quad in additions.0 {
+            data.insert(quad)?;
+        }
+    }
+    prepared.insert(|quad| data.insert(quad.into()))?;
     let outcome = expand_inner(data, mode, request)?;
     Ok((prepared, outcome))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::graph::XSD;
+    use oxrdf::GeneralizedDataset;
+
+    #[test]
+    fn rdfs_datatype_axioms_type_input_literals_in_the_requested_destination() {
+        for datatype_axioms in [false, true] {
+            let value = Literal::new_typed_literal("7", iri(XSD, "integer"));
+            let input = GeneralizedQuad::new(
+                iri("urn:", "s"),
+                iri("urn:", "p"),
+                value.clone(),
+                GraphName::DefaultGraph,
+            );
+            let mut data = GeneralizedDataset::from_iter([input.clone()]);
+            let request = InferenceRequest {
+                options: InferenceOptions {
+                    datatype_axioms,
+                    axiomatic_triples: false,
+                },
+                ..InferenceRequest::default()
+            };
+            super::super::expand(&mut data, "rdfs", request).unwrap();
+            for kind in ["integer", "decimal"] {
+                assert_eq!(
+                    data.contains(&GeneralizedQuad::new(
+                        value.clone(),
+                        iri(RDF, "type"),
+                        iri(XSD, kind),
+                        GraphName::DefaultGraph
+                    )),
+                    datatype_axioms,
+                    "{kind}"
+                );
+            }
+            let store = oxigraph::store::Store::new().unwrap();
+            store.insert_generalized(&input).unwrap();
+            let destination = GraphName::from(iri("urn:", "destination"));
+            let request = InferenceRequest {
+                options: InferenceOptions {
+                    datatype_axioms,
+                    axiomatic_triples: false,
+                },
+                ..InferenceRequest::default()
+            };
+            let mut transaction = store.start_transaction().unwrap();
+            super::super::scoped::expand(
+                &mut transaction,
+                "rdfs",
+                Some(GraphName::DefaultGraph),
+                destination.clone(),
+                request,
+            )
+            .unwrap();
+            for kind in ["integer", "decimal"] {
+                assert_eq!(
+                    transaction
+                        .contains_generalized(&GeneralizedQuad::new(
+                            value.clone(),
+                            iri(RDF, "type"),
+                            iri(XSD, kind),
+                            destination.clone()
+                        ))
+                        .unwrap(),
+                    datatype_axioms && kind == "integer",
+                    "destination {kind}"
+                );
+                assert!(
+                    !transaction
+                        .contains_generalized(&GeneralizedQuad::new(
+                            value.clone(),
+                            iri(RDF, "type"),
+                            iri(XSD, kind),
+                            GraphName::DefaultGraph
+                        ))
+                        .unwrap()
+                );
+            }
+        }
+    }
 }

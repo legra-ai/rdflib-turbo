@@ -66,7 +66,7 @@ impl<'a> QueryableDataset<'a> for DatasetView<'a> {
                     graph_name: if quad.graph_name.is_default_graph() {
                         None
                     } else {
-                        Some(quad.graph_name)
+                        Some(quad.graph_name.into())
                     },
                 })
             })

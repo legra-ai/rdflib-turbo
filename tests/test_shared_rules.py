@@ -10,7 +10,18 @@ from pathlib import Path
 import pyshacl_turbo as turbo
 import pytest
 from rdflib_turbo import Dataset
-from rdflib_turbo._native import SharedShapes
+from rdflib_turbo._native import NativeDataset, SharedShapes
+from rdflib_turbo._native import shacl as _native_shacl
+
+
+def load_dataset(data, source):
+    data.load(source, "turtle", None, True)
+    return data
+
+
+def native_dataset(source):
+    return load_dataset(NativeDataset(), source)
+
 
 SHAPES = """@prefix sh:<http://www.w3.org/ns/shacl#>.
 @prefix ex:<urn:>.
@@ -22,24 +33,24 @@ SOURCE = "@prefix ex:<urn:>. ex:a ex:p ex:b."
 
 
 def program(source=SHAPES):
-    return SharedShapes(source, True, [("ex", "urn:")])
+    return SharedShapes(source, True, [("ex", "urn:")], _policy=_native_shacl._REGEX_POLICY)
 
 
-def wrap(native):
-    data = Dataset()
-    data._native = native
-    return data
+def ask(data, query):
+    kind, payload = data.query(query)
+    assert kind == "ASK"
+    return json.loads(payload)
 
 
 def snapshot(data):
-    return data.serialize(format="nquads"), tuple(data.namespaces())
+    return data.dump("nquads"), tuple(data.namespaces())
 
 
 @pytest.mark.parametrize("inplace", [False, True])
 def test_native_expansion_preserves_terms_namespaces_and_original_ownership(inplace):
-    data = Dataset().parse(data=SOURCE)
+    data = native_dataset(SOURCE)
     before = snapshot(data)
-    native, messages = program().expand(data._native, "{}", inplace)
+    native, messages = program().expand(data, "{}", inplace)
     assert messages == []
     if inplace:
         assert native is None
@@ -47,18 +58,22 @@ def test_native_expansion_preserves_terms_namespaces_and_original_ownership(inpl
     else:
         assert native is not None
         assert snapshot(data) == before
-        result = wrap(native)
+        result = native
     assert tuple(result.namespaces()) == before[1]
     assert len(result) == 2
-    literal = next(iter(result.query("SELECT ?o WHERE { <urn:a> <urn:derived> ?o }")))[0]
-    assert str(literal) == "01"
-    assert str(literal.datatype) == "http://www.w3.org/2001/XMLSchema#integer"
-    assert bool(result.query("ASK { <urn:a> <urn:p> <urn:b> }"))
+    kind, payload = result.query("SELECT ?o WHERE { <urn:a> <urn:derived> ?o }")
+    assert kind == "SELECT"
+    assert json.loads(payload)["rows"][0]["o"] == {
+        "type": "literal",
+        "value": "01",
+        "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+    }
+    assert ask(result, "ASK { <urn:a> <urn:p> <urn:b> }")
 
 
 def test_native_expansion_retains_named_contexts_and_blank_identity():
-    data = Dataset()
-    data._native.load(
+    data = NativeDataset()
+    data.load(
         '@prefix ex:<urn:>. ex:g { ex:a ex:p _:original. _:original ex:q "chat"@fr. }',
         "trig",
         None,
@@ -67,22 +82,21 @@ def test_native_expansion_retains_named_contexts_and_blank_identity():
     source = SHAPES.replace(
         'sh:object "01"^^<http://www.w3.org/2001/XMLSchema#integer>', "sh:object [sh:path ex:p]"
     )
-    expanded, messages = program(source).expand(data._native, "{}", False)
-    result = wrap(expanded)
+    expanded, messages = program(source).expand(data, "{}", False)
+    result = expanded
     assert messages == []
     assert len(result) == 3
-    assert bool(
-        result.query(
-            'ASK { GRAPH <urn:g> { <urn:a> <urn:p> ?blank. ?blank <urn:q> "chat"@fr } <urn:a> <urn:derived> ?blank }'
-        )
+    assert ask(
+        result,
+        'ASK { GRAPH <urn:g> { <urn:a> <urn:p> ?blank. ?blank <urn:q> "chat"@fr } <urn:a> <urn:derived> ?blank }',
     )
-    assert not bool(data.query("ASK { <urn:a> <urn:derived> ?o }"))
+    assert not ask(data, "ASK { <urn:a> <urn:derived> ?o }")
 
 
 def test_expansion_never_uses_python_graph_conversion_or_validates_unrelated_constraints(
     monkeypatch,
 ):
-    data = Dataset().parse(data=SOURCE)
+    data = native_dataset(SOURCE)
     compiled = program(SHAPES + "<urn:S> <http://www.w3.org/ns/shacl#node> <urn:S>.")
 
     def forbidden(*args, **kwargs):
@@ -92,7 +106,7 @@ def test_expansion_never_uses_python_graph_conversion_or_validates_unrelated_con
         monkeypatch.setattr(Dataset, name, forbidden)
     with warnings.catch_warnings():
         warnings.simplefilter("error", turbo.ShapeRecursionWarning)
-        native, messages = compiled.expand(data._native, "{}", True)
+        native, messages = compiled.expand(data, "{}", True)
     assert native is None
     assert messages == []
     assert len(data) == 2
@@ -102,9 +116,9 @@ def test_expansion_never_uses_python_graph_conversion_or_validates_unrelated_con
     "settings", [{"focus_nodes": ["urn:other"]}, {"use_shapes": ["urn:other"]}]
 )
 def test_rule_selectors_do_not_add_unselected_rules(settings):
-    data = Dataset().parse(data=SOURCE)
+    data = native_dataset(SOURCE)
     before = snapshot(data)
-    result, warnings = program().expand(data._native, json.dumps(settings), True)
+    result, warnings = program().expand(data, json.dumps(settings), True)
     assert result is None and warnings == []
     assert snapshot(data) == before
 
@@ -113,11 +127,11 @@ def test_sparql_rules_expand_repeatedly_without_duplicate_insertions():
     source = """@prefix sh:<http://www.w3.org/ns/shacl#>.
     <urn:S> sh:targetNode <urn:a>; sh:rule [a sh:SPARQLRule;
     sh:construct "CONSTRUCT { $this <urn:derived> ?o } WHERE { $this <urn:p> ?o }"] ."""
-    data = Dataset().parse(data=SOURCE)
+    data = native_dataset(SOURCE)
     compiled = program(source)
-    assert compiled.expand(data._native, "{}", True) == (None, [])
+    assert compiled.expand(data, "{}", True) == (None, [])
     before = snapshot(data)
-    assert compiled.expand(data._native, "{}", True) == (None, [])
+    assert compiled.expand(data, "{}", True) == (None, [])
     assert snapshot(data) == before
     assert len(data) == 2
 
@@ -132,10 +146,10 @@ def test_sparql_rules_expand_repeatedly_without_duplicate_insertions():
     ],
 )
 def test_failed_expansion_rolls_back_original_data_and_metadata(settings):
-    data = Dataset().parse(data=SOURCE)
+    data = native_dataset(SOURCE)
     before = snapshot(data)
     with pytest.raises((ValueError, RuntimeError)):
-        program().expand(data._native, settings, True)
+        program().expand(data, settings, True)
     assert snapshot(data) == before
 
 
@@ -148,31 +162,31 @@ def recursive_program():
 
 @pytest.mark.parametrize("inplace", [False, True])
 def test_warning_as_error_discards_staged_expansion(inplace):
-    data = Dataset().parse(data=SOURCE)
+    data = native_dataset(SOURCE)
     before = snapshot(data)
     with warnings.catch_warnings():
         warnings.simplefilter("error", turbo.ShapeRecursionWarning)
         with pytest.raises(turbo.ShapeRecursionWarning, match="Recursive Shape"):
-            recursive_program().expand(data._native, "{}", inplace)
+            recursive_program().expand(data, "{}", inplace)
     assert snapshot(data) == before
 
 
 def callback_write_case():
-    data = Dataset().parse(data=SOURCE)
+    data = native_dataset(SOURCE)
     observed = []
 
     def mutate(*args, **kwargs):
         assert len(data) == 1
-        data.parse(data="<urn:callback> <urn:p> <urn:b>.")
+        load_dataset(data, "<urn:callback> <urn:p> <urn:b>.")
         observed.append(snapshot(data))
 
     with warnings.catch_warnings():
         warnings.simplefilter("always", turbo.ShapeRecursionWarning)
         warnings.showwarning = mutate
         with pytest.raises(RuntimeError, match=r"Dataset changed.*warnings"):
-            recursive_program().expand(data._native, "{}", True)
+            recursive_program().expand(data, "{}", True)
     assert snapshot(data) == observed[0]
-    assert not bool(data.query("ASK { <urn:a> <urn:derived> ?o }"))
+    assert not ask(data, "ASK { <urn:a> <urn:derived> ?o }")
 
 
 def test_warning_callback_write_conflicts_without_losing_intervening_writes(tmp_path):

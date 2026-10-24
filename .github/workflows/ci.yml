@@ -224,6 +224,8 @@ jobs:
         run: cargo test --locked -p oxsdatatypes --lib
       - name: CONSTRUCT ownership and identity regressions
         run: uv run --no-project python -m scripts.vendor_evaluator_tests
+      - name: Upstream matcher, Unicode and Python VM regressions
+        run: uv run --no-project python -m scripts.vendor_regex_tests
       - name: Dataset ownership, ordering and transaction regressions
         run: uv run --no-project python -m scripts.vendor_dataset_tests
       - name: Exact-term transactional storage contracts

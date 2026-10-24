@@ -205,7 +205,8 @@ fn all_six_indexes_and_journal_share_one_immutable_record() {
     let mut tx = data.insert_transaction();
     assert!(tx.insert(&q));
     assert!(!tx.insert(&q));
-    let record = &tx.inserted[0];
+    let MutationJournal::Additive(entries) = &tx.journal else { panic!("unexpected promotion") };
+    let record = &entries[0];
     assert_eq!(Arc::strong_count(record), 7);
     assert!(Arc::ptr_eq(record, &tx.gspo.first().unwrap().record));
     assert!(Arc::ptr_eq(record, &tx.gpos.first().unwrap().record));

@@ -85,11 +85,14 @@ def test_installed_matrix_tests_every_matching_pair(tmp_path, monkeypatch):
     expected = wheels(tmp_path)
     called = []
     monkeypatch.setattr(
-        module, "test_installed_wheel", lambda wheel, version: called.append((wheel, version))
+        module,
+        "test_installed_wheel",
+        lambda wheel, version, facade: called.append((wheel, version, facade)),
     )
-    module.test_matrix(expected)
+    facade = facade_wheel(tmp_path)
+    module.test_matrix(expected, facade)
     assert called == [
-        (expected[version], version) for version in ("3.11", "3.12", "3.13", "3.14", "3.15")
+        (expected[version], version, facade) for version in ("3.11", "3.12", "3.13", "3.14", "3.15")
     ]
 
 
@@ -164,6 +167,22 @@ def metadata_wheel(path):
     return path
 
 
+def facade_wheel(directory):
+    path = directory / "pyshacl_turbo-0.0.0-py3-none-any.whl"
+    with ZipFile(path, "w") as archive:
+        archive.writestr(
+            "pyshacl_turbo-0.0.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: pyshacl-turbo\nVersion: 0.0.0\n",
+        )
+        archive.writestr(
+            "pyshacl_turbo-0.0.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        archive.writestr("pyshacl_turbo/__init__.py", b"")
+        archive.writestr("pyshacl_turbo/_native.py", b"shared binding")
+    return path
+
+
 def test_wheel_environment_imports_locked_companion_before_artifact(tmp_path, monkeypatch):
     module = driver(monkeypatch)
     commands = []
@@ -172,16 +191,23 @@ def test_wheel_environment_imports_locked_companion_before_artifact(tmp_path, mo
         module.subprocess, "run", lambda command, **kwargs: commands.append(command)
     )
     wheel = metadata_wheel(tmp_path / "candidate.whl")
-    module.test_installed_wheel(wheel, "3.13")
+    facade = facade_wheel(tmp_path)
+    module.test_installed_wheel(wheel, "3.13", facade)
     export = next(command for command in commands if command[:2] == ["uv", "export"])
     assert "--locked" in export and "--no-emit-project" in export
     assert export[export.index("--group") + 1] == "coverage"
+    assert export[export.index("--no-emit-package") + 1] == "pyshacl-turbo"
     dependencies = next(command for command in commands if "--requirements" in command)
     artifact = next(command for command in commands if str(wheel) in command)
     assert commands.index(export) < commands.index(dependencies) < commands.index(artifact)
     assert "--extra" not in dependencies
     sync = next(command for command in commands if command[:2] == ["uv", "sync"])
     assert "--locked" in sync
+    assert "--no-build" in sync
+    assert any(str(facade) in command and command[:2] == ["uv", "add"] for command in commands)
+    assert not any(
+        "--rev" in command or "--config-settings-package" in command for command in commands
+    )
 
 
 def test_dependency_export_failure_stops_wheel_installation(tmp_path, monkeypatch):
@@ -196,7 +222,9 @@ def test_dependency_export_failure_stops_wheel_installation(tmp_path, monkeypatc
 
     monkeypatch.setattr(module.subprocess, "run", fail)
     with pytest.raises(subprocess.CalledProcessError):
-        module.test_installed_wheel(metadata_wheel(tmp_path / "candidate.whl"), "3.13")
+        module.test_installed_wheel(
+            metadata_wheel(tmp_path / "candidate.whl"), "3.13", facade_wheel(tmp_path)
+        )
     assert len(commands) == 1
 
 
@@ -209,6 +237,6 @@ def test_isolated_project_is_bounded_to_its_native_wheel_abi(tmp_path, monkeypat
     monkeypatch.setattr(
         module.subprocess, "run", lambda command, **kwargs: commands.append(command)
     )
-    module.test_installed_wheel(tmp_path / "candidate.whl", version)
+    module.test_installed_wheel(tmp_path / "candidate.whl", version, facade_wheel(tmp_path))
     initialize = next(command for command in commands if command[:2] == ["uv", "init"])
     assert initialize[initialize.index("--python") + 1] == f">={version},<{upper}"

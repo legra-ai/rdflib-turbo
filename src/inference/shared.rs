@@ -1,7 +1,7 @@
 //! Lower portable rule definitions into backend-owned compiled queries.
 
 use datalog_structural_model::{Atom, BuiltinFilter, Literal, Rule, Term};
-use oxigraph::model::NamedNodeRef;
+use oxigraph::model::{NamedNode, NamedNodeRef};
 use oxigraph::sparql::{PreparedSparqlQuery, SparqlEvaluator};
 use rdf_reasoning::{
     LITERAL_VALUE_RELATION, ListRuleId, Owlrl762RuleId, RDF_LIST_MEMBER_RELATION, RuleId::*,
@@ -11,58 +11,148 @@ use spargebra::term::Variable;
 
 use crate::{Error, Result};
 
-pub(super) enum RulePartition {
-    All,
-    GeneralizedHead,
-    GeneralizedPremise(usize),
+pub(super) struct CompiledRule(PreparedSparqlQuery, ReadPredicates);
+
+pub(super) struct ReadPredicates {
+    pub constants: Vec<NamedNode>,
+    pub wildcard: bool,
 }
 
-pub(super) struct CompiledRule(PreparedSparqlQuery);
+impl ReadPredicates {
+    fn try_new(rule: &Rule) -> Result<Self> {
+        // bounded: metadata for one fixed catalogue clause, never input graph predicates.
+        let mut constants = Vec::new();
+        let mut wildcard = false;
+        for literal in &rule.body {
+            let Literal::Positive(atom) = literal else {
+                continue;
+            };
+            if atom.predicate.as_str() == RDF_LIST_MEMBER_RELATION {
+                for iri in [
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#first",
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#rest",
+                ] {
+                    constants.push(NamedNode::new_unchecked(iri));
+                }
+            } else {
+                // The query compiler has already validated the triple relation/arity.
+                match &atom.terms[1] {
+                    Term::Constant(value) => {
+                        constants.push(NamedNode::new(value.as_str()).map_err(|error| {
+                            Error::Unsupported(format!("Invalid rule predicate: {error}"))
+                        })?)
+                    }
+                    Term::Variable(_) => wildcard = true,
+                    _ => unreachable!("query compiler rejected non-flat rule terms"),
+                }
+            }
+        }
+        Ok(Self {
+            constants,
+            wildcard,
+        })
+    }
+}
 
 impl CompiledRule {
-    pub(super) fn try_new(rule: &Rule) -> Result<Self> {
-        Self::partition(rule, RulePartition::All)
+    #[cfg(test)]
+    pub(super) fn from_catalogue(id: rdf_reasoning::RuleId) -> Result<Self> {
+        Self::try_new(&Self::catalogue_definition(id)?)
     }
 
-    pub(super) fn partition(rule: &Rule, partition: RulePartition) -> Result<Self> {
-        Self::compile(rule, partition, None)
+    fn catalogue_definition(id: rdf_reasoning::RuleId) -> Result<Rule> {
+        let mut rule = id.definition();
+        if matches!(id, CaxEqc1 | CaxEqc2) {
+            rule = Self::without_self_membership(id, &rule)?;
+        }
+        Ok(rule)
+    }
+
+    fn without_self_membership(id: rdf_reasoning::RuleId, rule: &Rule) -> Result<Rule> {
+        let invalid = || Error::Unsupported("Unexpected equivalent-class catalogue shape".into());
+        let [
+            Literal::Positive(equivalence),
+            Literal::Positive(membership),
+        ] = rule.body.as_slice()
+        else {
+            return Err(invalid());
+        };
+        for atom in [&rule.head, equivalence, membership] {
+            if atom.predicate.as_str() != TRIPLE_RELATION || atom.terms.len() != 3 {
+                return Err(invalid());
+            }
+        }
+        let is_constant =
+            |term: &Term, iri: &str| matches!(term, Term::Constant(value) if value.as_str() == iri);
+        if !is_constant(
+            &membership.terms[1],
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+        ) || rule.head.terms[1] != membership.terms[1]
+            || rule.head.terms[0] != membership.terms[0]
+            || !is_constant(
+                &equivalence.terms[1],
+                "http://www.w3.org/2002/07/owl#equivalentClass",
+            )
+        {
+            return Err(invalid());
+        }
+        let source = &membership.terms[2];
+        let target = &rule.head.terms[2];
+        let expected = match id {
+            CaxEqc1 => [&equivalence.terms[0], &equivalence.terms[2]],
+            CaxEqc2 => [&equivalence.terms[2], &equivalence.terms[0]],
+            _ => return Err(invalid()),
+        };
+        if expected != [source, target]
+            || source == target
+            || source == &rule.head.terms[0]
+            || target == &rule.head.terms[0]
+            || [&rule.head.terms[0], source, target]
+                .iter()
+                .any(|term| !matches!(term, Term::Variable(_)))
+        {
+            return Err(invalid());
+        }
+        // With identical classes the head is the membership body fact, already
+        // visible to Pending::push in the source even for a separate destination.
+        let mut optimized = rule.clone();
+        optimized.body.push(Literal::Filter(BuiltinFilter::Ne(
+            source.clone(),
+            target.clone(),
+        )));
+        Ok(optimized)
+    }
+
+    pub(super) fn try_new(rule: &Rule) -> Result<Self> {
+        let (head, body) = Self::validated_parts(rule, false)?;
+        Self::prepare(&head, &body, ReadPredicates::try_new(rule)?)
     }
 
     pub(super) fn with_literal_values(rule: &Rule, evaluator: SparqlEvaluator) -> Result<Self> {
-        Self::compile(rule, RulePartition::All, Some(evaluator))
+        let (head, body) = Self::validated_parts(rule, true)?;
+        let query = evaluator
+            .parse_query(&format!("CONSTRUCT {{ {head} }} WHERE {{ {body} }}"))
+            .map_err(|error| Error::Runtime(format!("Invalid shared inference rule: {error}")))?;
+        // The dedicated literal substitution query is run before scheduling.
+        // bounded: no graph-derived predicate metadata is retained.
+        Ok(Self(
+            query,
+            ReadPredicates {
+                constants: Vec::new(),
+                wildcard: true,
+            },
+        ))
     }
 
-    fn compile(
-        rule: &Rule,
-        partition: RulePartition,
-        evaluator: Option<SparqlEvaluator>,
-    ) -> Result<Self> {
+    fn validated_parts(rule: &Rule, literal_values: bool) -> Result<(String, String)> {
         if !rule.is_safe() {
             return Err(Error::Unsupported("Unsafe shared inference rule".into()));
         }
-        Self::atom(&rule.head)?;
-        if let RulePartition::GeneralizedPremise(index) = partition
-            && !matches!(rule.body.get(index), Some(Literal::Positive(_)))
-        {
-            return Err(Error::Unsupported(
-                "Generalized premise must select a positive atom".into(),
-            ));
-        }
+        let head = Self::atom(&rule.head)?;
         let mut body = String::new();
-        for (index, literal) in rule.body.iter().enumerate() {
+        for literal in &rule.body {
             match literal {
-                Literal::Positive(atom) => {
-                    let pattern = Self::body_atom(atom, evaluator.is_some())?;
-                    if matches!(partition, RulePartition::GeneralizedPremise(selected) if index == selected)
-                    {
-                        body.push_str(&format!(
-                            "GRAPH {} {{ {pattern} }} ",
-                            super::generalized::GENERALIZED_GRAPH
-                        ));
-                    } else {
-                        body.push_str(&pattern);
-                    }
-                }
+                Literal::Positive(atom) => body.push_str(&Self::body_atom(atom, literal_values)?),
                 Literal::Filter(BuiltinFilter::Ne(left, right)) => {
                     body.push_str(&format!(
                         "FILTER(!sameTerm({}, {})) ",
@@ -78,50 +168,46 @@ impl CompiledRule {
                 }
             }
         }
-        if matches!(partition, RulePartition::GeneralizedHead) {
-            let subject = Self::term(&rule.head.terms[0])?;
-            let predicate = Self::term(&rule.head.terms[1])?;
-            // These queries read RDF-only premises. Remove head-kind conditions
-            // already guaranteed by those positions so filters can precede joins.
-            let subject_is_rdf = Self::guaranteed_iri(rule, &rule.head.terms[0])
-                || Self::bound_at(rule, &rule.head.terms[0], 0);
-            let predicate_is_iri = Self::guaranteed_iri(rule, &rule.head.terms[1]);
-            let filter = match (subject_is_rdf, predicate_is_iri) {
-                (true, true) => "false".to_owned(),
-                (false, true) => format!("!(isIRI({subject}) || isBlank({subject}))"),
-                (true, false) => format!("!isIRI({predicate})"),
-                (false, false) => {
-                    format!("!(isIRI({subject}) || isBlank({subject})) || !isIRI({predicate})")
-                }
-            };
-            body.push_str(&format!("FILTER ({filter}) "));
+        Ok((head, body))
+    }
+
+    fn prepare(head: &str, body: &str, reads: ReadPredicates) -> Result<Self> {
+        let query = SparqlEvaluator::new()
+            .parse_query(&format!("CONSTRUCT {{ {head} }} WHERE {{ {body} }}"))
+            .map_err(|error| Error::Runtime(format!("Invalid shared inference rule: {error}")))?;
+        Ok(Self(query, reads))
+    }
+
+    fn compiled_catalogue(rules: &[Rule]) -> Result<Vec<Self>> {
+        if let [rule] = rules {
+            return Ok(vec![Self::try_new(rule)?]);
         }
-        // bounded: exactly three head columns, preserving every RDF term kind.
-        let columns = rule
-            .head
-            .terms
+        // bounded: only the fixed published catalogue, never caller graph facts.
+        // Validate every original rule before grouping can hide an invalid head.
+        let lowered = rules
             .iter()
-            .zip(["__head_s", "__head_p", "__head_o"])
-            .map(|(term, name)| Self::term(term).map(|term| format!("({term} AS ?{name})")))
+            .map(|rule| Self::validated_parts(rule, false).map(|(head, body)| (rule, head, body)))
             .collect::<Result<Vec<_>>>()?;
-        let text = format!("SELECT {} WHERE {{ {body} }}", columns.join(" "));
-        evaluator
-            .unwrap_or_default()
-            .parse_query(&text)
-            .map(Self)
-            .map_err(|error| Error::Runtime(format!("Invalid shared inference rule: {error}")))
+        // Exact ordered AST equality retains variable names and filter order.
+        // Dependencies belong to the common body, independent of its heads.
+        let mut groups: Vec<(&Rule, String, String)> = Vec::new();
+        for (rule, head, body) in lowered {
+            if let Some(group) = groups.iter_mut().find(|group| group.0.body == rule.body) {
+                group.1.push_str(&head);
+            } else {
+                groups.push((rule, head, body));
+            }
+        }
+        groups
+            .into_iter()
+            .map(|(rule, head, body)| Self::prepare(&head, &body, ReadPredicates::try_new(rule)?))
+            .collect()
     }
 
-    fn guaranteed_iri(rule: &Rule, term: &Term) -> bool {
-        matches!(term, Term::Constant(_)) || Self::bound_at(rule, term, 1)
-    }
-
-    fn bound_at(rule: &Rule, term: &Term, position: usize) -> bool {
-        rule.body.iter().any(|literal| {
-            matches!(literal,
-            Literal::Positive(atom) if atom.predicate.as_str() == TRIPLE_RELATION
-                && atom.terms.get(position) == Some(term))
-        })
+    #[cfg(test)]
+    pub(super) fn try_catalogue(rules: &[Rule]) -> Result<Vec<PreparedSparqlQuery>> {
+        Self::compiled_catalogue(rules)
+            .map(|rules| rules.into_iter().map(Self::into_query).collect())
     }
 
     fn body_atom(atom: &Atom, literal_values: bool) -> Result<String> {
@@ -192,10 +278,19 @@ impl CompiledRule {
     pub(super) fn into_query(self) -> PreparedSparqlQuery {
         self.0
     }
+
+    pub(super) fn into_parts(self) -> (PreparedSparqlQuery, ReadPredicates) {
+        (self.0, self.1)
+    }
 }
 
 impl CompiledRule {
+    #[cfg(test)]
     pub(super) fn for_mode(mode: &str) -> Result<Vec<PreparedSparqlQuery>> {
+        Self::compiled_for_mode(mode).map(|rules| rules.into_iter().map(Self::into_query).collect())
+    }
+
+    pub(super) fn compiled_for_mode(mode: &str) -> Result<Vec<Self>> {
         // bounded: the fixed published RDFS and OWL relational clause inventory.
         let mut selected = Vec::new();
         if mode != "owlrl" {
@@ -245,14 +340,14 @@ impl CompiledRule {
                 selected.push(Rdfs6);
             }
         }
-        // bounded: one prepared query per fixed catalogue clause.
-        let mut queries = selected
+        // bounded: the fixed published catalogue; no graph facts are retained.
+        let mut rules = selected
             .into_iter()
-            .map(|id| Self::try_new(&id.definition()).map(Self::into_query))
+            .map(Self::catalogue_definition)
             .collect::<Result<Vec<_>>>()?;
         if mode != "rdfs" {
             for id in Owlrl762RuleId::ALL {
-                queries.push(Self::try_new(&id.definition())?.into_query());
+                rules.push(id.definition());
             }
             for id in ListRuleId::ALL {
                 // The native property path supplies the exact auxiliary relation;
@@ -260,9 +355,13 @@ impl CompiledRule {
                 if matches!(id, ListRuleId::MemberFirst | ListRuleId::MemberRest) {
                     continue;
                 }
-                queries.push(Self::try_new(&id.definition())?.into_query());
+                rules.push(id.definition());
             }
         }
-        Ok(queries)
+        Self::compiled_catalogue(&rules)
     }
 }
+
+#[cfg(test)]
+#[path = "shared_cax_tests.rs"]
+mod cax_tests;

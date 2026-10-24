@@ -1,7 +1,8 @@
 //! Fallible derived-fact insertion must abort seeding, rounds and diagnostics.
 use oxigraph::model::*;
 use oxigraph::sparql::{PreparedSparqlQuery, QueryResults};
-use oxrdf::dataset::InsertTransaction;
+use oxrdf::GeneralizedDataset;
+use oxrdf::dataset::GeneralizedTransaction;
 
 use super::backend::Graph;
 use super::{InferenceOptions, diagnostics, expand_configured, literal_values};
@@ -10,17 +11,17 @@ use crate::{Error, Result};
 const FAILURE: &str = "derived insertion lookup failed";
 
 struct InsertionFault<'a, 'data> {
-    journal: &'a mut InsertTransaction<'data>,
+    journal: &'a mut GeneralizedTransaction<'data>,
     remaining: usize,
 }
 
-impl<'graph, 'data> Graph for InsertionFault<'graph, 'data> {
+impl<'owner, 'data> Graph for InsertionFault<'owner, 'data> {
     fn quads<'a>(
         &'a self,
-        subject: Option<NamedOrBlankNodeRef<'_>>,
-        predicate: Option<NamedNodeRef<'_>>,
+        subject: Option<TermRef<'_>>,
+        predicate: Option<TermRef<'_>>,
         object: Option<TermRef<'_>>,
-    ) -> impl Iterator<Item = Result<Quad>> + use<'a, 'graph, 'data> {
+    ) -> impl Iterator<Item = Result<GeneralizedQuad>> + use<'a, 'owner, 'data> {
         self.journal
             .quads_for_pattern(subject, predicate, object, Some(GraphNameRef::DefaultGraph))
             .map(|quad| Ok(quad.into_owned()))
@@ -30,7 +31,20 @@ impl<'graph, 'data> Graph for InsertionFault<'graph, 'data> {
         Ok(query.on_queryable_dataset(&**self.journal).execute()?)
     }
 
-    fn insert(&mut self, quad: Quad) -> Result<()> {
+    fn inference_heads(
+        &self,
+        query: PreparedSparqlQuery,
+    ) -> Result<oxigraph::sparql::QueryTripleIter<'_, GeneralizedTriple>> {
+        Ok(query
+            .on_queryable_dataset(&**self.journal)
+            .execute_inference_construct()?)
+    }
+
+    fn cleanup_blank_predicates(&mut self) -> Result<()> {
+        self.journal.cleanup_blank_predicates()
+    }
+
+    fn insert(&mut self, quad: GeneralizedQuad) -> Result<()> {
         if self.remaining == 0 {
             return Err(Error::Runtime(FAILURE.into()));
         }
@@ -40,8 +54,8 @@ impl<'graph, 'data> Graph for InsertionFault<'graph, 'data> {
     }
 }
 
-fn triple(subject: &str, object: impl Into<Term>) -> Quad {
-    Quad::new(
+fn triple(subject: &str, object: impl Into<Term>) -> GeneralizedQuad {
+    GeneralizedQuad::new(
         NamedNode::new(format!("urn:{subject}")).unwrap(),
         NamedNode::new("urn:p").unwrap(),
         object,
@@ -76,9 +90,9 @@ fn configured_axiom_and_round_insertions_propagate_failures_and_rollback() {
         ("rdfs", InferenceOptions::default(), 1),
     ] {
         let original = triple("source", NamedNode::new("urn:value").unwrap());
-        let mut data = Dataset::from_iter([&original]);
+        let mut data = GeneralizedDataset::from_iter([&original]);
         {
-            let mut journal = data.insert_transaction();
+            let mut journal = data.transaction();
             error(expand_configured(
                 &mut InsertionFault {
                     journal: &mut journal,
@@ -90,7 +104,7 @@ fn configured_axiom_and_round_insertions_propagate_failures_and_rollback() {
         }
         assert_eq!(data.len(), 1);
         assert!(data.contains(&original));
-        let mut recovery = data.insert_transaction();
+        let mut recovery = data.transaction();
         recovery.insert(&triple("recovery", NamedNode::new("urn:value").unwrap()));
         recovery.commit();
         assert_eq!(data.len(), 2);
@@ -107,9 +121,9 @@ fn literal_substitution_and_diagnostic_insertions_propagate_failures() {
             NamedNode::new("http://www.w3.org/2001/XMLSchema#normalizedString").unwrap(),
         ),
     );
-    let mut data = Dataset::from_iter([&plain, &typed]);
+    let mut data = GeneralizedDataset::from_iter([&plain, &typed]);
     {
-        let mut journal = data.insert_transaction();
+        let mut journal = data.transaction();
         error(literal_values::substitute(
             &mut InsertionFault {
                 journal: &mut journal,
@@ -119,14 +133,13 @@ fn literal_substitution_and_diagnostic_insertions_propagate_failures() {
         ));
     }
     {
-        let mut journal = data.insert_transaction();
+        let mut journal = data.transaction();
         error(
-            diagnostics::Diagnostics::new(vec!["existing diagnostic".into()]).finish(
+            diagnostics::Diagnostics::new(vec!["existing diagnostic".into()], 4300).finish(
                 &mut InsertionFault {
                     journal: &mut journal,
                     remaining: 1,
                 },
-                &super::generalized::Generalized::default(),
                 false,
                 |_| Ok(false),
             ),

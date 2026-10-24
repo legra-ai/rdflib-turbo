@@ -2,9 +2,9 @@
 
 use oxigraph::model::Literal;
 
-use super::{LexicalContext, cardinality, decimal, duration_truthiness, integer};
+use super::{cardinality, decimal, duration_truthiness, integer};
 
-pub(in crate::inference) fn truthy(literal: &Literal, context: &LexicalContext) -> bool {
+pub(in crate::inference) fn truthy(literal: &Literal, integer_digit_limit: usize) -> bool {
     let text = literal.value();
     if text.is_empty() {
         return false;
@@ -21,7 +21,7 @@ pub(in crate::inference) fn truthy(literal: &Literal, context: &LexicalContext) 
         "integer" | "byte" | "short" | "int" | "long" | "unsignedByte" | "unsignedShort"
         | "unsignedInt" | "unsignedLong" | "positiveInteger" | "negativeInteger"
         | "nonPositiveInteger" | "nonNegativeInteger" => {
-            !integer::digits(text, 10, context.integer_digit_limit)
+            !integer::digits(text, 10, integer_digit_limit)
                 .is_some_and(|(_, digits)| digits.bytes().all(|digit| digit == b'0'))
         }
         // bool(Decimal) does not compare sNaN or raise comparison flags.
@@ -46,6 +46,7 @@ pub(in crate::inference) fn truthy(literal: &Literal, context: &LexicalContext) 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::inference::diagnostic_datatypes::LexicalContext;
     use oxigraph::model::NamedNode;
     use serde::Deserialize;
 
@@ -64,7 +65,7 @@ mod tests {
             let literal =
                 Literal::new_typed_literal(&case.lexical, NamedNode::new(&case.datatype).unwrap());
             assert_eq!(
-                truthy(&literal, &context),
+                truthy(&literal, context.integer_digit_limit),
                 case.truthy,
                 "{} {:?}",
                 case.datatype,

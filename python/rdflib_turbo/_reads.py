@@ -28,6 +28,63 @@ def encode_graph(store, context):
     return None if identifier == store.default_identifier else encode(identifier)
 
 
+def physical_rows(store, pattern, context):
+    if context is None:
+        scope = ("any", None)
+    else:
+        graph = encode_graph(store, context)
+        scope = ("default", None) if graph is None else ("graph", graph)
+    batch, cursor = store.backend._native.read_quads(
+        tuple(map(encode, pattern)), scope, _TERM_FACTORIES
+    )
+    try:
+        while True:
+            for subject, predicate, obj, graph in batch:
+                yield subject, predicate, obj, store.default_identifier if graph is None else graph
+            if cursor is None:
+                break
+            batch, finished = cursor.next_batch()
+            if finished:
+                cursor = None
+    finally:
+        if cursor is not None:
+            cursor.close()
+
+
+def union_rows(store, pattern, context=None):
+    if context is None:
+        scope = ("any", None)
+    else:
+        graph = encode_graph(store, context)
+        scope = ("default", None) if graph is None else ("graph", graph)
+    batch, cursor = store.backend._native.read_union(
+        tuple(map(encode, pattern)), _TERM_FACTORIES, scope=scope
+    )
+    try:
+        while True:
+            yield from batch
+            if cursor is None:
+                break
+            batch, finished = cursor.next_batch()
+            if finished:
+                cursor = None
+    finally:
+        if cursor is not None:
+            cursor.close()
+
+
+def context_names(store, cursor):
+    try:
+        while True:
+            batch, finished = cursor.next_batch()
+            for identifier in batch:
+                yield store.default_identifier if identifier is None else identifier
+            if finished:
+                return
+    finally:
+        cursor.close()
+
+
 def scoped_rows(store, pattern, context, positions=(0, 1, 2)):
     graph = encode_graph(store, context)
     # Bound terms already belong to the caller: transport/decode only unknown outputs.

@@ -1,11 +1,14 @@
 use oxigraph::model::*;
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 
+use oxrdf::GeneralizedDataset;
+use std::cell::Cell;
+
 use super::expand;
 
 #[test]
 fn literal_substitution_plan_joins_on_the_value_key() {
-    let data = Dataset::new();
+    let data = GeneralizedDataset::new();
     let (result, explanation) = super::literal_values::value_query(Default::default())
         .unwrap()
         .on_queryable_dataset(&data)
@@ -38,7 +41,7 @@ fn bound_join_keys_preserve_unbound_wildcards_only_when_the_filter_allows_them()
                 }} }}
             }}"#
         );
-        let data = Dataset::new();
+        let data = GeneralizedDataset::new();
         let QueryResults::Solutions(solutions) = SparqlEvaluator::new()
             .parse_query(&query)
             .unwrap()
@@ -49,7 +52,11 @@ fn bound_join_keys_preserve_unbound_wildcards_only_when_the_filter_allows_them()
             panic!("Expected SELECT solutions")
         };
         assert_eq!(
-            solutions.map(|row| row.unwrap()).count(),
+            solutions
+                .inspect(|row| {
+                    row.as_ref().unwrap();
+                })
+                .count(),
             expected,
             "{guard}"
         );
@@ -72,25 +79,26 @@ fn rdfs_substitutes_equal_string_values_across_datatypes_and_languages() {
         Literal::new_simple_literal("different"),
         Literal::new_typed_literal("same", NamedNode::new("urn:unknown-datatype").unwrap()),
     ];
-    let mut data = Dataset::from_iter(values.iter().enumerate().map(|(index, value)| {
-        Quad::new(
-            NamedNode::new(format!("urn:s{index}")).unwrap(),
-            predicate.clone(),
-            value.clone(),
-            GraphName::DefaultGraph,
-        )
-    }));
+    let mut data =
+        GeneralizedDataset::from_iter(values.iter().enumerate().map(|(index, value)| {
+            GeneralizedQuad::new(
+                NamedNode::new(format!("urn:s{index}")).unwrap(),
+                predicate.clone(),
+                value.clone(),
+                GraphName::DefaultGraph,
+            )
+        }));
     expand(&mut data, "rdfs", super::InferenceRequest::default()).unwrap();
     for (subject, _) in values.iter().enumerate() {
         for (replacement, value) in values.iter().enumerate() {
             let expected = subject == replacement || (subject < 7 && replacement < 7);
-            let quad = Quad::new(
+            let quad = GeneralizedQuad::new(
                 NamedNode::new(format!("urn:s{subject}")).unwrap(),
                 predicate.clone(),
                 value.clone(),
                 GraphName::DefaultGraph,
             );
-            assert_eq!(data.contains(&quad), expected, "{quad}");
+            assert_eq!(data.contains(&quad), expected, "{quad:?}");
         }
     }
 }
@@ -115,9 +123,9 @@ fn rdfs_substitutes_equal_numeric_values_without_conflating_strings_or_rounding(
         Literal::new_typed_literal(lexical, NamedNode::new(format!("{xsd}{datatype}")).unwrap())
     });
     let predicate = NamedNode::new("urn:value").unwrap();
-    let mut data = Dataset::new();
+    let mut data = GeneralizedDataset::new();
     for (index, literal) in values.iter().enumerate() {
-        data.insert(&Quad::new(
+        data.insert(&GeneralizedQuad::new(
             NamedNode::new(format!("urn:s{index}")).unwrap(),
             predicate.clone(),
             literal.clone(),
@@ -129,7 +137,7 @@ fn rdfs_substitutes_equal_numeric_values_without_conflating_strings_or_rounding(
         for (object, literal) in values.iter().enumerate() {
             let expected = (subject < 6 && object < 6) || subject == object;
             assert_eq!(
-                data.contains(&Quad::new(
+                data.contains(&GeneralizedQuad::new(
                     NamedNode::new(format!("urn:s{subject}")).unwrap(),
                     predicate.clone(),
                     literal.clone(),
@@ -148,21 +156,21 @@ fn signaling_nan_is_not_compared_with_itself_or_non_numeric_values() {
         "sNaN",
         NamedNode::new("http://www.w3.org/2001/XMLSchema#decimal").unwrap(),
     );
-    let mut data = Dataset::from_iter([Quad::new(
+    let mut data = GeneralizedDataset::from_iter([GeneralizedQuad::new(
         NamedNode::new("urn:s").unwrap(),
         NamedNode::new("urn:p").unwrap(),
         nan,
         GraphName::DefaultGraph,
     )]);
     expand(&mut data, "rdfs", Default::default()).unwrap();
-    data.insert(&Quad::new(
+    data.insert(&GeneralizedQuad::new(
         NamedNode::new("urn:s").unwrap(),
         NamedNode::new("urn:q").unwrap(),
         Literal::new_simple_literal("one"),
         GraphName::DefaultGraph,
     ));
     expand(&mut data, "rdfs", Default::default()).unwrap();
-    data.insert(&Quad::new(
+    data.insert(&GeneralizedQuad::new(
         NamedNode::new("urn:s").unwrap(),
         NamedNode::new("urn:n").unwrap(),
         Literal::from(1),
@@ -174,4 +182,58 @@ fn signaling_nan_is_not_compared_with_itself_or_non_numeric_values() {
             super::LexicalFailure::DecimalInvalidComparison
         ))
     ));
+}
+
+#[derive(Default)]
+struct HeadFailure {
+    scanned_objects: Cell<usize>,
+}
+impl super::backend::Graph for HeadFailure {
+    fn quads<'a>(
+        &'a self,
+        _: Option<TermRef<'_>>,
+        _: Option<TermRef<'_>>,
+        _: Option<TermRef<'_>>,
+    ) -> impl Iterator<Item = crate::Result<GeneralizedQuad>> + use<'a> {
+        std::iter::once_with(|| {
+            self.scanned_objects.set(self.scanned_objects.get() + 1);
+            Ok(GeneralizedQuad::new(
+                NamedNode::new_unchecked("urn:s"),
+                NamedNode::new_unchecked("urn:p"),
+                Literal::from(1),
+                GraphName::DefaultGraph,
+            ))
+        })
+    }
+    fn query(&self, _: oxigraph::sparql::PreparedSparqlQuery) -> crate::Result<QueryResults<'_>> {
+        panic!("substitution must not return to strict public projection")
+    }
+    fn inference_heads(
+        &self,
+        _: oxigraph::sparql::PreparedSparqlQuery,
+    ) -> crate::Result<oxigraph::sparql::QueryTripleIter<'_, GeneralizedTriple>> {
+        assert_eq!(
+            self.scanned_objects.get(),
+            1,
+            "numeric preflight must complete"
+        );
+        Err(crate::Error::Runtime(
+            "substitution source read failed".into(),
+        ))
+    }
+    fn insert(&mut self, _: GeneralizedQuad) -> crate::Result<()> {
+        panic!("failed substitution must not publish")
+    }
+    fn cleanup_blank_predicates(&mut self) -> crate::Result<()> {
+        panic!("substitution must not perform OWL postprocessing")
+    }
+}
+
+#[test]
+fn rdfs_substitution_propagates_inference_head_errors_without_publication() {
+    let result =
+        super::literal_values::substitute(&mut HeadFailure::default(), &Default::default());
+    assert!(
+        matches!(result,Err(crate::Error::Runtime(message)) if message=="substitution source read failed")
+    );
 }

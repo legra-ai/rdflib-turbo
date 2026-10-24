@@ -44,7 +44,7 @@ impl SharedShapes {
             let pending = inplace.then(|| {
                 Pending::inferred(
                     output.additions,
-                    source.into_additions(),
+                    source.into_delta(),
                     !outcome.error_messages.is_empty(),
                     data.revision,
                 )

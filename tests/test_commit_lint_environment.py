@@ -56,5 +56,5 @@ def test_commit_lint_runs_when_project_build_backend_is_unavailable(tmp_path):
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert (tmp_path / "cargo-invocations").read_text().splitlines() == [
-        "clippy --locked -- -D warnings"
+        "clippy --workspace --lib --tests --locked -- -D warnings"
     ]

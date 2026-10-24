@@ -59,3 +59,53 @@ as the displaced local property paths. This does not validate list structure or
 change the separate indexed intersection-recognition kernel. The five local
 list templates are removed. Cardinality and the equality kernel boundary remain
 native; this still does not certify full OWL-RL or Python owlrl compatibility.
+
+## Elide equivalent-class self-membership witnesses
+
+The catalogue-specific CaxEqc1/CaxEqc2 factory adds an exact-term inequality
+between the membership body's class and the head's class. When those terms
+are identical, the head is already the same membership fact read by the body.
+`Pending::push` rejects that existing fact; a scoped graph checks both its read
+source and destination, so this remains true for a separate output graph.
+Filtering that witness avoids constructing and probing redundant rows without
+changing any newly publishable consequence or fixed-point round visibility.
+
+Derive the guard from the typed published head and two body atoms. Check their
+relations, arities, RDF predicates, shared focus variable and directional class
+positions; reject an unexpected catalogue shape. Preserve generic `try_new`
+semantics for arbitrary clauses. Apply this optimization only to the two known
+catalogue IDs, using `BuiltinFilter::Ne` lowered to `!sameTerm`, never value `!=`.
+Non-self equivalence and distinct numeric lexical terms continue to infer both
+directions. Default, named and blank scopes, union reads and separate output
+graph tests retain the existing source/destination contract. This does not
+remove a rule, change its shared definition or establish universal OWL parity.
+
+## Exact catalogue body groups
+
+The fixed portable catalogue contains repeated identical bodies with distinct
+heads. Validate every original rule's safety, head, body, terms and supported
+operators before grouping. Combine heads only when their complete ordered body
+ASTs are equal, including variable names, filter order and inequality operand
+order. Retain the first body's catalogue position and append each original
+validated head in order. Generic single-rule compilation keeps its existing
+contract. Do not normalize expressions or infer equivalence from rendered text.
+
+This reduces prepared portable plans from 12 to 11 in RDFS, 49 to 43 in OWL-RL
+and 56 to 49 in combined mode. The five local OWL plans remain separate; combined
+mode therefore evaluates 54 plans rather than 61. These are fixed plan counts,
+not a timing improvement claim. Grouping retains only the bounded published
+catalogue, never caller graph data, and adds no storage/index/dependency changes.
+
+All grouped consequences still enter the original pending set. Every ordinary,
+equality, list, chain and key rule reads the same immutable round before any
+publication. Frozen ungrouped catalogue tests compare complete one-round output,
+including exact literals, blank nodes, union/selected contexts and malformed
+scoped-list errors. Late query failures leave pending results private and roll
+back the existing insertion journal. Installed-wheel matched performance and
+whole-output acceptance remain required before claiming a runtime speedup.
+
+Catalogue-specific equivalent-class self-membership guards are applied before
+grouping. The conservative predicate scheduler retains one descriptor for each
+common body; identical ordered bodies necessarily have identical positive
+predicate dependencies. Late class seeds and equivalent-class facts compare
+every scheduled pending set with independent ungrouped catalogue queries.

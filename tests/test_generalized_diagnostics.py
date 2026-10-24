@@ -1,8 +1,9 @@
 """Diagnostic conditions read the same generalized closure as entailment rules."""
 
 import pytest
+from inference_observers import inference_outcome, physical_keys, union_graph
 from owlrl import DeductiveClosure, OWLRL_Semantics, RDFS_OWLRL_Semantics
-from rdflib import BNode, Graph, Literal, Namespace, URIRef
+from rdflib import BNode, Graph, Namespace, URIRef
 from rdflib.compare import isomorphic
 from rdflib_turbo import Dataset, Store
 from rdflib_turbo import Graph as NativeGraph
@@ -46,14 +47,13 @@ def test_generalized_diagnostics_match_reference(case, mode, semantics, api, tmp
     assert messages(reference), "fixture must exercise an actual reference diagnostic"
     expected = Graph()
     for triple in reference:
-        if not isinstance(triple[0], Literal) and isinstance(triple[1], URIRef):
-            expected.add(triple)
+        expected.add(triple)
 
     def check(graph):
         graph.parse(data=document).infer(inference=mode)
-        actual = Graph().parse(data=graph.serialize(format="ntriples"), format="nt")
+        actual = union_graph(graph)
         assert messages(actual) == messages(reference)
-        assert set(graph._last_inference.error_messages) == messages(reference)
+        assert set(inference_outcome(graph).error_messages) == messages(reference)
         assert isomorphic(actual, expected)
 
     if api == "dataset":
@@ -68,7 +68,7 @@ def test_generalized_diagnostics_match_reference(case, mode, semantics, api, tmp
                 check(store)
         if api == "persistent":
             with Store(path) as reopened:
-                actual = Graph().parse(data=reopened.serialize(format="ntriples"), format="nt")
+                actual = union_graph(reopened)
                 assert isomorphic(actual, expected)
 
 
@@ -87,7 +87,7 @@ def test_generalized_diagnostics_respect_the_source_scope(identifier, inside):
         if inside:
             source.parse(data=declaration, format="turtle")
         source.infer(inference="owlrl")
-        actual = Graph().parse(data=source.serialize(format="ntriples"), format="nt")
+        actual = source
         assert bool(messages(actual)) is inside
         assert len(outside) == 1
 
@@ -96,13 +96,13 @@ def test_generalized_diagnostics_respect_the_source_scope(identifier, inside):
 def test_generalized_diagnostics_rollback_and_retry(case):
     with Store() as store:
         store.parse(data=PREFIX + CASES[case])
-        before = store.serialize(format="ntriples")
+        before = physical_keys(store)
         with pytest.raises(RuntimeError, match="abort"):
             with store.transaction() as transaction:
                 transaction.infer(inference="owlrl")
-                assert transaction._last_inference.error_messages
+                assert inference_outcome(transaction).error_messages
                 raise RuntimeError("abort")
-        assert store.serialize(format="ntriples") == before
-        assert store._last_inference is None
+        assert physical_keys(store) == before
+        assert inference_outcome(store) is None
         store.infer(inference="owlrl")
-        assert store._last_inference.error_messages
+        assert inference_outcome(store).error_messages
