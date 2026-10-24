@@ -13,6 +13,8 @@ mod tuples;
 pub(super) use equality::EqualityRules;
 pub(super) use tuples::Tuples;
 #[cfg(test)]
+mod diagnostic_tests;
+#[cfg(test)]
 mod equality_tests;
 #[cfg(test)]
 mod equality_work_tests;
@@ -31,6 +33,11 @@ const REFLEXIVE_SUBJECT: NamedNodeRef<'static> =
 const SAME_AS: NamedNodeRef<'static> =
     NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#sameAs");
 
+const LITERAL_TYPES: NamedNodeRef<'static> =
+    NamedNodeRef::new_unchecked("urn:rdflib-turbo:inference:literal-type");
+const RDF_TYPE: NamedNodeRef<'static> =
+    NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
+
 const COLUMNS: [NamedNodeRef<'static>; 3] = [
     NamedNodeRef::new_unchecked("urn:rdflib-turbo:inference:subject"),
     NamedNodeRef::new_unchecked("urn:rdflib-turbo:inference:predicate"),
@@ -38,8 +45,8 @@ const COLUMNS: [NamedNodeRef<'static>; 3] = [
 ];
 
 /// Only the non-RDF inference delta is stored, using the native indexed dataset.
-/// Literal reflexivity stores its one independent value; other tuples use three
-/// columns. The input graph is borrowed, never copied.
+/// Literal reflexivity and type membership use compact indexed records; other
+/// tuples use three columns. The input graph is borrowed, never copied.
 #[derive(Default)]
 pub(super) struct Generalized {
     rows: Dataset,
@@ -92,7 +99,30 @@ impl Generalized {
             .into_iter()
             .flatten()
             .map(|quad| [quad.object, SAME_AS.into(), quad.object]);
-        explicit.chain(reflexive).filter(move |row| {
+        // A literal type has two independent values. Invert them into an RDF
+        // record, so the native subject/object indexes serve either bound slot.
+        let type_subject = pattern[2].as_ref().and_then(|term| match term {
+            Term::NamedNode(node) => Some(node.as_ref().into()),
+            Term::BlankNode(node) => Some(node.as_ref().into()),
+            Term::Literal(_) => None,
+        });
+        let types_enabled = pattern[1]
+            .as_ref()
+            .is_none_or(|term| term.as_ref() == TermRef::from(RDF_TYPE))
+            && (pattern[2].is_none() || type_subject.is_some());
+        let types = types_enabled
+            .then(|| {
+                self.rows.quads_for_pattern(
+                    type_subject,
+                    Some(LITERAL_TYPES),
+                    pattern[0].as_ref().map(Term::as_ref),
+                    None,
+                )
+            })
+            .into_iter()
+            .flatten()
+            .map(|quad| [quad.object, RDF_TYPE.into(), quad.subject.into()]);
+        explicit.chain(reflexive).chain(types).filter(move |row| {
             pattern
                 .iter()
                 .zip(*row)
@@ -119,6 +149,18 @@ impl Generalized {
             ));
             return;
         }
+        if row[0].is_literal()
+            && row[1].as_ref() == TermRef::from(RDF_TYPE)
+            && let Ok(class) = NamedOrBlankNode::try_from(row[2].clone())
+        {
+            self.rows.insert(&Quad::new(
+                class,
+                LITERAL_TYPES,
+                row[0].clone(),
+                GraphName::DefaultGraph,
+            ));
+            return;
+        }
         let subject = BlankNode::default();
         for (column, value) in COLUMNS.into_iter().zip(row) {
             self.rows.insert(&Quad::new(
@@ -130,12 +172,29 @@ impl Generalized {
         }
     }
 
-    pub(super) fn extend(&mut self, pending: Self) -> bool {
-        let changed = !pending.rows.is_empty();
-        for quad in &pending.rows {
-            self.rows.insert(quad);
+    pub(super) fn literal_type(&mut self, literal: &Literal, datatype: NamedNode) {
+        self.insert([
+            literal.clone().into(),
+            crate::graph::iri(crate::graph::RDF, "type").into(),
+            datatype.into(),
+        ]);
+    }
+
+    pub(super) fn extend(&mut self, mut pending: Self) -> bool {
+        if pending.rows.is_empty() {
+            return false;
         }
-        changed
+        if self.rows.is_empty() {
+            self.rows = pending.rows;
+            return true;
+        }
+        // Transfer one physical record at a time, releasing its pending indexes
+        // before inserting it. Retaining both full index sets inflates the peak.
+        while let Some(quad) = pending.rows.iter().next().map(QuadRef::into_owned) {
+            assert!(pending.rows.remove(&quad));
+            self.rows.insert(&quad);
+        }
+        true
     }
 
     pub(super) fn apply(

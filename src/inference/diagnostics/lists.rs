@@ -8,6 +8,7 @@ use crate::Result;
 use crate::graph::{RDF, iri};
 use crate::inference::OWL;
 use crate::inference::backend::Graph;
+use crate::inference::generalized::Tuples;
 
 #[derive(Clone, Copy)]
 enum Kind {
@@ -17,7 +18,7 @@ enum Kind {
 }
 
 pub(super) fn collect(
-    data: &impl Graph,
+    data: &Tuples<'_, impl Graph>,
     errors: &mut Diagnostics,
     witnesses: &ListWitnesses,
 ) -> Result<()> {
@@ -29,7 +30,7 @@ pub(super) fn collect(
     ] {
         let class: Term = iri(OWL, name).into();
         for declaration in data.quads(None, Some(iri(RDF, "type").as_ref()), Some(class.as_ref())) {
-            let node: Term = declaration?.subject.into();
+            let node: Term = declaration?.subject;
             for property in ["members", "distinctMembers"] {
                 if property == "distinctMembers" && !matches!(kind, Kind::Different) {
                     continue;
@@ -44,9 +45,9 @@ pub(super) fn collect(
 }
 
 fn check(
-    data: &impl Graph,
+    data: &Tuples<'_, impl Graph>,
     errors: &mut Diagnostics,
-    list: RdfList<'_, impl Graph>,
+    list: RdfList<'_, '_, impl Graph>,
     kind: Kind,
 ) -> Result<()> {
     let mut outer = list.cursor();
@@ -84,7 +85,7 @@ fn check(
 }
 
 fn properties(
-    data: &impl Graph,
+    data: &Tuples<'_, impl Graph>,
     errors: &mut Diagnostics,
     left: &Term,
     right: &Term,
@@ -94,7 +95,7 @@ fn properties(
     };
     for quad in data.quads(None, Some(left.as_ref()), None) {
         let quad = quad?;
-        let subject: Term = quad.subject.into();
+        let subject: Term = quad.subject;
         if has(data, &subject, right, &quad.object)? {
             errors.add(format!(
                 "Disjoint properties in an 'AllDisjointProperties' are not really disjoint: ({}, {},{}) and ({},{},{})",
@@ -105,10 +106,15 @@ fn properties(
     Ok(())
 }
 
-fn classes(data: &impl Graph, errors: &mut Diagnostics, left: &Term, right: &Term) -> Result<()> {
+fn classes(
+    data: &Tuples<'_, impl Graph>,
+    errors: &mut Diagnostics,
+    left: &Term,
+    right: &Term,
+) -> Result<()> {
     let predicate = iri(RDF, "type");
     for quad in data.quads(None, Some(predicate.as_ref()), Some(left.as_ref())) {
-        let subject: Term = quad?.subject.into();
+        let subject: Term = quad?.subject;
         if has(data, &subject, &predicate, right)? {
             errors.add(format!(
                 "Disjoint classes {} and {} have a common individual {}",

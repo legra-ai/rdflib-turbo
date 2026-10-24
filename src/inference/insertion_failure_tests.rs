@@ -123,6 +123,7 @@ fn literal_substitution_and_diagnostic_insertions_propagate_failures() {
                     journal: &mut journal,
                     remaining: 1,
                 },
+                &super::generalized::Generalized::default(),
                 false,
                 |_| Ok(false),
             ),
