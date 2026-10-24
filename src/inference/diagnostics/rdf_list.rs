@@ -114,7 +114,7 @@ impl<'a, 'graph, G: Graph> Cursor<'a, 'graph, G> {
     pub fn next(&mut self) -> Result<Option<Term>> {
         while let Some(node) = self.current.take() {
             // RDFLib uses Python node truthiness, not a special rdf:nil branch.
-            // Literal subjects cannot occur in this native RDF model.
+            // Literal-valued list cells remain outside this list-reader profile.
             if node.is_literal() || super::text(&node).is_empty() {
                 return Ok(None);
             }

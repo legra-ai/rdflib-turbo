@@ -12,7 +12,7 @@ pub(in crate::inference) struct Tuples<'a, G> {
     pub(in crate::inference) extra: &'a Generalized,
 }
 
-/// A logical inference tuple; subject and predicate need not be RDF-representable.
+/// Subject and object of a match against a fixed RDF predicate.
 pub(in crate::inference) struct Tuple {
     pub(in crate::inference) subject: Term,
     pub(in crate::inference) object: Term,
