@@ -259,3 +259,41 @@ pub(super) fn zero(text: &str, context: &DecimalContext) -> Result<bool, Lexical
 pub(super) fn value_is_zero(text: &str) -> bool {
     matches!(parse(text), Some(Parsed::Finite(value)) if value.digits.is_empty())
 }
+
+/// Shared Decimal constructor result; default value equality and Alt validation
+/// choose their own policies after parsing, rather than sharing those profiles.
+pub(crate) enum DecimalParts {
+    Finite {
+        negative: bool,
+        digits: String,
+        exponent: i128,
+    },
+    Infinity {
+        negative: bool,
+    },
+    NaN {
+        signaling: bool,
+    },
+}
+
+pub(crate) fn parts(text: &str) -> Option<DecimalParts> {
+    let negative = text
+        .trim_matches(unicode::whitespace)
+        .chars()
+        .find(|&ch| ch != '_')
+        == Some('-');
+    Some(match parse(text)? {
+        Parsed::Finite(value) => {
+            if !value.digits.is_empty() && value.adjusted() > 999_999_999_999_999_999 {
+                return None;
+            }
+            DecimalParts::Finite {
+                negative,
+                digits: value.digits,
+                exponent: value.exponent,
+            }
+        }
+        Parsed::Infinity => DecimalParts::Infinity { negative },
+        Parsed::Nan { signaling } => DecimalParts::NaN { signaling },
+    })
+}

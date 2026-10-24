@@ -343,3 +343,9 @@ fn shared_aggregate_exports_validate_before_adapter_rejection() {
         Err(crate::Error::Unsupported(_))
     ));
 }
+
+#[test]
+fn shared_literal_rule_requires_explicit_value_class_capability() {
+    let rule = rdf_reasoning::LiteralRuleId::RdfsValueSubstitution.definition();
+    assert!(super::shared::CompiledRule::try_new(&rule).is_err());
+}

@@ -7,6 +7,7 @@ mod context;
 mod decimal;
 mod duration_truthiness;
 mod integer;
+mod numeric;
 mod signals;
 mod temporal;
 mod text;
@@ -14,6 +15,7 @@ mod truthiness;
 mod unicode;
 
 pub(crate) use context::LexicalContext;
+pub(super) use numeric::{PythonNumericValue, parse_numeric};
 pub(crate) use signals::SignalPublisher;
 pub(super) use truthiness::truthy;
 

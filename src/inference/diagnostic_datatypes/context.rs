@@ -61,6 +61,18 @@ impl Default for LexicalContext {
 }
 
 impl LexicalContext {
+    pub(in crate::inference) fn traps_invalid_operation(&self) -> bool {
+        self.decimal.traps[INVALID]
+    }
+    pub(in crate::inference) fn record_invalid_operation(&self) {
+        let mut signals = [false; 7]; // bounded: fixed signal vocabulary.
+        signals[INVALID] = true;
+        self.decimal.signals.record(signals);
+    }
+    pub(in crate::inference) fn record_float_operation(&self) {
+        self.decimal.signals.record_float_operation();
+    }
+
     /// Snapshot the calling Python thread before moving native inference work.
     #[cfg(test)]
     pub(crate) fn capture(py: Python<'_>) -> PyResult<Self> {
