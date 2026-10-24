@@ -201,7 +201,7 @@ fn expand_inner(
         for quad in literal_publications.0 {
             data.insert(quad)?;
         }
-        literal_values::strings(data)?;
+        literal_values::substitute(data, &request.lexical_context)?;
     }
     let mut diagnostics = diagnostics::Diagnostics::new(request.prior_error_messages);
     // bounded: the fixed RDFS/OWL rule tables above.

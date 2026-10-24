@@ -1,31 +1,10 @@
 //! OWL cardinality compares default RDFLib Python values, not Alt conversions.
 
-use super::{LexicalContext, LexicalFailure, decimal, integer, unicode};
+use super::{LexicalContext, LexicalFailure, decimal, integer};
 use oxigraph::model::Literal;
 
 pub(super) fn float_zero(text: &str) -> bool {
-    let mut value = String::new(); // bounded: this one scalar lexical value.
-    let mut chars = text.trim_matches(integer::whitespace).chars().peekable();
-    let mut previous_digit = false;
-    while let Some(ch) = chars.next() {
-        if let Some(digit) = unicode::decimal(ch) {
-            value.push(char::from(b'0' + digit));
-            previous_digit = true;
-        } else if ch == '_' {
-            if !previous_digit
-                || !chars
-                    .peek()
-                    .is_some_and(|&next| unicode::decimal(next).is_some())
-            {
-                return false;
-            }
-            previous_digit = false;
-        } else {
-            value.push(ch);
-            previous_digit = false;
-        }
-    }
-    value.parse::<f64>().is_ok_and(|number| number == 0.0)
+    integer::float_value(text).is_some_and(|number| number == 0.0)
 }
 
 pub(super) fn zero(literal: &Literal, context: &LexicalContext) -> Result<bool, LexicalFailure> {

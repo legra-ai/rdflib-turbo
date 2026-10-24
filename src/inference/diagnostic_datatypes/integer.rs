@@ -100,3 +100,29 @@ pub(super) fn whitespace(ch: char) -> bool {
         unicode::whitespace(ch)
     }
 }
+
+/// Default CPython binary64 conversion; no AltXSD numeric bounds apply.
+pub(crate) fn float_value(text: &str) -> Option<f64> {
+    let mut value = String::new(); // bounded: this one scalar lexical value.
+    let mut chars = text.trim_matches(whitespace).chars().peekable();
+    let mut previous_digit = false;
+    while let Some(ch) = chars.next() {
+        if let Some(digit) = unicode::decimal(ch) {
+            value.push(char::from(b'0' + digit));
+            previous_digit = true;
+        } else if ch == '_' {
+            if !previous_digit
+                || !chars
+                    .peek()
+                    .is_some_and(|&next| unicode::decimal(next).is_some())
+            {
+                return None;
+            }
+            previous_digit = false;
+        } else {
+            value.push(ch);
+            previous_digit = false;
+        }
+    }
+    value.parse().ok()
+}

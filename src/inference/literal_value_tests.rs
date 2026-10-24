@@ -4,9 +4,9 @@ use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use super::expand;
 
 #[test]
-fn string_substitution_plan_joins_on_the_value_key() {
+fn literal_substitution_plan_joins_on_the_value_key() {
     let data = Dataset::new();
-    let (result, explanation) = super::literal_values::string_query()
+    let (result, explanation) = super::literal_values::value_query(Default::default())
         .unwrap()
         .on_queryable_dataset(&data)
         .explain();
@@ -91,6 +91,53 @@ fn rdfs_substitutes_equal_string_values_across_datatypes_and_languages() {
                 GraphName::DefaultGraph,
             );
             assert_eq!(data.contains(&quad), expected, "{quad}");
+        }
+    }
+}
+
+#[test]
+fn rdfs_substitutes_equal_numeric_values_without_conflating_strings_or_rounding() {
+    let xsd = "http://www.w3.org/2001/XMLSchema#";
+    // bounded: six equal Python numeric values and four distinct controls.
+    let values = [
+        ("true", "boolean"),
+        ("1", "integer"),
+        ("01", "nonNegativeInteger"),
+        ("1.0", "decimal"),
+        ("1.0", "double"),
+        ("1.0", "float"),
+        ("2", "integer"),
+        ("1", "string"),
+        ("0.1", "decimal"),
+        ("0.1", "double"),
+    ]
+    .map(|(lexical, datatype)| {
+        Literal::new_typed_literal(lexical, NamedNode::new(format!("{xsd}{datatype}")).unwrap())
+    });
+    let predicate = NamedNode::new("urn:value").unwrap();
+    let mut data = Dataset::new();
+    for (index, literal) in values.iter().enumerate() {
+        data.insert(&Quad::new(
+            NamedNode::new(format!("urn:s{index}")).unwrap(),
+            predicate.clone(),
+            literal.clone(),
+            GraphName::DefaultGraph,
+        ));
+    }
+    expand(&mut data, "rdfs", Default::default()).unwrap();
+    for (subject, _) in values.iter().enumerate() {
+        for (object, literal) in values.iter().enumerate() {
+            let expected = (subject < 6 && object < 6) || subject == object;
+            assert_eq!(
+                data.contains(&Quad::new(
+                    NamedNode::new(format!("urn:s{subject}")).unwrap(),
+                    predicate.clone(),
+                    literal.clone(),
+                    GraphName::DefaultGraph
+                )),
+                expected,
+                "numeric substitution {subject} -> {object}"
+            );
         }
     }
 }
