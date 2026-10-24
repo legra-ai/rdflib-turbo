@@ -70,10 +70,10 @@ struct FirstProbeFails(Cell<usize>);
 impl Graph for FirstProbeFails {
     fn quads<'a>(
         &'a self,
-        _: Option<NamedOrBlankNodeRef<'a>>,
-        _: Option<NamedNodeRef<'a>>,
-        _: Option<TermRef<'a>>,
-    ) -> impl Iterator<Item = Result<Quad>> + 'a {
+        _: Option<NamedOrBlankNodeRef<'_>>,
+        _: Option<NamedNodeRef<'_>>,
+        _: Option<TermRef<'_>>,
+    ) -> impl Iterator<Item = Result<Quad>> + use<'a> {
         std::iter::empty()
     }
 
