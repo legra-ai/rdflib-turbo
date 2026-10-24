@@ -9,13 +9,19 @@ use crate::{Error, Result};
 
 mod equality;
 mod query;
+mod tuples;
 pub(super) use equality::EqualityRules;
+pub(super) use tuples::Tuples;
 #[cfg(test)]
 mod equality_tests;
 #[cfg(test)]
 mod equality_work_tests;
 #[cfg(test)]
+mod list_cardinality_tests;
+#[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tuple_tests;
 
 pub(super) const GENERALIZED_GRAPH: NamedNodeRef<'static> =
     NamedNodeRef::new_unchecked("urn:rdflib-turbo:inference:generalized");
@@ -176,17 +182,28 @@ impl Generalized {
             });
             let [subject, predicate, object] = row;
             let row = [subject?, predicate?, object?];
-            match (
-                NamedOrBlankNode::try_from(row[0].clone()),
-                NamedNode::try_from(row[1].clone()),
-            ) {
-                (Ok(subject), Ok(predicate)) => ordinary.push(
-                    data,
-                    Quad::new(subject, predicate, row[2].clone(), GraphName::DefaultGraph),
-                )?,
-                _ if !self.contains(&row) => pending.insert(row),
-                _ => {}
-            }
+            self.retain_row(row, data, ordinary, pending)?;
+        }
+        Ok(())
+    }
+
+    fn retain_row(
+        &self,
+        row: [Term; 3],
+        data: &impl Graph,
+        ordinary: &mut Pending,
+        pending: &mut Self,
+    ) -> Result<()> {
+        match (
+            NamedOrBlankNode::try_from(row[0].clone()),
+            NamedNode::try_from(row[1].clone()),
+        ) {
+            (Ok(subject), Ok(predicate)) => ordinary.push(
+                data,
+                Quad::new(subject, predicate, row[2].clone(), GraphName::DefaultGraph),
+            )?,
+            _ if !self.contains(&row) => pending.insert(row),
+            _ => {}
         }
         Ok(())
     }

@@ -97,7 +97,15 @@ fn current(data: &Dataset) -> (HashSet<Triple>, u64) {
         explanations: RefCell::new(Vec::new()),
     };
     let mut additions = Pending::default();
-    intersections::additions(&measured, &mut additions).unwrap();
+    intersections::additions(
+        &super::generalized::Tuples {
+            data: &measured,
+            extra: &super::generalized::Generalized::default(),
+        },
+        &mut additions,
+        &mut super::generalized::Generalized::default(),
+    )
+    .unwrap();
     // bounded: synthetic fixtures produce at most 65 distinct type additions.
     let triples = additions
         .0

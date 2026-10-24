@@ -25,7 +25,14 @@ fn failure_rolls_back(kernel: Kernel, input: &[(&str, &str, &str)], fault: Fault
         let mut pending = Pending::default();
         let error = match kernel {
             Kernel::Equality => same_as::apply(&source, &mut pending),
-            Kernel::Intersection => intersections::additions(&source, &mut pending),
+            Kernel::Intersection => intersections::additions(
+                &super::generalized::Tuples {
+                    data: &source,
+                    extra: &super::generalized::Generalized::default(),
+                },
+                &mut pending,
+                &mut super::generalized::Generalized::default(),
+            ),
         }
         .expect_err("storage error was swallowed or retried");
         assert!(

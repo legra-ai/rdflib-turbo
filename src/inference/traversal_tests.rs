@@ -10,7 +10,14 @@ fn dataset(source: &str) -> Dataset {
 
 fn checked_list(data: &Dataset, head: &Term) -> Result<Vec<NamedNode>> {
     let mut data = data.clone();
-    list(&data.insert_transaction(), head, "members must be IRIs")
+    list(
+        &Tuples {
+            data: &data.insert_transaction(),
+            extra: &Generalized::default(),
+        },
+        head,
+        "members must be IRIs",
+    )
 }
 
 #[test]
