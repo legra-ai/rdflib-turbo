@@ -1,5 +1,5 @@
 //! Exercise actual source-owned binding classes, not an installed native wheel.
-use std::ffi::CString;
+use std::{ffi::CString, process::Command, thread};
 
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyModule};
@@ -19,6 +19,34 @@ fn force_factory_construction(py: Python<'_>) -> PyResult<()> {
 }
 
 fn execute(source: &str) {
+    const CHILD: &str = "RDFLIB_TURBO_COMPARISON_TEST_CHILD";
+    let current = thread::current();
+    let case = current
+        .name()
+        .expect("Rust test harness supplies the case name");
+    if let Some(selected) = std::env::var_os(CHILD) {
+        assert_eq!(
+            selected, case,
+            "Comparison child must run its exact named case"
+        );
+    } else {
+        // These fixtures replace process-global warnings and dis spies while native
+        // validation releases the GIL. Isolate them from every embedded Rust test.
+        // LLVM_PROFILE_FILE is inherited, retaining its per-process %p expansion.
+        // bounded: output contains one exact test case's diagnostics.
+        let output = Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", case, "--nocapture"])
+            .env(CHILD, case)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "Isolated comparison case {case} failed: {}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return;
+    }
     Python::initialize();
     Python::attach(|py| {
         let module = PyModule::new(py, "source_numeric_comparison").unwrap();
@@ -41,6 +69,41 @@ fn execute(source: &str) {
         py.run(&source, Some(&globals), None).unwrap();
     });
 }
+#[test]
+fn source_fixture_does_not_share_parent_interpreter_globals() {
+    let child = std::env::var_os("RDFLIB_TURBO_COMPARISON_TEST_CHILD").is_some();
+    if !child {
+        Python::initialize();
+        Python::attach(|py| {
+            py.import("sys")
+                .unwrap()
+                .setattr("_comparison_parent_warning_spy", "parent")
+                .unwrap();
+        });
+    }
+    execute(
+        r#"
+import sys
+assert not hasattr(sys, '_comparison_parent_warning_spy')
+sys._comparison_child_warning_spy = 'child'
+"#,
+    );
+    if !child {
+        Python::attach(|py| {
+            let sys = py.import("sys").unwrap();
+            assert_eq!(
+                sys.getattr("_comparison_parent_warning_spy")
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                "parent"
+            );
+            assert!(!sys.hasattr("_comparison_child_warning_spy").unwrap());
+            sys.delattr("_comparison_parent_warning_spy").unwrap();
+        });
+    }
+}
+
 #[test]
 fn caller_context_is_captured_for_every_validation_and_shared_owner_path() {
     execute(
