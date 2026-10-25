@@ -15,6 +15,16 @@ use super::{fixture, measure_requested_heap, metrics};
 #[derive(Clone)]
 struct Lease(Arc<QuadListNode>);
 
+trait NodeKey {
+    fn node(&self) -> &QuadListNode;
+}
+
+impl NodeKey for Lease {
+    fn node(&self) -> &QuadListNode {
+        &self.0
+    }
+}
+
 fn same_spo(left: &QuadListNode, right: &QuadListNode) -> bool {
     left.quad.subject == right.quad.subject
         && left.quad.predicate == right.quad.predicate
@@ -43,6 +53,12 @@ impl Hash for Lease {
 struct CachedLease {
     hash: u64,
     node: Arc<QuadListNode>,
+}
+
+impl NodeKey for CachedLease {
+    fn node(&self) -> &QuadListNode {
+        &self.node
+    }
 }
 
 #[derive(Default)]
@@ -92,7 +108,7 @@ fn acquire(reader: &StorageReader<'_>, quad: &EncodedQuad) -> Arc<QuadListNode> 
 }
 
 pub(super) fn profile(reader: &StorageReader<'_>, rows: usize, cached: bool) {
-    fn run<K: Eq + Hash>(
+    fn run<K: Eq + Hash + NodeKey>(
         reader: &StorageReader<'_>,
         rows: usize,
         make: impl Fn(Arc<QuadListNode>) -> K,
@@ -115,6 +131,34 @@ pub(super) fn profile(reader: &StorageReader<'_>, rows: usize, cached: bool) {
             "UNION_CAPACITY {{\"triples\":{rows},\"triple_capacity\":{capacity},\"distinct_terms\":null,\"dictionary_capacity\":0,\"key_bytes\":{},\"key_align\":{}}}",
             size_of::<K>(),
             align_of::<K>()
+        );
+        // Separate unmeasured replay: numerical release has already completed,
+        // and no semantic observation owner was retained across that release.
+        // bounded: two complete sets over at most70,000 fixed synthetic SPOs.
+        let mut complete = FxHashSet::default();
+        let mut reference = FxHashSet::default();
+        for quad in reader.quads_for_pattern(None, None, None, None) {
+            let quad = quad.unwrap();
+            reference.insert((
+                quad.subject.clone(),
+                quad.predicate.clone(),
+                quad.object.clone(),
+            ));
+            complete.insert(make(acquire(reader, &quad)));
+        }
+        assert_eq!(complete.len(), reference.len());
+        for key in &complete {
+            let node = key.node();
+            assert!(reference.remove(&(
+                node.quad.subject.clone(),
+                node.quad.predicate.clone(),
+                node.quad.object.clone()
+            )));
+        }
+        assert!(reference.is_empty());
+        println!(
+            "UNION_LEASE_RELATION {{\"canonical\":{},\"whole_relation_equal\":true}}",
+            complete.len()
         );
     }
     if cached {
