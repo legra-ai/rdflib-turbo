@@ -35,7 +35,12 @@ impl CompiledShapes {
                                 value,
                                 other,
                             )? {
-                                results.push(violation(kind, Some(value)));
+                                results.push(violation(kind, Some(value)).with_comparison(
+                                    ComparisonMessage::PropertyPair {
+                                        operator: operator.expect("Ordering pair has operator"),
+                                        predicate: predicate.clone(),
+                                    },
+                                ));
                             }
                         }
                     }

@@ -102,7 +102,12 @@ impl CompiledShapes {
                         value,
                         bound,
                     )? {
-                        results.push(violation(component, Some(value)));
+                        results.push(violation(component, Some(value)).with_comparison(
+                            ComparisonMessage::Range {
+                                operator: *operator,
+                                bound: bound.clone(),
+                            },
+                        ));
                     }
                 }
             }

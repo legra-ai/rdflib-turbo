@@ -52,6 +52,38 @@ impl CompiledShapes {
         } else if shape.messages.is_empty() {
             let message = if !violation.message.is_empty() {
                 violation.message.clone()
+            } else if let Some(comparison) = &violation.comparison {
+                match comparison {
+                    ComparisonMessage::Range { operator, bound } => {
+                        let operator = match operator {
+                            crate::ComparisonOperator::Less => "<",
+                            crate::ComparisonOperator::LessEqual => "<=",
+                            crate::ComparisonOperator::Greater => ">",
+                            crate::ComparisonOperator::GreaterEqual => ">=",
+                        };
+                        format!("Value is not {operator} {}", display.term(bound, true)?)
+                    }
+                    ComparisonMessage::PropertyPair {
+                        operator,
+                        predicate,
+                    } => {
+                        let operator = match operator {
+                            crate::ComparisonOperator::Less => "<=",
+                            crate::ComparisonOperator::LessEqual => "<",
+                            _ => unreachable!("Property-pair ordering is less or less-equal"),
+                        };
+                        let value = violation
+                            .value
+                            .as_ref()
+                            .expect("Ordering violation has value");
+                        format!(
+                            "Value of {}->{} {operator} {}",
+                            display.term(&violation.focus, false)?,
+                            display.iri(predicate),
+                            display.term(value, false)?,
+                        )
+                    }
+                }
             } else {
                 let focus = display.term(&violation.focus, false)?;
                 let component = violation

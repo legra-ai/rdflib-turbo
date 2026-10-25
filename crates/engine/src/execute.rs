@@ -100,6 +100,18 @@ struct Violation {
     details: Vec<Violation>,
     source_constraint: Option<Term>,
     messages: Option<Vec<Term>>,
+    comparison: Option<ComparisonMessage>,
+}
+
+enum ComparisonMessage {
+    Range {
+        operator: crate::ComparisonOperator,
+        bound: Term,
+    },
+    PropertyPair {
+        operator: crate::ComparisonOperator,
+        predicate: NamedNode,
+    },
 }
 
 impl Violation {
@@ -131,7 +143,13 @@ impl Violation {
             details: Vec::new(),
             source_constraint: None,
             messages: None,
+            comparison: None,
         }
+    }
+
+    fn with_comparison(mut self, comparison: ComparisonMessage) -> Self {
+        self.comparison = Some(comparison);
+        self
     }
 }
 
