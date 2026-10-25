@@ -97,11 +97,9 @@ pub(super) fn substitute(data: &mut impl Graph, context: &LexicalContext) -> Res
         // Original RDFS one_time_rules uses destination.add directly, unlike
         // OWL Core.store_triple: literal predicates are valid substitutions.
         // Retain immutable query evaluation and only distinct destination delta.
-        if !additions.0.contains(&quad) && !data.contains_destination(quad.as_ref())? {
-            additions.0.insert(quad);
-        }
+        additions.publish(data, quad)?;
     }
-    for quad in additions.0 {
+    for quad in additions {
         data.insert(quad)?;
     }
     Ok(())

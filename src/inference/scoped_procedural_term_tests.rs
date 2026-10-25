@@ -104,7 +104,7 @@ fn run(case: Case) {
         )
         .unwrap();
     }
-    let actual = pending.0.into_iter().collect::<HashSet<_>>();
+    let actual = pending.into_iter().collect::<HashSet<_>>();
     assert!(
         actual.contains(&expected),
         "missing full-Term procedural consequence"

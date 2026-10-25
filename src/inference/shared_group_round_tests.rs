@@ -217,7 +217,7 @@ fn round(
             &crate::inference::diagnostics::rdf_list::ListWitnesses::new(4300),
         )?;
     }
-    Ok(pending.0)
+    Ok(pending.into_iter().collect())
 }
 
 fn compare(data: &GeneralizedDataset, scope: Option<GraphName>, require_success: bool) {
@@ -310,16 +310,16 @@ fn scheduled_groups_reactivate_all_heads_for_late_class_and_equivalence_facts() 
             apply_rules(&view, &queries, &mut expected, false).unwrap();
             let mut actual = Pending::default();
             schedule.apply(&view, &mut actual).unwrap();
-            assert_eq!(actual.0, expected.0, "{mode} late grouped round {round}");
+            assert_eq!(actual, expected, "{mode} late grouped round {round}");
             let external = round
                 .checked_sub(1)
                 .and_then(|index| additions.get(index))
                 .cloned();
-            if actual.0.is_empty() && external.is_none() && round > additions.len() {
+            if actual.is_empty() && external.is_none() && round > additions.len() {
                 break;
             }
             let mut dirty = 0;
-            for quad in actual.0.into_iter().chain(external) {
+            for quad in actual.into_iter().chain(external) {
                 dirty |= schedule.changed(&quad.predicate);
                 data.insert(quad.as_ref());
             }

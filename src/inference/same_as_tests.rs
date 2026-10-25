@@ -180,7 +180,7 @@ fn equality_round_matches_frozen_queries_exhaustively() {
             let mut actual = Pending::default();
             apply_rules(&measured, &optimized, &mut actual, true).unwrap();
             assert_eq!(
-                actual.0,
+                actual.into_iter().collect::<HashSet<_>>(),
                 reference(&data, &original),
                 "one-step equality mismatch mask={mask}, aliases={extra}"
             );
@@ -202,19 +202,19 @@ fn new_symmetry_is_not_visible_to_other_rules_in_the_same_round() {
     };
     let mut pending = Pending::default();
     apply_rules(&measured, &queries(&OWL_RULES[..2]), &mut pending, true).unwrap();
-    assert!(pending.0.contains(&GeneralizedQuad::new(
+    assert!(pending.contains(&GeneralizedQuad::new(
         iri("a"),
         same(),
         iri("c"),
         GraphName::DefaultGraph
     )));
-    assert!(!pending.0.contains(&GeneralizedQuad::new(
+    assert!(!pending.contains(&GeneralizedQuad::new(
         iri("a"),
         same(),
         iri("d"),
         GraphName::DefaultGraph
     )));
-    assert!(pending.0.contains(&GeneralizedQuad::new(
+    assert!(pending.contains(&GeneralizedQuad::new(
         iri("b"),
         same(),
         iri("d"),
@@ -232,7 +232,7 @@ fn new_symmetry_is_not_visible_to_other_rules_in_the_same_round() {
     };
     let mut pending = Pending::default();
     apply_rules(&measured, &queries(&OWL_RULES[..2]), &mut pending, true).unwrap();
-    assert!(pending.0.contains(&GeneralizedQuad::new(
+    assert!(pending.contains(&GeneralizedQuad::new(
         iri("b"),
         same(),
         iri("c"),
@@ -266,9 +266,9 @@ fn frozen_closure(data: &mut GeneralizedDataset) {
     loop {
         let mut pending = Pending::default();
         apply_rules(&transaction, &prepared, &mut pending, false).unwrap();
-        pending
-            .0
-            .extend(super::same_as_reference_tests::one_round(&transaction).unwrap());
+        for quad in super::same_as_reference_tests::one_round(&transaction).unwrap() {
+            pending.insert(quad);
+        }
         super::traversal::chains(
             &transaction,
             &mut pending,
@@ -281,10 +281,10 @@ fn frozen_closure(data: &mut GeneralizedDataset) {
             &crate::inference::diagnostics::rdf_list::ListWitnesses::new(4300),
         )
         .unwrap();
-        if pending.0.is_empty() {
+        if pending.is_empty() {
             break;
         }
-        for quad in pending.0 {
+        for quad in pending {
             Graph::insert(&mut transaction, quad).unwrap();
         }
     }

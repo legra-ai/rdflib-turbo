@@ -154,13 +154,13 @@ fn scheduled_flat_rounds_match_full_queries_with_late_list_and_variable_predicat
             apply_rules(&data, &queries, &mut expected, false).unwrap();
             let mut actual = Pending::default();
             schedule.apply(&data, &mut actual).unwrap();
-            assert_eq!(actual.0, expected.0, "{mode}, immutable round {round}");
+            assert_eq!(actual, expected, "{mode}, immutable round {round}");
             let external = additions.get(round).cloned();
-            if actual.0.is_empty() && external.is_none() {
+            if actual.is_empty() && external.is_none() {
                 break;
             }
             let mut dirty = 0;
-            for quad in actual.0.into_iter().chain(external) {
+            for quad in actual.into_iter().chain(external) {
                 dirty |= schedule.changed(&quad.predicate);
                 data.insert(quad).unwrap();
             }

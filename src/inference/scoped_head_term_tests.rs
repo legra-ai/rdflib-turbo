@@ -102,7 +102,7 @@ fn scoped_inference_heads_keep_literal_subjects_and_apply_pending_predicate_poli
             }
         }
         assert_eq!(dispositions, [6, 1, 2]);
-        for quad in pending.0 {
+        for quad in pending {
             graph.insert(quad).unwrap();
         }
         let source_rows = graph

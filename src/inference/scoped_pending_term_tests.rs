@@ -62,7 +62,7 @@ fn pending_dispositions_preserve_existing_literal_predicates_and_undo_publicatio
             pending.push(&graph, refused).unwrap(),
             HeadDisposition::RefusedLiteralPredicate
         );
-        assert!(pending.0.is_empty());
+        assert!(pending.is_empty());
         for row in [&literal_subject, &blank_predicate] {
             assert_eq!(
                 pending.push(&graph, row.clone()).unwrap(),
@@ -74,7 +74,7 @@ fn pending_dispositions_preserve_existing_literal_predicates_and_undo_publicatio
             );
             assert!(!graph.contains_destination(row.into()).unwrap());
         }
-        for row in pending.0 {
+        for row in pending {
             graph.insert(row).unwrap();
         }
         assert!(
@@ -158,5 +158,5 @@ fn full_term_overlay_hit_does_not_hide_source_error_or_enter_pending() {
             .to_string()
             .contains("source-first")
     );
-    assert!(pending.0.is_empty());
+    assert!(pending.is_empty());
 }

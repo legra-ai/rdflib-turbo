@@ -103,7 +103,7 @@ fn full_term_algebra_matches_original_equality_round_before_blank_predicate_clea
     assert_eq!(equality_rules_one_round(&transaction).unwrap(), expected);
     let mut actual = super::Pending::default();
     super::same_as::apply(&transaction, &mut actual).unwrap();
-    assert_eq!(actual.0, reference);
+    assert_eq!(actual.into_iter().collect::<HashSet<_>>(), reference);
     assert!(
         reference
             .iter()

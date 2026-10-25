@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use oxigraph::model::*;
 use oxigraph::sparql::{PreparedSparqlQuery, SparqlEvaluator};
 use oxrdf::GeneralizedDataset;
@@ -23,6 +21,9 @@ mod intersections;
 mod literal_values;
 mod options;
 mod outcome;
+mod pending;
+#[cfg(test)]
+mod pending_retirement_tests;
 mod request;
 mod same_as;
 #[cfg(test)]
@@ -64,6 +65,7 @@ mod literal_value_tests;
 mod same_as_tests;
 
 use backend::Graph;
+use pending::Pending;
 
 const OWL: &str = "http://www.w3.org/2002/07/owl#";
 
@@ -119,30 +121,12 @@ pub(crate) fn expand_into(
     staged::expand(data, mode, destination, request)
 }
 
-/// One round retains only distinct statements absent from its read snapshot.
-/// Existing facts and duplicate rule results never enter the retained buffer.
-#[derive(Default)]
-struct Pending(HashSet<GeneralizedQuad>);
-
 /// The pinned original's derived-head policy is separate from stored data.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum HeadDisposition {
     Accepted,
     AlreadyPresent,
     RefusedLiteralPredicate,
-}
-
-impl Pending {
-    fn push(&mut self, data: &impl Graph, quad: GeneralizedQuad) -> Result<HeadDisposition> {
-        if self.0.contains(&quad) || data.contains(quad.as_ref())? {
-            return Ok(HeadDisposition::AlreadyPresent);
-        }
-        if quad.predicate.is_literal() {
-            return Ok(HeadDisposition::RefusedLiteralPredicate);
-        }
-        self.0.insert(quad);
-        Ok(HeadDisposition::Accepted)
-    }
 }
 
 fn apply_rules(
@@ -191,10 +175,10 @@ fn expand_inner(
             let mut quad = quad?;
             if quad.object.is_literal() && !data.contains_destination(quad.as_ref())? {
                 quad.graph_name = GraphName::DefaultGraph;
-                literal_publications.0.insert(quad);
+                literal_publications.insert(quad);
             }
         }
-        for quad in literal_publications.0 {
+        for quad in literal_publications {
             data.insert(quad)?;
         }
         literal_values::substitute(data, &request.lexical_context)?;
@@ -248,7 +232,7 @@ fn expand_inner(
             traversal::chains(data, &mut additions, diagnostics.witnesses())?;
             traversal::keys(data, &mut additions, diagnostics.witnesses())?;
         }
-        if additions.0.is_empty() {
+        if additions.is_empty() {
             let outcome = diagnostics.finish(data, mode != "rdfs", |term| {
                 diagnostics::cardinality_zero(term, &request.lexical_context)
             })?;
@@ -258,7 +242,7 @@ fn expand_inner(
             return Ok(outcome);
         }
         let mut dirty = 0;
-        for quad in additions.0 {
+        for quad in additions {
             // Conservatively count destination-only publications too. Native
             // membership kernels still run every round and retain their wider view.
             dirty |= schedule.changed(&quad.predicate);

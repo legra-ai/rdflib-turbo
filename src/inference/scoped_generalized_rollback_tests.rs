@@ -80,7 +80,7 @@ fn pending_list_error_keeps_generalized_destination_and_rolls_back_prior_writes(
         )
         .unwrap();
         assert!(
-            !pending.0.is_empty(),
+            !pending.is_empty(),
             "error must follow actual pending derivation"
         );
         let error = traversal::chains(
@@ -94,7 +94,7 @@ fn pending_list_error_keeps_generalized_destination_and_rolls_back_prior_writes(
                 .to_string()
                 .contains("List contains a recursive rdf:rest reference")
         );
-        for quad in &pending.0 {
+        for quad in &pending {
             assert!(
                 !data.contains(quad.into()).unwrap(),
                 "pending output became visible"
