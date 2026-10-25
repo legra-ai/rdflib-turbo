@@ -27,13 +27,17 @@ def program():
 def test_graph_rule_result_retains_scope_and_source_ownership(dataset, inplace):
     source = StoreDataset() if dataset else Graph(identifier=URIRef("urn:chosen"))
     source.parse(data=SOURCE, format="nt")
-    before = physical_keys(source)
+    before = physical_keys(source.store.backend)
     with source._expand_shared_shapes(program(), "{}", inplace) as (result, warnings):
         assert warnings == []
         assert (result is source) is inplace
         graph = result.default_graph if dataset else result
     assert DERIVED in graph
-    assert physical_keys(source) != before if inplace else physical_keys(source) == before
+    assert (
+        physical_keys(source.store.backend) != before
+        if inplace
+        else physical_keys(source.store.backend) == before
+    )
     source.close()
     if not inplace:
         assert DERIVED in graph, "the returned owner must outlive the original"
@@ -42,7 +46,7 @@ def test_graph_rule_result_retains_scope_and_source_ownership(dataset, inplace):
 @pytest.mark.parametrize("explicit", [False, True])
 def test_rule_consumer_failure_aborts_pending_and_derived_graph_writes(explicit):
     source = Graph().parse(data=SOURCE, format="nt")
-    before = physical_keys(source)
+    before = physical_keys(source.store.backend)
     with pytest.raises(ValueError, match="consumer rejected output"):
         if explicit:
             with source.transaction() as transaction:
@@ -52,7 +56,7 @@ def test_rule_consumer_failure_aborts_pending_and_derived_graph_writes(explicit)
         else:
             with source._expand_shared_shapes(program(), "{}", True):
                 raise ValueError("consumer rejected output")
-    assert physical_keys(source) == before
+    assert physical_keys(source.store.backend) == before
 
 
 @pytest.mark.parametrize("inplace", [False, True])
@@ -89,7 +93,8 @@ def test_shapes_compile_from_native_scopes_and_validate_another_owner(dataset):
     source = StoreDataset() if dataset else Graph(identifier=URIRef("urn:shapes"))
     source.bind("ex", "urn:")
     source.parse(data=SHAPES, format="turtle")
-    compiled, namespaces = source._compile_shared_shapes(True)
+    native, namespaces = source._compile_shared_shapes(True)
+    compiled = SharedShapes.from_compiled(native)
     assert ("ex", "urn:") in namespaces
     data = Graph().parse(data=SOURCE, format="nt")
     with data._validate_shared_shapes(compiled, "{}", False) as result:
@@ -133,7 +138,7 @@ def test_inference_capture_publishes_diagnostics_or_closes_failed_consumer_lease
     monkeypatch, reject_namespace
 ):
     source = StoreDataset().parse(
-        data="<urn:a> <http://www.w3.org/2002/07/owl#sameAs> <urn:b> . <urn:a> <http://www.w3.org/2002/07/owl#differentFrom> <urn:b> .",
+        data="<urn:a> <http://www.w3.org/2002/07/owl#sameAs> <urn:b> .\n<urn:a> <http://www.w3.org/2002/07/owl#differentFrom> <urn:b> .",
         format="nt",
     )
     if reject_namespace:
