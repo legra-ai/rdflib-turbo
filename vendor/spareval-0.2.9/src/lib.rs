@@ -762,7 +762,12 @@ impl PreparedQuery<'_> {
         self,
         dataset: impl QueryableDataset<'b>,
     ) -> Result<QueryTripleIter<'b, oxrdf::GeneralizedTriple>, QueryEvaluationError> {
-        self.evaluate_projected_inference_construct(dataset, construct_projection::InferenceConstruct, false).0
+        self.evaluate_projected_inference_construct(
+            dataset,
+            construct_projection::InferenceConstruct,
+            false,
+        )
+        .0
     }
 
     /// Explains the same inference-only head execution without losing body statistics.
@@ -774,25 +779,39 @@ impl PreparedQuery<'_> {
         QueryExplanation,
     ) {
         self.evaluate_projected_inference_construct(
-            dataset, construct_projection::InferenceConstruct, true,
+            dataset,
+            construct_projection::InferenceConstruct,
+            true,
         )
     }
 
     /// Executes inference heads with an owner-specific, query-local internal projection.
     pub fn execute_projected_inference_construct<
-        'b, D: QueryableDataset<'b>, P: InferenceProjection<'b, D>,
+        'b,
+        D: QueryableDataset<'b>,
+        P: InferenceProjection<'b, D>,
     >(
-        self, dataset: D, projection: P,
+        self,
+        dataset: D,
+        projection: P,
     ) -> Result<QueryTripleIter<'b, P::Output>, QueryEvaluationError> {
         self.evaluate_projected_inference_construct(
-            dataset, construct_projection::ProjectedInference(projection), false,
-        ).0
+            dataset,
+            construct_projection::ProjectedInference(projection),
+            false,
+        )
+        .0
     }
 
     fn evaluate_projected_inference_construct<
-        'b, D: QueryableDataset<'b>, P: construct_projection::ConstructProjection<'b, D>,
+        'b,
+        D: QueryableDataset<'b>,
+        P: construct_projection::ConstructProjection<'b, D>,
     >(
-        self, dataset: D, projection: P, explain: bool,
+        self,
+        dataset: D,
+        projection: P,
+        explain: bool,
     ) -> (
         Result<QueryTripleIter<'b, P::Output>, QueryEvaluationError>,
         QueryExplanation,
