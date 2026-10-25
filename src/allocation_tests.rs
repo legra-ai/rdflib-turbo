@@ -1,7 +1,10 @@
 //! Requested Rust heap bytes, not allocator arenas, Python allocations or RSS.
 //! Run this ignored test alone, with --test-threads=1. Production has no counter.
 use std::alloc::{GlobalAlloc, Layout, System};
+use std::collections::HashSet;
 use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
+
+use oxigraph::model::vocab::{rdf, rdfs, xsd};
 
 use super::*;
 
@@ -153,9 +156,35 @@ fn inference_heap_budget() {
             peak < retained * 2,
             "Inference heap budget exceeded: peak={peak}, retained={retained}"
         );
-        let first = data.dump(py, "nquads").unwrap();
+        // bounded: the fixed 1,000-subject fixture's complete closure, captured after budget checks.
+        let physical_quads = || {
+            data.inner
+                .read()
+                .unwrap()
+                .iter()
+                .map(GeneralizedQuadRef::into_owned)
+                .collect::<HashSet<_>>()
+        };
+        let first = physical_quads();
         data.infer(py, "owlrl", None, false, false, None).unwrap();
-        assert_eq!(data.dump(py, "nquads").unwrap(), first);
+        let second = physical_quads();
+        assert!(
+            first.is_subset(&second),
+            "Repeated OWL-RL must not remove facts"
+        );
+        // bounded: the pinned original's second call adds one datatype row per fixture integer.
+        let expected_added = (0..1000)
+            .map(|index| {
+                GeneralizedQuad::new(
+                    Literal::new_typed_literal(index.to_string(), xsd::INTEGER),
+                    rdf::TYPE,
+                    rdfs::DATATYPE,
+                    GraphName::DefaultGraph,
+                )
+            })
+            .collect::<HashSet<_>>();
+        let added = second.difference(&first).cloned().collect::<HashSet<_>>();
+        assert_eq!(added, expected_added);
     });
 }
 
