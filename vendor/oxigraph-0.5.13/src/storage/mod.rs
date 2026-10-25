@@ -18,7 +18,8 @@ mod lexical_hash_tests;
 pub use crate::storage::error::{CorruptionError, LoaderError, SerializerError, StorageError};
 use crate::storage::memory::{
     MemoryChangedRows, MemoryDecodingGraphIterator, MemoryPreparedChanges, MemoryStorage,
-    MemoryStorageBulkLoader, MemoryStorageReader, MemoryStorageTransaction, QuadIterator,
+    MemoryStorageBulkLoader, MemoryStorageReader, MemoryStorageTransaction, MemoryUnionCandidates,
+    QuadIterator,
 };
 use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, StrHash, StrLookup};
 #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
@@ -227,6 +228,21 @@ enum StorageReaderKind<'a> {
     expect(clippy::unnecessary_wraps)
 )]
 impl<'a> StorageReader<'a> {
+    pub(crate) fn memory_union_candidates(
+        &self,
+        subject: Option<&EncodedTerm>,
+        predicate: Option<&EncodedTerm>,
+        object: Option<&EncodedTerm>,
+    ) -> Option<MemoryUnionCandidates<'a>> {
+        match &self.kind {
+            StorageReaderKind::Memory(reader) => {
+                Some(reader.union_candidates(subject, predicate, object))
+            }
+            #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]
+            StorageReaderKind::RocksDb(_) => None,
+        }
+    }
+
     pub fn len(&self) -> Result<usize, StorageError> {
         match &self.kind {
             #[cfg(all(not(target_family = "wasm"), feature = "rocksdb"))]

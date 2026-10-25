@@ -47,6 +47,28 @@ pub trait QueryableDataset<'a>: Sized + 'a {
         graph_name: Option<Option<&Self::InternalTerm>>,
     ) -> impl Iterator<Item = Result<InternalQuad<Self::InternalTerm>, Self::Error>> + use<'a, Self>;
 
+    /// Supplies a unique default-graph view of the union of all physical graphs.
+    ///
+    /// `None` retains the evaluator's generic union implementation. A supplied
+    /// stream must preserve full RDF term identity and check cancellation for
+    /// every matching physical candidate, including candidates removed as
+    /// duplicates. Errors from a supplied stream propagate without retry.
+    fn internal_unique_default_union_quads_for_pattern(
+        &self,
+        _subject: Option<&Self::InternalTerm>,
+        _predicate: Option<&Self::InternalTerm>,
+        _object: Option<&Self::InternalTerm>,
+        _cancellation_token: &crate::CancellationToken,
+    ) -> Option<
+        Box<
+            dyn Iterator<
+                    Item = Result<InternalQuad<Self::InternalTerm>, crate::QueryEvaluationError>,
+                > + 'a,
+        >,
+    > {
+        None
+    }
+
     /// Fetches the list of dataset named graphs
     fn internal_named_graphs(
         &self,
@@ -117,6 +139,10 @@ pub trait QueryableDataset<'a>: Sized + 'a {
             .effective_boolean_value())
     }
 }
+
+#[cfg(test)]
+#[path = "default_union_tests.rs"]
+mod default_union_tests;
 
 impl<'a> QueryableDataset<'a> for &'a Dataset {
     type InternalTerm = TermCow<'a>;

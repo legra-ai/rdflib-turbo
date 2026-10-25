@@ -71,6 +71,8 @@ def test_vendor_memory_runner_applies_current_root_patches_and_locked_native_tes
 
     def cargo(arguments, *, cwd, check, **kwargs):
         calls.append((arguments, cwd, check))
+        if "--ignored" in arguments:
+            return SimpleNamespace(stdout="test result: ok. 1 passed; 0 failed;")
         return SimpleNamespace(
             stdout="\n".join(
                 f"{name}: test"
@@ -84,7 +86,7 @@ def test_vendor_memory_runner_applies_current_root_patches_and_locked_native_tes
 
     monkeypatch.setattr(vendor_memory_tests.subprocess, "run", cargo)
     vendor_memory_tests.run(root)
-    assert len(calls) == 8
+    assert len(calls) == 9
     assert "build" in calls[0][0] and calls[0][0][-1] == "--lib"
     assert calls[1][0][-2:] == ["--", "--list"]
     arguments, directory, checked = calls[2]
@@ -92,8 +94,8 @@ def test_vendor_memory_runner_applies_current_root_patches_and_locked_native_tes
     assert arguments[0] == "cargo"
     assert "--locked" in arguments and "--lib" in arguments
     assert "storage::" in arguments
-    assert arguments[arguments.index("--features") + 1] == "exact-term-storage,rocksdb"
-    assert calls[7][0][calls[7][0].index("--features") + 1] == "rocksdb"
+    assert arguments[arguments.index("--features") + 1] == vendor_memory_tests.EXACT_FEATURES
+    assert calls[8][0][calls[8][0].index("--features") + 1] == "rocksdb"
     assert arguments[arguments.index("--manifest-path") + 1] == str(
         root / "vendor/oxigraph-0.5.13/Cargo.toml"
     )
@@ -120,11 +122,17 @@ def test_native_inventory_respects_real_filtering_and_runs_both_owning_cohorts(
             return SimpleNamespace(stdout="\n".join(f"{name}: test" for name in selected))
         if "test" in arguments:
             executed.append(arguments[arguments.index("--lib") + 1])
-        return SimpleNamespace(stdout="")
+        return SimpleNamespace(stdout="test result: ok. 1 passed; 0 failed;")
 
     monkeypatch.setattr(vendor_memory_tests.subprocess, "run", cargo)
     vendor_memory_tests.run(tmp_path)
-    assert executed == ["storage::", "store::generalized::"] * 2
+    assert executed == [
+        "storage::",
+        "store::generalized::",
+        vendor_memory_tests.UNION_BUDGET,
+        "storage::",
+        "store::generalized::",
+    ]
 
 
 def test_vendor_memory_runner_preserves_native_failure(tmp_path, monkeypatch, vendor_memory_tests):
@@ -179,6 +187,8 @@ def test_missing_instrumented_regressions_fail_before_execution(
 
     def cargo(arguments, **kwargs):
         calls.append(arguments)
+        if "--ignored" in arguments:
+            return SimpleNamespace(stdout="test result: ok. 1 passed; 0 failed;")
         return SimpleNamespace(stdout="storage::memory::tests::test_range: test\n")
 
     monkeypatch.setattr(vendor_memory_tests.subprocess, "run", cargo)
@@ -195,6 +205,8 @@ def test_missing_upstream_hash_regression_fails_inventory(
 
     def cargo(arguments, **kwargs):
         calls.append(arguments)
+        if "--ignored" in arguments:
+            return SimpleNamespace(stdout="test result: ok. 1 passed; 0 failed;")
         return SimpleNamespace(
             stdout="\n".join(f"{name}: test" for name in vendor_memory_tests.REQUIRED_TESTS)
         )
@@ -212,6 +224,8 @@ def test_missing_lexical_hash_regression_fails_inventory(
 
     def cargo(arguments, **kwargs):
         calls.append(arguments)
+        if "--ignored" in arguments:
+            return SimpleNamespace(stdout="test result: ok. 1 passed; 0 failed;")
         return SimpleNamespace(
             stdout="\n".join(
                 f"{name}: test"
@@ -232,6 +246,8 @@ def test_missing_upstream_store_guard_fails_inventory(tmp_path, monkeypatch, ven
 
     def cargo(arguments, **kwargs):
         calls.append(arguments)
+        if "--ignored" in arguments:
+            return SimpleNamespace(stdout="test result: ok. 1 passed; 0 failed;")
         return SimpleNamespace(
             stdout="\n".join(
                 f"{name}: test"
@@ -245,7 +261,7 @@ def test_missing_upstream_store_guard_fails_inventory(tmp_path, monkeypatch, ven
     monkeypatch.setattr(vendor_memory_tests.subprocess, "run", cargo)
     with pytest.raises(RuntimeError, match="Missing native storage regressions"):
         vendor_memory_tests.run(tmp_path)
-    assert len(calls) == 6
+    assert len(calls) == 7
 
 
 @pytest.mark.parametrize(
@@ -265,6 +281,8 @@ def test_missing_generalized_storage_contract_fails_before_execution(
 
     def cargo(arguments, **kwargs):
         calls.append(arguments)
+        if "--ignored" in arguments:
+            return SimpleNamespace(stdout="test result: ok. 1 passed; 0 failed;")
         names = (
             *vendor_memory_tests.REQUIRED_TESTS,
             "storage::numeric_encoder::tests::str_hash_stability",
@@ -295,6 +313,8 @@ def test_missing_prefix_scope_contract_fails_before_execution(
 
     def cargo(arguments, **kwargs):
         calls.append(arguments)
+        if "--ignored" in arguments:
+            return SimpleNamespace(stdout="test result: ok. 1 passed; 0 failed;")
         names = (
             *vendor_memory_tests.REQUIRED_TESTS,
             "storage::numeric_encoder::tests::str_hash_stability",
@@ -320,12 +340,14 @@ def test_missing_compact_graph_contract_fails_before_execution(
 
     def cargo(arguments, **kwargs):
         calls.append(arguments)
+        if "--ignored" in arguments:
+            return SimpleNamespace(stdout="test result: ok. 1 passed; 0 failed;")
         names = (
             *vendor_memory_tests.REQUIRED_TESTS,
             "storage::numeric_encoder::tests::str_hash_stability",
             "storage::rocksdb::upstream_hash_tests::exact_hash_declarations_are_rejected_before_upstream_migration",
         )
-        hide = not upstream or "exact-term-storage,rocksdb" not in arguments
+        hide = not upstream or vendor_memory_tests.EXACT_FEATURES not in arguments
         return SimpleNamespace(
             stdout="\n".join(f"{name}: test" for name in names if not hide or name != missing)
         )
@@ -333,7 +355,7 @@ def test_missing_compact_graph_contract_fails_before_execution(
     monkeypatch.setattr(vendor_memory_tests.subprocess, "run", cargo)
     with pytest.raises(RuntimeError, match="Missing native storage regressions"):
         vendor_memory_tests.run(tmp_path)
-    assert len(calls) == (6 if upstream else 2)
+    assert len(calls) == (7 if upstream else 2)
 
 
 @pytest.mark.parametrize(
@@ -345,3 +367,60 @@ def test_missing_compact_graph_contract_fails_before_execution(
 )
 def test_full_term_lexical_projection_is_a_mandatory_owner_guard(vendor_memory_tests, name):
     assert f"store::generalized::lexical_tests::{name}" in vendor_memory_tests.REQUIRED_TESTS
+
+
+@pytest.mark.parametrize(
+    "summary", ("test result: ok. 0 passed; 0 failed;", "test result: ok. 1 passed; 0 failed;")
+)
+def test_union_budget_requires_exact_isolated_execution(
+    tmp_path, monkeypatch, vendor_memory_tests, summary
+):
+    (tmp_path / "Cargo.toml").write_text("[patch.crates-io]\n")
+    calls = []
+    name = "storage::memory::lock_tests::union_cache::native_union_query_cache_does_not_exceed_sixteen_mebibytes"
+
+    def cargo(arguments, **kwargs):
+        calls.append(arguments)
+        if "--list" in arguments:
+            return SimpleNamespace(
+                stdout="\n".join(
+                    f"{item}: test" for item in (*vendor_memory_tests.REQUIRED_TESTS, name)
+                )
+            )
+        return SimpleNamespace(stdout=summary)
+
+    monkeypatch.setattr(vendor_memory_tests.subprocess, "run", cargo)
+    if "0 passed" in summary:
+        with pytest.raises(RuntimeError, match="did not execute exactly one"):
+            vendor_memory_tests.run_configuration(
+                tmp_path,
+                vendor_memory_tests.EXACT_FEATURES,
+                vendor_memory_tests.REQUIRED_TESTS,
+                isolated=(name,),
+            )
+    else:
+        vendor_memory_tests.run_configuration(
+            tmp_path,
+            vendor_memory_tests.EXACT_FEATURES,
+            vendor_memory_tests.REQUIRED_TESTS,
+            isolated=(name,),
+        )
+    assert calls[-1][-6:] == [name, "--", "--ignored", "--exact", "--nocapture", "--test-threads=1"]
+    assert "spareval/rdf-set-union" in vendor_memory_tests.EXACT_FEATURES
+
+
+def test_union_semantics_and_budget_are_mandatory(vendor_memory_tests):
+    required = set(vendor_memory_tests.REQUIRED_TESTS)
+    assert (
+        "storage::memory::lock_tests::union_cache::semantics::native_union_cancellation_errors_when_only_physical_duplicates_remain"
+        in required
+    )
+    assert vendor_memory_tests.UNION_BUDGET in required
+
+
+def test_native_union_required_names_match_actual_compiled_inventory(vendor_memory_tests):
+    fixture = Path(__file__).parent / "fixtures/native_union_test_inventory.json"
+    actual = json.loads(fixture.read_text())
+    assert set(vendor_memory_tests.REQUIRED_TESTS) <= set(actual["native_exact"])
+    assert vendor_memory_tests.UNION_BUDGET in actual["native_exact"]
+    assert vendor_memory_tests.UNION_BUDGET not in actual["native_standard"]

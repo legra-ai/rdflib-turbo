@@ -1,5 +1,7 @@
 //! Optional finite reference axioms, initialized before the first inference round.
 
+#[cfg(all(test, feature = "allocation-profiling"))]
+use crate::allocation_tests::trace;
 use oxigraph::io::{RdfFormat, RdfParser};
 use oxigraph::model::*;
 
@@ -115,6 +117,8 @@ pub(super) fn expand_configured<'a>(
     mode: &'a str,
     request: InferenceRequest,
 ) -> Result<(PreparedOptions<'a>, InferenceOutcome)> {
+    #[cfg(all(test, feature = "allocation-profiling"))]
+    trace::mark("configured_enter", 0, (0, 0));
     match mode {
         "none" | "" => {
             return Ok((
@@ -153,7 +157,11 @@ pub(super) fn expand_configured<'a>(
         }
     }
     prepared.insert(|quad| data.insert(quad.into()))?;
+    #[cfg(all(test, feature = "allocation-profiling"))]
+    trace::mark("configured_initialization_done", 0, (0, 0));
     let outcome = expand_inner(data, mode, request)?;
+    #[cfg(all(test, feature = "allocation-profiling"))]
+    trace::mark("configured_return", 0, (0, 0));
     Ok((prepared, outcome))
 }
 

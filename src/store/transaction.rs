@@ -1,4 +1,6 @@
 //! Python transaction handle; its native transaction remains on the session owner.
+#[cfg(all(test, feature = "allocation-profiling"))]
+use crate::allocation_tests::trace;
 use pyo3::prelude::*;
 use std::sync::Arc;
 
@@ -202,6 +204,8 @@ impl NativeTransaction {
         datatype_axioms: bool,
         prior_error_messages: Option<Vec<String>>,
     ) -> PyResult<crate::inference::InferenceOutcome> {
+        #[cfg(all(test, feature = "allocation-profiling"))]
+        trace::mark("native_transaction_enter", 0, (0, 0));
         let (source_graph, destination_graph) = graphs;
         let (request, publisher) = match crate::inference::InferenceRequest::capture(
             py,
@@ -217,6 +221,8 @@ impl NativeTransaction {
                 return Err(failure);
             }
         };
+        #[cfg(all(test, feature = "allocation-profiling"))]
+        trace::mark("native_capture_done", 0, (0, 0));
         let result = py.detach(|| {
             match self.session.execute(Operation::InferGraph {
                 mode,
@@ -228,6 +234,8 @@ impl NativeTransaction {
                 _ => unreachable!("native scoped inference reply type"),
             }
         });
+        #[cfg(all(test, feature = "allocation-profiling"))]
+        trace::mark("native_execute_done", 0, (0, 0));
         publisher.complete(py, result)
     }
 

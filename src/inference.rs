@@ -1,3 +1,5 @@
+#[cfg(all(test, feature = "allocation-profiling"))]
+use crate::allocation_tests::trace;
 use oxigraph::model::*;
 use oxigraph::sparql::{PreparedSparqlQuery, SparqlEvaluator};
 use oxrdf::GeneralizedDataset;
@@ -155,6 +157,8 @@ fn expand_inner(
     mode: &str,
     request: InferenceRequest,
 ) -> Result<InferenceOutcome> {
+    #[cfg(all(test, feature = "allocation-profiling"))]
+    trace::mark("kernel_enter", 0, (0, 0));
     match mode {
         "none" | "" => return Ok(InferenceOutcome::default()),
         "rdfs" | "owlrl" | "both" => {}
@@ -164,6 +168,8 @@ fn expand_inner(
         // RDFS_Semantics.one_time_rules publishes every literal's identity pair
         // directly to its destination, even when the input contains that SPO.
         // Retain only the output delta; no source snapshot is needed.
+        #[cfg(all(test, feature = "allocation-profiling"))]
+        trace::mark("literal_publications_before", 0, (0, 0));
         let mut literal_publications = Pending::default();
         for quad in data.quads(None, None, None) {
             let mut quad = quad?;
@@ -172,10 +178,20 @@ fn expand_inner(
                 literal_publications.insert(quad);
             }
         }
+        #[cfg(all(test, feature = "allocation-profiling"))]
+        trace::mark(
+            "literal_publications_collected",
+            0,
+            literal_publications.trace_counts(),
+        );
         for quad in literal_publications.into_heads() {
             data.insert_head(quad)?;
         }
+        #[cfg(all(test, feature = "allocation-profiling"))]
+        trace::mark("literal_publications_done", 0, (0, 0));
         literal_values::substitute(data, &request.lexical_context)?;
+        #[cfg(all(test, feature = "allocation-profiling"))]
+        trace::mark("literal_values_done", 0, (0, 0));
     }
     let mut diagnostics = diagnostics::Diagnostics::new(
         request.prior_error_messages,
@@ -192,12 +208,16 @@ fn expand_inner(
             &request.lexical_context,
         )?;
     }
+    #[cfg(all(test, feature = "allocation-profiling"))]
+    trace::mark("resources_before", 0, (0, 0));
     let mut initial_resources = Pending::default();
     if mode != "owlrl" {
         for quad in axioms::resources(data) {
             initial_resources.push(data, quad?)?;
         }
     }
+    #[cfg(all(test, feature = "allocation-profiling"))]
+    trace::mark("resources_collected", 0, initial_resources.trace_counts());
     // bounded: one prepared query per built-in rule.
     let mut schedule = scheduling::Schedule::for_mode(mode)?;
     let queries = rules
@@ -210,7 +230,16 @@ fn expand_inner(
                 .map_err(|e| Error::Runtime(format!("Invalid inference rule: {e}")))
         })
         .collect::<Result<Vec<_>>>()?;
+    #[cfg(all(test, feature = "allocation-profiling"))]
+    trace::mark("rules_prepared", 0, initial_resources.trace_counts());
+    #[cfg(all(test, feature = "allocation-profiling"))]
+    let mut trace_round = 0;
     loop {
+        #[cfg(all(test, feature = "allocation-profiling"))]
+        {
+            trace_round += 1;
+            trace::mark("round_enter", trace_round, initial_resources.trace_counts());
+        }
         if mode != "rdfs" {
             diagnostics.round(data)?;
         }
@@ -218,8 +247,17 @@ fn expand_inner(
         if mode != "rdfs" {
             same_as::apply(data, &mut additions)?;
         }
+        #[cfg(all(test, feature = "allocation-profiling"))]
+        trace::mark("schedule_before", trace_round, additions.trace_counts());
+        #[cfg(not(all(test, feature = "allocation-profiling")))]
         schedule.apply(data, &mut additions)?;
+        #[cfg(all(test, feature = "allocation-profiling"))]
+        schedule.apply_traced(data, &mut additions, trace_round)?;
+        #[cfg(all(test, feature = "allocation-profiling"))]
+        trace::mark("schedule_after", trace_round, additions.trace_counts());
         apply_rules(data, &queries, &mut additions, false)?;
+        #[cfg(all(test, feature = "allocation-profiling"))]
+        trace::mark("other_queries_after", trace_round, additions.trace_counts());
         if mode != "rdfs" {
             // Lists can themselves be inferred, so discover them each round.
             intersections::additions(data, &mut additions)?;
@@ -227,14 +265,20 @@ fn expand_inner(
             traversal::keys(data, &mut additions, diagnostics.witnesses())?;
         }
         if additions.is_empty() {
+            #[cfg(all(test, feature = "allocation-profiling"))]
+            trace::mark("diagnostics_before", trace_round, additions.trace_counts());
             let outcome = diagnostics.finish(data, mode != "rdfs", |term| {
                 diagnostics::cardinality_zero(term, &request.lexical_context)
             })?;
             if mode != "rdfs" {
                 data.cleanup_blank_predicates()?;
             }
+            #[cfg(all(test, feature = "allocation-profiling"))]
+            trace::mark("kernel_return", trace_round, additions.trace_counts());
             return Ok(outcome);
         }
+        #[cfg(all(test, feature = "allocation-profiling"))]
+        trace::mark("publish_before", trace_round, additions.trace_counts());
         let mut dirty = 0;
         for quad in additions.into_heads() {
             // Conservatively count destination-only publications too. Native
@@ -242,6 +286,8 @@ fn expand_inner(
             dirty |= schedule.changed(&quad.as_ref().predicate.into_owned());
             data.insert_head(quad)?;
         }
+        #[cfg(all(test, feature = "allocation-profiling"))]
+        trace::mark("publish_after", trace_round, (0, 0));
         schedule.advance(dirty);
     }
 }

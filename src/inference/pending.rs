@@ -58,6 +58,11 @@ impl Pending {
         )
     }
 
+    #[cfg(all(test, feature = "allocation-profiling"))]
+    pub(super) fn trace_counts(&self) -> (usize, usize) {
+        (self.0.len(), self.1.len())
+    }
+
     #[cfg(test)]
     pub(super) fn heads(&self) -> impl Iterator<Item = GeneralizedQuadRef<'_>> {
         self.0
