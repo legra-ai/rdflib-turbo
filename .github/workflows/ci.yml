@@ -252,7 +252,7 @@ jobs:
       - name: Exact-term transactional storage contracts
         run: make test-store-contract
       - name: Native allocation regression budgets
-        run: uv run --no-project --python 3.13 python -m scripts.allocation_budgets
+        run: uv run --no-project --python 3.13 python -m scripts.allocation_budgets --yaml-authority "$YAML_AUTHORITY"
       - run: uv run --locked --only-group dev ruff check python tests scripts
       - run: uv run --locked --only-group dev ruff format --check python tests scripts
 

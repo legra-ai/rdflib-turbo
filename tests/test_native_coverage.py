@@ -358,3 +358,48 @@ def test_native_uv_project_pins_the_requested_interpreter(tmp_path):
     )
     assert json.loads(output) == list(sys.version_info[:2])
     assert (project / ".python-version").is_file()
+
+
+def test_windows_runtime_metadata_uses_create_process_without_posix_launcher(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    module = harness()
+    prefix = str(tmp_path / "runtime")
+    site = str(tmp_path / "selected/site-packages")
+    calls = []
+
+    def posix_forbidden(*args, **kwargs):
+        raise AssertionError("Windows metadata query reached the POSIX collector launcher")
+
+    def create_process(arguments, **kwargs):
+        calls.append((arguments, kwargs))
+        output = (
+            json.dumps({"purelib": site, "platlib": site, "rdflib": site + "/rdflib/__init__.py"})
+            if "sysconfig" in arguments[-1]
+            else prefix
+        )
+        return SimpleNamespace(returncode=0, stdout=output + "\n")
+
+    monkeypatch.setattr(module.sys, "platform", "win32")
+    monkeypatch.setattr(module, "run", posix_forbidden)
+    monkeypatch.setattr(module.subprocess, "run", create_process)
+    result = module.embedded_python_environment(str(tmp_path / "python.exe"), {"SENTINEL": "kept"})
+    assert result["PYTHONHOME"] == prefix
+    assert result["PYTHONPATH"] == site
+    assert len(calls) == 2
+    assert all(args[1:3] == ["-I", "-c"] for args, _ in calls)
+    assert all(options["env"] == {"SENTINEL": "kept"} for _, options in calls)
+
+
+def test_windows_runtime_metadata_preserves_dependency_query_failure(monkeypatch):
+    from types import SimpleNamespace
+
+    module = harness()
+    monkeypatch.setattr(module.sys, "platform", "win32")
+    monkeypatch.setattr(
+        module.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=1, stdout="No module named 'rdflib'"),
+    )
+    with pytest.raises(RuntimeError, match="rdflib"):
+        module.embedded_python_environment("C:/selected/python.exe", {})

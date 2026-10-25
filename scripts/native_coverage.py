@@ -22,6 +22,7 @@ import tempfile
 import tomllib
 import uuid
 import zipfile
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from email.parser import Parser
 from pathlib import Path
@@ -83,25 +84,36 @@ def run(arguments, environment=None, *, capture=False):
         return text
 
 
+def runtime_query(python, code, environment):
+    """Query the selected runtime portably without extending POSIX coverage support."""
+    arguments = [python, "-I", "-c", code]
+    if sys.platform != "win32":
+        return run(arguments, environment, capture=True)
+    # Windows uses CreateProcess; the native coverage collector remains POSIX-only.
+    result = subprocess.run(
+        list(map(str, arguments)),
+        env=environment,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    if result.returncode:
+        raise RuntimeError(f"Runtime query failed ({result.returncode}): {result.stdout}")
+    return result.stdout
+
+
 def embedded_python_environment(python, environment):
     """Bind embedded CPython to the selected runtime and its installed dependencies."""
-    prefix = run(
-        [python, "-I", "-c", "import sys; print(sys.base_prefix)"], environment, capture=True
-    ).strip()
+    prefix = runtime_query(python, "import sys; print(sys.base_prefix)", environment).strip()
     if not Path(prefix).is_absolute():
         raise RuntimeError("Python did not report an absolute runtime prefix")
     installed = json.loads(
-        run(
-            [
-                python,
-                "-I",
-                "-c",
-                "import json, sysconfig, rdflib; "
-                "print(json.dumps({'purelib': sysconfig.get_path('purelib'), "
-                "'platlib': sysconfig.get_path('platlib'), 'rdflib': rdflib.__file__}))",
-            ],
+        runtime_query(
+            python,
+            "import json, sysconfig, rdflib; "
+            "print(json.dumps({'purelib': sysconfig.get_path('purelib'), "
+            "'platlib': sysconfig.get_path('platlib'), 'rdflib': rdflib.__file__}))",
             environment,
-            capture=True,
         )
     )
     sites = []
@@ -126,10 +138,8 @@ def embedded_python_environment(python, environment):
         "PYTHONSAFEPATH": "1",
     }
     if sys.platform == "linux":
-        library = run(
-            [python, "-I", "-c", "import sysconfig; print(sysconfig.get_config_var('LIBDIR'))"],
-            environment,
-            capture=True,
+        library = runtime_query(
+            python, "import sysconfig; print(sysconfig.get_config_var('LIBDIR'))", environment
         ).strip()
         if not Path(library).is_absolute():
             raise RuntimeError("Python did not report an absolute library directory")
@@ -216,6 +226,60 @@ def initialize_dependencies(root, profiles, output, project, python, environment
     run(["uv", "sync", "--project", project_environment, "--locked", "--no-build"], environment)
     verify_dependency_inputs(root, profiles, output, provenance)
     return provenance
+
+
+@contextmanager
+def locked_python_environment(root, output, python, yaml_authority):
+    """Bootstrap native source-test callers from exact locked dependency inputs."""
+    root, output = Path(root).resolve(), Path(output).resolve()
+    output.mkdir(parents=True, exist_ok=False)
+    profiles = output / "profiles"
+    authority = Path(yaml_authority).resolve(strict=True)
+    checker = yaml_checker()
+    frozen = checker.verify(root, authority)
+    environment = dict(os.environ)
+    for name in (
+        "VIRTUAL_ENV",
+        "UV_PYTHON",
+        "UV_PROJECT_ENVIRONMENT",
+        "UV_PROJECT",
+        "PYTHONPATH",
+        "PYTHONHOME",
+        "PYO3_PYTHON",
+    ):
+        environment.pop(name, None)
+    dependencies = initialize_dependencies(
+        root, profiles, output, "rdflib-turbo", python, environment, frozen["wheel"]
+    )
+    if checker.verify(root, authority) != frozen:
+        raise RuntimeError("YAML dependency changed during source-test dependency setup")
+    project = profiles / "project"
+    venv = project / ".venv"
+    selected = venv / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+    project_run = ["uv", "run", "--project", project, "--locked", "--no-sync", "--no-build"]
+    installed = verify_installed_yaml(root, authority, project_run, venv, environment)
+    configured = embedded_python_environment(selected, environment)
+    configured["PYO3_PYTHON"] = str(selected)
+    (output / "runtime-inputs.json").write_text(
+        json.dumps(
+            {
+                "python": str(selected),
+                "dependencies": dependencies,
+                "yaml_inputs": frozen["record"],
+                "yaml_installed": installed,
+            },
+            indent=2,
+        )
+        + "\n"
+    )
+    try:
+        yield configured
+    finally:
+        verify_dependency_inputs(root, profiles, output, dependencies)
+        if checker.verify(root, authority) != frozen:
+            raise RuntimeError("YAML dependency changed during native source tests")
+        if verify_installed_yaml(root, authority, project_run, venv, environment) != installed:
+            raise RuntimeError("Installed YAML changed during native source tests")
 
 
 def facade_payload(wheel):

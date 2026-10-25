@@ -1,9 +1,11 @@
 """Run every native allocation budget alone and reject missing Cargo test filters."""
 
-import os
+import argparse
 import sys
+import uuid
+from pathlib import Path
 
-from .native_coverage import embedded_python_environment, run
+from .native_coverage import locked_python_environment, run
 
 # bounded: these twenty-one regression budgets each require an isolated test process.
 TESTS = (
@@ -49,9 +51,15 @@ def run_budgets(environment):
 
 
 def main():
-    environment = embedded_python_environment(sys.executable, dict(os.environ))
-    environment["PYO3_PYTHON"] = sys.executable
-    run_budgets(environment)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--yaml-authority", type=Path, required=True)
+    args = parser.parse_args()
+    root = Path(__file__).resolve().parents[1]
+    output = root / "target/allocation-budgets" / uuid.uuid4().hex
+    with locked_python_environment(
+        root, output, sys.executable, args.yaml_authority
+    ) as environment:
+        run_budgets(environment)
 
 
 if __name__ == "__main__":
