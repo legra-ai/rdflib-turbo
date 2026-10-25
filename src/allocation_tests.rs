@@ -10,6 +10,8 @@ use super::*;
 
 #[path = "allocation_canonical_profile_tests.rs"]
 mod canonical;
+#[path = "allocation_trace_tests.rs"]
+pub(crate) mod trace;
 
 struct CountingAllocator;
 static LIVE: AtomicUsize = AtomicUsize::new(0);
