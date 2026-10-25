@@ -199,3 +199,31 @@ def test_opt_in_allocator_fixture_is_not_a_production_coverage_source(profiler):
     fixtures = list((root / "src").glob("allocation_canonical_profile*.rs"))
     assert len(fixtures) == 1
     assert str(fixtures[0].relative_to(root)) not in native_coverage.owned_sources(root)
+
+
+def test_report_receipt_preserves_equal_lexical_literals_datatypes_and_languages():
+    from rdflib import Graph, Literal, URIRef
+    from rdflib.namespace import XSD
+
+    root = Path(__file__).resolve().parents[1]
+    spec = importlib.util.spec_from_file_location(
+        "memory_full_report_terms", root / "scripts/canonical_memory_fixture.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    graph = Graph()
+    values = [
+        Literal("same"),
+        Literal("same", datatype=XSD.string),
+        Literal("same", lang="en"),
+        Literal("same", lang="fr"),
+    ]
+    for value in values:
+        graph.add((URIRef("urn:report"), URIRef("urn:value"), value))
+    observed = {row[2] for row in module.report_terms(graph)}
+    assert observed == {
+        ("Literal", "same", None, None),
+        ("Literal", "same", str(XSD.string), None),
+        ("Literal", "same", None, "en"),
+        ("Literal", "same", None, "fr"),
+    }

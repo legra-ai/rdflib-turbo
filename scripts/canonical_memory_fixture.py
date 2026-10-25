@@ -70,22 +70,27 @@ def source_metadata(sources):
         sys.meta_path[:] = before
 
 
-def facts(data):
+def full_term_key(term):
     from rdflib import Literal
 
-    def key(term):
-        return (
-            type(term).__name__,
-            str(term),
-            str(term.datatype) if isinstance(term, Literal) and term.datatype is not None else None,
-            term.language if isinstance(term, Literal) else None,
-        )
+    return (
+        type(term).__name__,
+        str(term),
+        str(term.datatype) if isinstance(term, Literal) and term.datatype is not None else None,
+        term.language if isinstance(term, Literal) else None,
+    )
 
+
+def facts(data):
     default = data.default_graph.identifier
     return {
-        (*map(key, (s, p, o)), None if graph == default else key(graph))
+        (*map(full_term_key, (s, p, o)), None if graph == default else full_term_key(graph))
         for s, p, o, graph in data.quads((None,) * 4)
     }
+
+
+def report_terms(graph):
+    return sorted((tuple(map(full_term_key, triple)) for triple in graph), key=repr)
 
 
 def source_package_root(source, name):
@@ -260,12 +265,6 @@ def validate_observation(data, observation, text, shape_text, mode):
         "flags": flags,
         "conforms": actual[0],
         "report_text": actual[2],
-        "report_triples": sorted(
-            (tuple((type(term).__name__, str(term)) for term in triple) for triple in actual[1]),
-            key=repr,
-        ),
-        "original_report_triples": sorted(
-            (tuple((type(term).__name__, str(term)) for term in triple) for triple in expected[1]),
-            key=repr,
-        ),
+        "report_triples": report_terms(actual[1]),
+        "original_report_triples": report_terms(expected[1]),
     }
