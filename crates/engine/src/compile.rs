@@ -634,6 +634,15 @@ impl CompiledShapes {
             });
         }
         for shape in &shapes {
+            for constraint in &shape.constraints {
+                if let Constraint::MemberShape(target) = constraint
+                    && shapes[*target].path.is_some()
+                {
+                    return Err(Error::Invalid(
+                        "sh:memberShape requires a node shape".into(),
+                    ));
+                }
+            }
             for &p in &shape.properties {
                 if shapes[p].path.is_none() {
                     return Err(Error::Invalid(format!(

@@ -1,5 +1,18 @@
 use super::*;
 
+impl Violation {
+    fn data_term(
+        &self,
+        value: &Term,
+        display: &crate::display::Display<'_, impl GraphRead + ?Sized, impl GraphRead + ?Sized>,
+    ) -> Result<String> {
+        match self.data_description {
+            DataDescription::Identity => Ok(value.to_string()),
+            DataDescription::Expanded => display.term(value, false),
+        }
+    }
+}
+
 impl CompiledShapes {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn write_result(
@@ -29,14 +42,18 @@ impl CompiledShapes {
             add(report, &result, predicate, object)?;
         }
         clones.copy(&self.graph, report, &shape.node)?;
-        clones.copy(data, report, &violation.focus)?;
+        if matches!(violation.data_description, DataDescription::Expanded) {
+            clones.copy(data, report, &violation.focus)?;
+        }
         if let Some(path) = &violation.path {
             add(report, &result, iri(SH, "resultPath"), path.clone())?;
             clones.copy(&self.graph, report, path)?;
         }
         if let Some(value) = &violation.value {
             add(report, &result, iri(SH, "value"), value.clone())?;
-            clones.copy(data, report, value)?;
+            if matches!(violation.data_description, DataDescription::Expanded) {
+                clones.copy(data, report, value)?;
+            }
         }
         if let Some(constraint) = &violation.source_constraint {
             add(
@@ -85,7 +102,7 @@ impl CompiledShapes {
                     }
                 }
             } else {
-                let focus = display.term(&violation.focus, false)?;
+                let focus = violation.data_term(&violation.focus, display)?;
                 let component = violation
                     .component
                     .as_str()
@@ -277,10 +294,13 @@ impl CompiledShapes {
             violation.component.as_str(),
             display.iri(&shape.severity),
             display.term(&shape.node, true)?,
-            display.term(&violation.focus, false)?
+            violation.data_term(&violation.focus, display)?
         ));
         if let Some(value) = &violation.value {
-            text.push_str(&format!("\tValue Node: {}\n", display.term(value, false)?));
+            text.push_str(&format!(
+                "\tValue Node: {}\n",
+                violation.data_term(value, display)?
+            ));
         }
         if let Some(path) = violation.printed_path() {
             text.push_str(&format!("\tResult Path: {}\n", display.term(path, true)?));
