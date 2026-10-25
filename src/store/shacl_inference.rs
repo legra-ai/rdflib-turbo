@@ -4,7 +4,7 @@ use pyshacl_turbo_engine::{CompiledShapes, GraphRead, Options, ScopedGraph};
 
 use super::shacl::ValidationDelta;
 use crate::Result;
-use crate::inference::BorrowedInference;
+use crate::inference::{BorrowedInference, InferenceDelta};
 use crate::shacl::{InferenceStage, Report};
 
 pub(super) fn validate<G: GraphRead + ?Sized>(
@@ -31,7 +31,11 @@ pub(super) fn validate<G: GraphRead + ?Sized>(
         report,
         ValidationDelta {
             data: if inplace { rules } else { Dataset::new() },
-            inference: if inplace { inferred } else { Dataset::new() },
+            inference: if inplace {
+                inferred
+            } else {
+                InferenceDelta::default()
+            },
             graph,
         },
     ))
@@ -43,14 +47,14 @@ fn stage<G: GraphRead + ?Sized>(
     mut options: Options,
     destination: GraphName,
     inference: InferenceStage,
-) -> Result<(Report, Dataset, Dataset)> {
+) -> Result<(Report, Dataset, InferenceDelta)> {
     let mut source = BorrowedInference::new(source, destination);
     let outcome = source.expand(inference.mode.name(), inference.request)?;
     outcome.bind_namespace(&mut options.namespaces);
     let output = shapes.validate_delta(&source, options)?;
     let report =
         Report::try_new(output.report)?.with_diagnostics(!outcome.error_messages.is_empty());
-    Ok((report, output.additions, source.into_additions()))
+    Ok((report, output.additions, source.into_delta()))
 }
 
 #[cfg(test)]

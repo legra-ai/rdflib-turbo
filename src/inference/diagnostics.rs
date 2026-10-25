@@ -1,4 +1,4 @@
-//! Inconsistency messages over ordinary and generalized tuples, published only after successful closure.
+//! Pinned OWL inconsistency messages, published only after successful closure.
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -7,17 +7,15 @@ use oxigraph::model::*;
 
 use super::backend::Graph;
 use super::diagnostic_datatypes::{self, LexicalContext, LexicalResult};
-use super::generalized::{Generalized, Tuples};
 use super::outcome::{ERROR_NAMESPACE, InferenceOutcome};
 use crate::graph::{RDF, iri};
 use crate::{Error, Result};
 
 mod lists;
-mod rdf_list;
+pub(super) mod rdf_list;
 mod relations;
 mod restrictions;
 
-#[derive(Default)]
 pub(super) struct Diagnostics {
     // Output-sized: the caller's prior messages plus newly discovered diagnostics.
     messages: Vec<Arc<String>>,
@@ -26,8 +24,12 @@ pub(super) struct Diagnostics {
 }
 
 impl Diagnostics {
-    pub(super) fn new(prior: Vec<String>) -> Self {
-        let mut diagnostics = Self::default();
+    pub(super) fn new(prior: Vec<String>, integer_limit: usize) -> Self {
+        let mut diagnostics = Self {
+            messages: Vec::new(),
+            known: HashSet::new(),
+            list_witnesses: rdf_list::ListWitnesses::new(integer_limit),
+        };
         for message in prior {
             let message = Arc::new(message);
             diagnostics.known.insert(message.clone());
@@ -58,30 +60,30 @@ impl Diagnostics {
         Ok(())
     }
 
-    pub(super) fn round(
-        &mut self,
-        data: &impl Graph,
-        extra: &Generalized,
-        context: &LexicalContext,
-    ) -> Result<()> {
-        let data = &Tuples { data, extra };
-        let witnesses = std::mem::take(&mut self.list_witnesses);
-        let result = lists::collect(data, self, &witnesses, context);
+    pub(super) fn round(&mut self, data: &impl Graph) -> Result<()> {
+        let limit = self.list_witnesses.integer_limit();
+        let witnesses = std::mem::replace(
+            &mut self.list_witnesses,
+            rdf_list::ListWitnesses::new(limit),
+        );
+        let result = lists::collect(data, self, &witnesses);
         self.list_witnesses = witnesses;
         result
+    }
+
+    pub(super) fn witnesses(&self) -> &rdf_list::ListWitnesses {
+        &self.list_witnesses
     }
 
     pub(super) fn finish(
         mut self,
         data: &mut impl Graph,
-        extra: &Generalized,
         owl: bool,
         is_zero: impl Fn(&Term) -> Result<bool>,
     ) -> Result<InferenceOutcome> {
         if owl {
-            let view = Tuples { data, extra };
-            relations::collect(&view, &mut self)?;
-            restrictions::collect(&view, &mut self, is_zero)?;
+            relations::collect(data, &mut self)?;
+            restrictions::collect(data, &mut self, is_zero)?;
         }
         drop(self.known);
         drop(self.list_witnesses);
@@ -92,13 +94,13 @@ impl Diagnostics {
             .collect();
         for message in &error_messages {
             let subject = BlankNode::default();
-            data.insert(Quad::new(
+            data.insert(GeneralizedQuad::new(
                 subject.clone(),
                 iri(RDF, "type"),
                 iri(ERROR_NAMESPACE, "ErrorMessage"),
                 GraphName::DefaultGraph,
             ))?;
-            data.insert(Quad::new(
+            data.insert(GeneralizedQuad::new(
                 subject,
                 iri(ERROR_NAMESPACE, "error"),
                 Literal::new_simple_literal(message.as_str()),
@@ -117,24 +119,17 @@ fn text(term: &Term) -> &str {
     }
 }
 
-fn has<'p>(
-    data: &Tuples<'_, impl Graph>,
-    left: &Term,
-    predicate: impl Into<TermRef<'p>>,
-    right: &Term,
-) -> Result<bool> {
-    data.quads(
-        Some(left.as_ref()),
-        Some(predicate.into()),
-        Some(right.as_ref()),
-    )
-    .next()
-    .transpose()
-    .map(|quad| quad.is_some())
+fn has(data: &impl Graph, left: &Term, predicate: TermRef<'_>, right: &Term) -> Result<bool> {
+    data.contains(GeneralizedQuadRef {
+        subject: left.as_ref(),
+        predicate,
+        object: right.as_ref(),
+        graph_name: GraphNameRef::DefaultGraph,
+    })
 }
 
 fn objects<'a>(
-    data: &'a Tuples<'_, impl Graph>,
+    data: &'a impl Graph,
     node: &'a Term,
     predicate: &'a NamedNode,
 ) -> impl Iterator<Item = Result<Term>> + 'a {

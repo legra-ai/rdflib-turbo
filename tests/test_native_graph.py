@@ -253,16 +253,17 @@ def test_language_literals_and_invalid_term_kinds():
         graph.add((Variable("s"), EX.p, value))
 
 
-def test_constructor_boundaries_and_legacy_conversion_reject_native_graphs():
+def test_constructor_boundaries_and_explicit_native_conversion():
     from rdflib_turbo.graph import RDFLibStore
 
     with pytest.raises(TypeError, match="Native Store"):
         RDFLibStore(object())
     for factory in (rdflib_turbo.Graph, rdflib_turbo.StoreDataset):
         with pytest.raises(TypeError, match="native"):
-            factory(store="Memory")
-        with pytest.raises(NotImplementedError, match="Store inference"):
-            rdflib_turbo.Dataset.from_rdflib(factory())
+            factory(store="unsupported-storage")
+        source = factory(store="Memory")
+        with pytest.raises(NotImplementedError, match="Use copy"):
+            rdflib_turbo.Dataset.from_rdflib(source)
     backend = rdflib_turbo.Store()
     dataset = rdflib_turbo.StoreDataset(store=backend)
     dataset.graph(EX.named).add((EX.s, EX.p, Literal("shared")))

@@ -5,8 +5,18 @@ import json
 import pytest
 from rdflib import BNode, Graph, Literal, URIRef
 from rdflib.namespace import XSD
-from rdflib_turbo import Dataset
-from rdflib_turbo._native import SharedShapes
+from rdflib_turbo._native import NativeDataset, SharedShapes
+from rdflib_turbo._native import shacl as _native_shacl
+
+
+def load_dataset(data, source):
+    data.load(source, "turtle", None, True)
+    return data
+
+
+def native_dataset(source):
+    return load_dataset(NativeDataset(), source)
+
 
 SHAPES = """@prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
@@ -31,13 +41,16 @@ def source_dataset():
         Literal("mot", lang="fr"),
     ):
         source.add((BNode("holder"), URIRef("urn:p"), value))
-    return Dataset.from_rdflib(source)
+    data = NativeDataset()
+    data.load(source.serialize(format="nt"), "nt", None, True)
+    data.bind_namespaces([(prefix, str(namespace)) for prefix, namespace in source.namespaces()])
+    return data
 
 
 def test_report_batch_preserves_exact_literals_and_blank_node_identities(monkeypatch):
     data = source_dataset()
-    program = SharedShapes(SHAPES, False, [("ex", "urn:")])
-    before = data.serialize()
+    program = SharedShapes(SHAPES, False, [("ex", "urn:")], _policy=_native_shacl._REGEX_POLICY)
+    before = data.dump("nquads")
 
     def forbidden(*args, **kwargs):
         raise AssertionError("Shared report transport must not parse or serialize RDF")
@@ -45,7 +58,7 @@ def test_report_batch_preserves_exact_literals_and_blank_node_identities(monkeyp
     with monkeypatch.context() as patch:
         patch.setattr(Graph, "parse", forbidden)
         patch.setattr(Graph, "serialize", forbidden)
-        conforms, report, text, warnings = program.validate(data._native, "{}", False)
+        conforms, report, text, warnings = program.validate(data, "{}", False)
 
     assert isinstance(report, tuple), "Shared reports must use the existing RDF term batch"
     records, quads = report
@@ -67,7 +80,7 @@ def test_report_batch_preserves_exact_literals_and_blank_node_identities(monkeyp
     assert all(graph is None for _, _, _, graph in quads)
     assert not conforms and "Results (4):" in text and "ex:link" in text
     assert not warnings
-    assert data.serialize() == before
+    assert data.dump("nquads") == before
 
 
 @pytest.mark.parametrize(
@@ -83,6 +96,8 @@ def test_report_batch_preserves_exact_literals_and_blank_node_identities(monkeyp
 )
 def test_report_batch_preserves_validation_options(settings, conforms):
     data = source_dataset()
-    result = SharedShapes(SHAPES, False, []).validate(data._native, json.dumps(settings), False)
+    result = SharedShapes(SHAPES, False, [], _policy=_native_shacl._REGEX_POLICY).validate(
+        data, json.dumps(settings), False
+    )
     assert result[0] is conforms
     assert isinstance(result[1], tuple)

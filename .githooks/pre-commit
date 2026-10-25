@@ -5,7 +5,7 @@ else
     printf 'Rust formatting check failed; run make dev before committing\n' >&2
     exit 1
 fi
-if cargo clippy --locked -- -D warnings; then
+if cargo clippy --workspace --lib --tests --locked -- -D warnings; then
     :
 else
     printf 'Rust lint check failed; run make dev before committing\n' >&2

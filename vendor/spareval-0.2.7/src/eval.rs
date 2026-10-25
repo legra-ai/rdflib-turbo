@@ -1,3 +1,5 @@
+use crate::construct_cache::ConstructCache;
+use crate::construct_projection::{ConstructProjection, InferenceConstruct, StrictConstruct};
 #[cfg(feature = "sparql-12")]
 use crate::dataset::ExpressionTriple;
 use crate::dataset::{ExpressionTerm, InternalQuad, QueryableDataset};
@@ -15,7 +17,7 @@ use json_event_parser::{JsonEvent, WriterJsonSerializer};
 use oxiri::Iri;
 #[cfg(feature = "sparql-12")]
 use oxrdf::{BaseDirection, NamedOrBlankNode};
-use oxrdf::{BlankNode, GraphName, Literal, NamedNode, Term, Triple, Variable};
+use oxrdf::{BlankNode, GeneralizedTriple, GraphName, Literal, NamedNode, Term, Triple, Variable};
 use oxsdatatypes::{DateTime, DayTimeDuration, Decimal, Double, Float, Integer};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet, FxHasher};
 use spargebra::algebra::{AggregateFunction, PropertyPathExpression};
@@ -38,6 +40,10 @@ use std::rc::Rc;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, atomic};
 use std::{fmt, io};
+#[path = "inference_template.rs"]
+mod inference_template;
+use inference_template::internal as get_internal_inference_template_value;
+
 // TODO: make expression raise error when relevant (storage I/O)
 
 type InternalTupleEvaluator<'a, T> =
@@ -657,6 +663,30 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
         Result<QueryTripleIter<'a>, QueryEvaluationError>,
         Rc<EvalNodeWithStats>,
     ) {
+        self.evaluate_construct_projected::<StrictConstruct>(pattern, template, substitutions)
+    }
+
+    pub fn evaluate_inference_construct(
+        &self,
+        pattern: &GraphPattern,
+        template: &[TriplePattern],
+        substitutions: impl IntoIterator<Item = (Variable, Term)>,
+    ) -> (
+        Result<QueryTripleIter<'a, GeneralizedTriple>, QueryEvaluationError>,
+        Rc<EvalNodeWithStats>,
+    ) {
+        self.evaluate_construct_projected::<InferenceConstruct>(pattern, template, substitutions)
+    }
+
+    fn evaluate_construct_projected<P: ConstructProjection>(
+        &self,
+        pattern: &GraphPattern,
+        template: &[TriplePattern],
+        substitutions: impl IntoIterator<Item = (Variable, Term)>,
+    ) -> (
+        Result<QueryTripleIter<'a, P::Output>, QueryEvaluationError>,
+        Rc<EvalNodeWithStats>,
+    ) {
         let mut variables = self
             .initial_bindings
             .iter()
@@ -703,12 +733,12 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
             Err(e) => return (Err(e), stats),
         };
         (
-            Ok(QueryTripleIter::new(ConstructIterator {
+            Ok(QueryTripleIter::new(ConstructIterator::<_, P> {
                 eval: self.clone(),
                 iter: eval(from),
                 template,
                 buffered_results: Vec::default(),
-                already_emitted_results: FxHashSet::default(),
+                already_emitted_results: ConstructCache::default(),
                 seen_terms: FxHashMap::default(),
                 constant_ids,
                 bnodes: Vec::default(),
@@ -4415,12 +4445,12 @@ impl<T: Eq> Iterator for ConsecutiveDeduplication<'_, T> {
     }
 }
 
-struct ConstructIterator<'a, D: QueryableDataset<'a>> {
+struct ConstructIterator<'a, D: QueryableDataset<'a>, P: ConstructProjection> {
     eval: SimpleEvaluator<'a, D>,
     iter: InternalTuplesIterator<'a, D::InternalTerm>,
     template: Vec<TripleTemplate>,
-    buffered_results: Vec<Result<Triple, QueryEvaluationError>>,
-    already_emitted_results: FxHashSet<[usize; 3]>,
+    buffered_results: Vec<Result<P::Output, QueryEvaluationError>>,
+    already_emitted_results: ConstructCache,
     // Bounded by three terms per retained result; cleared with the existing result cache.
     seen_terms: FxHashMap<D::InternalTerm, usize>,
     // Bounded by the CONSTRUCT template constants, never by result count.
@@ -4428,8 +4458,24 @@ struct ConstructIterator<'a, D: QueryableDataset<'a>> {
     bnodes: Vec<BlankNode>,
 }
 
-impl<'a, D: QueryableDataset<'a>> Iterator for ConstructIterator<'a, D> {
-    type Item = Result<Triple, QueryEvaluationError>;
+impl<'a, D: QueryableDataset<'a>, P: ConstructProjection> ConstructIterator<'a, D, P> {
+    fn fail(
+        &mut self,
+        error: QueryEvaluationError,
+    ) -> Option<Result<P::Output, QueryEvaluationError>> {
+        if P::PROPAGATE_EXTERNALIZATION_ERRORS {
+            // Fail the inference stream once, including heads buffered earlier
+            // in this solution. No further reads or externalization callbacks.
+            self.iter = Box::new(empty());
+            self.buffered_results.clear();
+            self.bnodes.clear();
+        }
+        Some(Err(error))
+    }
+}
+
+impl<'a, D: QueryableDataset<'a>, P: ConstructProjection> Iterator for ConstructIterator<'a, D, P> {
+    type Item = Result<P::Output, QueryEvaluationError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -4439,29 +4485,41 @@ impl<'a, D: QueryableDataset<'a>> Iterator for ConstructIterator<'a, D> {
             {
                 let tuple = match self.iter.next()? {
                     Ok(tuple) => tuple,
-                    Err(error) => return Some(Err(error)),
+                    Err(error) => return self.fail(error),
                 };
                 for template in &self.template {
-                    let (Some(internal_subject), Some(internal_predicate), Some(internal_object)) = (
-                        get_internal_triple_template_value(
-                            &template.subject,
-                            &tuple,
-                            &mut self.bnodes,
-                            &self.eval.dataset,
-                        ),
-                        get_internal_triple_template_value(
-                            &template.predicate,
-                            &tuple,
-                            &mut self.bnodes,
-                            &self.eval.dataset,
-                        ),
-                        get_internal_triple_template_value(
-                            &template.object,
-                            &tuple,
-                            &mut self.bnodes,
-                            &self.eval.dataset,
-                        ),
-                    ) else {
+                    let mut select = |selector| {
+                        if P::PROPAGATE_EXTERNALIZATION_ERRORS {
+                            get_internal_inference_template_value(
+                                selector,
+                                &tuple,
+                                &mut self.bnodes,
+                                &self.eval.dataset,
+                            )
+                        } else {
+                            Ok(get_internal_triple_template_value(
+                                selector,
+                                &tuple,
+                                &mut self.bnodes,
+                                &self.eval.dataset,
+                            ))
+                        }
+                    };
+                    let internal_subject = match select(&template.subject) {
+                        Ok(value) => value,
+                        Err(error) => return self.fail(error),
+                    };
+                    let internal_predicate = match select(&template.predicate) {
+                        Ok(value) => value,
+                        Err(error) => return self.fail(error),
+                    };
+                    let internal_object = match select(&template.object) {
+                        Ok(value) => value,
+                        Err(error) => return self.fail(error),
+                    };
+                    let (Some(internal_subject), Some(internal_predicate), Some(internal_object)) =
+                        (internal_subject, internal_predicate, internal_object)
+                    else {
                         continue;
                     };
                     let key = (internal_subject, internal_predicate, internal_object);
@@ -4477,66 +4535,47 @@ impl<'a, D: QueryableDataset<'a>> Iterator for ConstructIterator<'a, D> {
                             continue;
                         }
                     }
-                    if let (Some(subject), Some(predicate), Some(object)) = (
-                        key.0
-                            .externalize(&self.eval.dataset)
-                            .and_then(|t| t.try_into().ok()),
-                        key.1
-                            .externalize(&self.eval.dataset)
-                            .and_then(|t| t.try_into().ok()),
-                        key.2.externalize(&self.eval.dataset),
-                    ) {
-                        let triple = Triple {
-                            subject,
-                            predicate,
-                            object,
+                    let externalize = |term: &ConstructTerm<'_, D::InternalTerm>| {
+                        if P::PROPAGATE_EXTERNALIZATION_ERRORS {
+                            term.externalize_checked(&self.eval.dataset).map(Some)
+                        } else {
+                            Ok(term.externalize(&self.eval.dataset))
+                        }
+                    };
+                    let subject = match externalize(&key.0) {
+                        Ok(value) => value,
+                        Err(error) => return self.fail(error),
+                    };
+                    let predicate = match externalize(&key.1) {
+                        Ok(value) => value,
+                        Err(error) => return self.fail(error),
+                    };
+                    let object = match externalize(&key.2) {
+                        Ok(value) => value,
+                        Err(error) => return self.fail(error),
+                    };
+                    let (Some(subject), Some(predicate), Some(object)) =
+                        (subject, predicate, object)
+                    else {
+                        continue;
+                    };
+                    if let Some(triple) = P::project(subject, predicate, object) {
+                        let new_triple = P::uncached(&triple) || {
+                            let [subject, predicate, object] = P::terms(&triple);
+                            let subject =
+                                key.0
+                                    .assign_id(&subject, &mut self.seen_terms, &self.constant_ids);
+                            let predicate = key.1.assign_id(
+                                &predicate,
+                                &mut self.seen_terms,
+                                &self.constant_ids,
+                            );
+                            let object =
+                                key.2
+                                    .assign_id(&object, &mut self.seen_terms, &self.constant_ids);
+                            self.already_emitted_results
+                                .insert([subject, predicate, object])
                         };
-                        // We allocate new blank nodes for each solution,
-                        // triples with blank nodes are likely to be new.
-                        #[cfg(feature = "sparql-12")]
-                        let new_triple = triple.subject.is_blank_node()
-                            || triple.object.is_blank_node()
-                            || triple.object.is_triple()
-                            || {
-                                let subject = key.0.assign_id(
-                                    &triple.subject.clone().into(),
-                                    &mut self.seen_terms,
-                                    &self.constant_ids,
-                                );
-                                let predicate = key.1.assign_id(
-                                    &triple.predicate.clone().into(),
-                                    &mut self.seen_terms,
-                                    &self.constant_ids,
-                                );
-                                let object = key.2.assign_id(
-                                    &triple.object,
-                                    &mut self.seen_terms,
-                                    &self.constant_ids,
-                                );
-                                self.already_emitted_results
-                                    .insert([subject, predicate, object])
-                            };
-                        #[cfg(not(feature = "sparql-12"))]
-                        let new_triple =
-                            triple.subject.is_blank_node() || triple.object.is_blank_node() || {
-                                let subject = key.0.assign_id(
-                                    &triple.subject.clone().into(),
-                                    &mut self.seen_terms,
-                                    &self.constant_ids,
-                                );
-                                let predicate = key.1.assign_id(
-                                    &triple.predicate.clone().into(),
-                                    &mut self.seen_terms,
-                                    &self.constant_ids,
-                                );
-                                let object = key.2.assign_id(
-                                    &triple.object,
-                                    &mut self.seen_terms,
-                                    &self.constant_ids,
-                                );
-                                self.already_emitted_results
-                                    .insert([subject, predicate, object])
-                            };
                         if new_triple {
                             self.buffered_results.push(Ok(triple));
                             if self.already_emitted_results.len() > 1024 * 1024 {
@@ -4677,6 +4716,17 @@ impl<T: Clone + Eq + Hash> ConstructTerm<'_, T> {
         }
     }
 
+    fn externalize_checked<'a, D: QueryableDataset<'a, InternalTerm = T>>(
+        &self,
+        dataset: &EvalDataset<'a, D>,
+    ) -> Result<Term, QueryEvaluationError> {
+        match self {
+            Self::Internal(term) => dataset.externalize_term(term.clone()),
+            Self::Constant(term) => Ok((*term).clone()),
+            Self::External(term) => Ok(term.clone()),
+        }
+    }
+
     fn externalize<'a, D: QueryableDataset<'a, InternalTerm = T>>(
         &self,
         dataset: &EvalDataset<'a, D>,
@@ -4710,32 +4760,9 @@ fn get_triple_template_value<'a, D: QueryableDataset<'a>>(
     bnodes: &mut Vec<BlankNode>,
     dataset: &EvalDataset<'a, D>,
 ) -> Option<Term> {
-    match selector {
-        TripleTemplateValue::Constant(term) => Some(term.clone()),
-        TripleTemplateValue::Variable(v) => {
-            let t = tuple.get(*v)?;
-            dataset.externalize_term(t.clone()).ok() // TODO: raise error
-        }
-        TripleTemplateValue::BlankNode(bnode) => {
-            if *bnode >= bnodes.len() {
-                bnodes.resize_with(*bnode + 1, BlankNode::default)
-            }
-            Some(bnodes[*bnode].clone().into())
-        }
-        #[cfg(feature = "sparql-12")]
-        TripleTemplateValue::Triple(triple) => Some(
-            Triple {
-                subject: get_triple_template_value(&triple.subject, tuple, bnodes, dataset)?
-                    .try_into()
-                    .ok()?,
-                predicate: get_triple_template_value(&triple.predicate, tuple, bnodes, dataset)?
-                    .try_into()
-                    .ok()?,
-                object: get_triple_template_value(&triple.object, tuple, bnodes, dataset)?,
-            }
-            .into(),
-        ),
-    }
+    inference_template::external(selector, tuple, bnodes, dataset)
+        .ok()
+        .flatten()
 }
 
 struct DescribeIterator<'a, D: QueryableDataset<'a>> {

@@ -845,19 +845,13 @@ impl<'a> Reader<'a> {
     }
 
     pub fn scan_prefix(&self, column_family: &ColumnFamily, prefix: &[u8]) -> Iter<'a> {
-        // We generate the upper bound
-        let upper_bound = {
-            let mut bound = prefix.to_vec();
-            let mut found = false;
-            for c in bound.iter_mut().rev() {
-                if *c < u8::MAX {
-                    *c += 1;
-                    found = true;
-                    break;
-                }
-            }
-            found.then_some(bound)
-        };
+        // The exclusive successor ends at the byte receiving the carry. Keeping
+        // the trailing 0xff bytes would admit keys from the adjacent prefix.
+        let upper_bound = prefix.iter().rposition(|byte| *byte < u8::MAX).map(|last| {
+            let mut bound = prefix[..=last].to_vec();
+            bound[last] += 1;
+            bound
+        });
 
         unsafe {
             let options = oxrocksdb_readoptions_create_copy(self.options);
@@ -1325,6 +1319,10 @@ fn available_file_descriptors() -> io::Result<Option<u64>> {
 fn available_file_descriptors() -> io::Result<Option<u64>> {
     Ok(None)
 }
+
+#[cfg(test)]
+#[path = "rocksdb_wrapper_prefix_tests.rs"]
+mod prefix_tests;
 
 #[cfg(test)]
 mod tests {

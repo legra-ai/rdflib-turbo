@@ -8,8 +8,7 @@ use oxigraph::model::Term;
 use super::objects;
 use crate::graph::{RDF, iri};
 use crate::inference::backend::Graph;
-use crate::inference::diagnostic_datatypes::{self, LexicalContext};
-use crate::inference::generalized::Tuples;
+use crate::inference::diagnostic_datatypes::list_truthiness;
 use crate::{Error, Result};
 
 #[derive(Clone, Default)]
@@ -18,15 +17,25 @@ struct SelectedEdges {
     rest: Option<Term>,
 }
 
-#[derive(Default)]
-pub(super) struct ListWitnesses {
+pub(in crate::inference) struct ListWitnesses {
     // Diagnostic schema traversal state: at most two selected edges per touched
     // list cell, not an index or copy of ordinary graph/equality statements.
     edges: RefCell<HashMap<Term, SelectedEdges>>,
+    integer_limit: usize,
 }
 
 impl ListWitnesses {
-    fn read(&self, data: &Tuples<'_, impl Graph>, node: &Term) -> Result<SelectedEdges> {
+    pub(in crate::inference) fn new(integer_limit: usize) -> Self {
+        Self {
+            edges: RefCell::new(HashMap::new()),
+            integer_limit,
+        }
+    }
+    pub(super) fn integer_limit(&self) -> usize {
+        self.integer_limit
+    }
+
+    fn read(&self, data: &impl Graph, node: &Term) -> Result<SelectedEdges> {
         let mut selected = self.edges.borrow().get(node).cloned().unwrap_or_default();
         if selected.first.is_some() && selected.rest.is_some() {
             return Ok(selected);
@@ -47,25 +56,18 @@ impl ListWitnesses {
     }
 }
 
-pub(super) struct RdfList<'a, 'graph, G> {
-    data: &'a Tuples<'graph, G>,
+pub(in crate::inference) struct RdfList<'a, G> {
+    data: &'a G,
     witnesses: &'a ListWitnesses,
-    context: &'a LexicalContext,
     head: Term,
     pub len: usize,
 }
 
-impl<'a, 'graph, G: Graph> RdfList<'a, 'graph, G> {
-    pub fn new(
-        data: &'a Tuples<'graph, G>,
-        witnesses: &'a ListWitnesses,
-        head: Term,
-        context: &'a LexicalContext,
-    ) -> Result<Self> {
+impl<'a, G: Graph> RdfList<'a, G> {
+    pub fn new(data: &'a G, witnesses: &'a ListWitnesses, head: Term) -> Result<Self> {
         let mut cursor = Cursor {
             data,
             witnesses,
-            context,
             current: Some(head.clone()),
             guard: Some(CycleGuard {
                 anchor: head.clone(),
@@ -82,38 +84,34 @@ impl<'a, 'graph, G: Graph> RdfList<'a, 'graph, G> {
         Ok(Self {
             data,
             witnesses,
-            context,
             head,
             len,
         })
     }
 
-    pub fn cursor(&self) -> Cursor<'a, 'graph, G> {
+    pub fn cursor(&self) -> Cursor<'a, G> {
         // The immutable round was validated above; replay the same witnesses.
         Cursor {
             data: self.data,
             witnesses: self.witnesses,
-            context: self.context,
             current: Some(self.head.clone()),
             guard: None,
         }
     }
 }
 
-pub(super) struct Cursor<'a, 'graph, G> {
-    data: &'a Tuples<'graph, G>,
+pub(in crate::inference) struct Cursor<'a, G> {
+    data: &'a G,
     witnesses: &'a ListWitnesses,
-    context: &'a LexicalContext,
     current: Option<Term>,
     guard: Option<CycleGuard>,
 }
 
-impl<'a, 'graph, G: Graph> Cursor<'a, 'graph, G> {
+impl<'a, G: Graph> Cursor<'a, G> {
     pub fn tail(&self) -> Self {
         Self {
             data: self.data,
             witnesses: self.witnesses,
-            context: self.context,
             current: self.current.clone(),
             guard: None,
         }
@@ -121,12 +119,9 @@ impl<'a, 'graph, G: Graph> Cursor<'a, 'graph, G> {
 
     pub fn next(&mut self) -> Result<Option<Term>> {
         while let Some(node) = self.current.take() {
-            // RDFLib uses Python node truthiness, not a special rdf:nil branch.
-            let truthy = match &node {
-                Term::Literal(literal) => diagnostic_datatypes::truthy(literal, self.context),
-                _ => !super::text(&node).is_empty(),
-            };
-            if !truthy {
+            // RDFLib uses cached default Python values, not SPARQL EBV or a
+            // special rdf:nil branch. A falsy head performs no graph read.
+            if !list_truthiness::truthy(&node, self.witnesses.integer_limit) {
                 return Ok(None);
             }
             let selected = self.witnesses.read(self.data, &node)?;

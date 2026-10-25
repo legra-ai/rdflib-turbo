@@ -1,65 +1,86 @@
-//! The reasoner reads one logical graph and inserts only derived facts.
+//! The reasoner reads full-Term facts and inserts only derived consequences.
 use oxigraph::model::*;
-use oxigraph::sparql::{PreparedSparqlQuery, QueryResults};
+use oxigraph::sparql::PreparedSparqlQuery;
+#[cfg(test)]
+use oxigraph::sparql::QueryResults;
 use oxigraph::store::Transaction;
-use oxrdf::dataset::InsertTransaction;
+use oxrdf::{GeneralizedDataset, GeneralizedTransaction};
 
 use crate::{Error, Result};
 
 pub(super) trait Graph {
     fn quads<'a>(
         &'a self,
-        subject: Option<NamedOrBlankNodeRef<'_>>,
-        predicate: Option<NamedNodeRef<'_>>,
+        subject: Option<TermRef<'_>>,
+        predicate: Option<TermRef<'_>>,
         object: Option<TermRef<'_>>,
-    ) -> impl Iterator<Item = Result<Quad>> + use<'a, Self>;
+    ) -> impl Iterator<Item = Result<GeneralizedQuad>> + use<'a, Self>;
+    #[cfg(test)]
     fn query(&self, query: PreparedSparqlQuery) -> Result<QueryResults<'_>>;
-    fn insert(&mut self, quad: Quad) -> Result<()>;
+    fn inference_heads(
+        &self,
+        query: PreparedSparqlQuery,
+    ) -> Result<oxigraph::sparql::QueryTripleIter<'_, GeneralizedTriple>>;
+    fn insert(&mut self, quad: GeneralizedQuad) -> Result<()>;
+    fn cleanup_blank_predicates(&mut self) -> Result<()>;
 
     /// Direct reference publication checks the output scope, not the read union.
-    fn contains_destination(&self, quad: &Quad) -> Result<bool> {
+    fn contains_destination(&self, quad: GeneralizedQuadRef<'_>) -> Result<bool> {
         self.contains(quad)
     }
 
-    fn contains(&self, quad: &Quad) -> Result<bool> {
-        self.quads(
-            Some(quad.subject.as_ref()),
-            Some(quad.predicate.as_ref()),
-            Some(quad.object.as_ref()),
-        )
-        .next()
-        .transpose()
-        .map(|quad| quad.is_some())
+    fn contains(&self, quad: GeneralizedQuadRef<'_>) -> Result<bool> {
+        self.quads(Some(quad.subject), Some(quad.predicate), Some(quad.object))
+            .next()
+            .transpose()
+            .map(|quad| quad.is_some())
     }
 }
 
-impl<'data> Graph for InsertTransaction<'data> {
-    fn contains(&self, quad: &Quad) -> Result<bool> {
-        Ok(Dataset::contains(
+impl<'data> Graph for GeneralizedTransaction<'data> {
+    fn cleanup_blank_predicates(&mut self) -> Result<()> {
+        self.remove_where(|quad| {
+            quad.predicate.is_blank_node() && quad.graph_name.is_default_graph()
+        });
+        Ok(())
+    }
+
+    fn contains(&self, quad: GeneralizedQuadRef<'_>) -> Result<bool> {
+        Ok(GeneralizedDataset::contains(
             self,
-            QuadRef {
+            GeneralizedQuadRef {
                 graph_name: GraphNameRef::DefaultGraph,
-                ..quad.as_ref()
+                ..quad
             },
         ))
     }
 
     fn quads<'a>(
         &'a self,
-        subject: Option<NamedOrBlankNodeRef<'_>>,
-        predicate: Option<NamedNodeRef<'_>>,
+        subject: Option<TermRef<'_>>,
+        predicate: Option<TermRef<'_>>,
         object: Option<TermRef<'_>>,
-    ) -> impl Iterator<Item = Result<Quad>> + use<'a, 'data> {
+    ) -> impl Iterator<Item = Result<GeneralizedQuad>> + use<'a, 'data> {
         self.quads_for_pattern(subject, predicate, object, Some(GraphNameRef::DefaultGraph))
             .map(|q| Ok(q.into_owned()))
     }
 
+    #[cfg(test)]
     fn query(&self, query: PreparedSparqlQuery) -> Result<QueryResults<'_>> {
         Ok(query.on_queryable_dataset(&**self).execute()?)
     }
 
-    fn insert(&mut self, quad: Quad) -> Result<()> {
-        InsertTransaction::insert(self, &quad);
+    fn inference_heads(
+        &self,
+        query: PreparedSparqlQuery,
+    ) -> Result<oxigraph::sparql::QueryTripleIter<'_, GeneralizedTriple>> {
+        Ok(query
+            .on_queryable_dataset(&**self)
+            .execute_inference_construct()?)
+    }
+
+    fn insert(&mut self, quad: GeneralizedQuad) -> Result<()> {
+        GeneralizedTransaction::insert(self, &quad);
         Ok(())
     }
 }
@@ -69,35 +90,50 @@ pub(crate) struct TransactionGraph<'a, 'store> {
     pub destination: GraphName,
 }
 
-impl<'graph, 'store> Graph for TransactionGraph<'graph, 'store> {
-    fn contains_destination(&self, quad: &Quad) -> Result<bool> {
+impl<'owner, 'data> Graph for TransactionGraph<'owner, 'data> {
+    fn cleanup_blank_predicates(&mut self) -> Result<()> {
+        super::cleanup::transaction(self.transaction, None, &self.destination)
+    }
+
+    fn contains_destination(&self, quad: GeneralizedQuadRef<'_>) -> Result<bool> {
         self.transaction
-            .contains(QuadRef {
+            .contains_generalized(GeneralizedQuadRef {
                 graph_name: self.destination.as_ref(),
-                ..quad.as_ref()
+                ..quad
             })
             .map_err(|error| Error::Runtime(error.to_string()))
     }
 
     fn quads<'a>(
         &'a self,
-        subject: Option<NamedOrBlankNodeRef<'_>>,
-        predicate: Option<NamedNodeRef<'_>>,
+        subject: Option<TermRef<'_>>,
+        predicate: Option<TermRef<'_>>,
         object: Option<TermRef<'_>>,
-    ) -> impl Iterator<Item = Result<Quad>> + use<'a, 'graph, 'store> {
+    ) -> impl Iterator<Item = Result<GeneralizedQuad>> + use<'a, 'owner, 'data> {
         self.transaction
-            .quads_for_pattern(subject, predicate, object, None)
+            .generalized_quads_for_pattern(subject, predicate, object, None)
             .map(|q| q.map_err(|e| Error::Runtime(e.to_string())))
     }
 
+    #[cfg(test)]
     fn query(&self, mut query: PreparedSparqlQuery) -> Result<QueryResults<'_>> {
         query.dataset_mut().set_default_graph_as_union();
         Ok(query.on_transaction(self.transaction).execute()?)
     }
 
-    fn insert(&mut self, mut quad: Quad) -> Result<()> {
+    fn inference_heads(
+        &self,
+        mut query: PreparedSparqlQuery,
+    ) -> Result<oxigraph::sparql::QueryTripleIter<'_, GeneralizedTriple>> {
+        query.dataset_mut().set_default_graph_as_union();
+        Ok(query
+            .on_transaction(self.transaction)
+            .execute_inference_construct()?)
+    }
+
+    fn insert(&mut self, mut quad: GeneralizedQuad) -> Result<()> {
         quad.graph_name = self.destination.clone();
-        self.transaction.insert(&quad);
+        self.transaction.insert_generalized(&quad);
         Ok(())
     }
 }

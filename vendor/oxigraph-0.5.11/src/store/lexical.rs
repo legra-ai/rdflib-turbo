@@ -3,7 +3,7 @@ use super::{QuadIter, StorageError};
 #[cfg(feature = "rdf-12")]
 use crate::model::BaseDirection;
 use crate::model::{BlankNode, Term};
-use crate::storage::numeric_encoder::{Decoder, EncodedTerm};
+use crate::storage::numeric_encoder::{Decoder, EncodedQuad, EncodedTerm};
 use crate::storage::term_text::TermText;
 use crate::storage::{CorruptionError, StorageReader};
 
@@ -66,7 +66,10 @@ impl LexicalTerm {
         }
     }
 
-    fn decode(reader: &StorageReader<'_>, encoded: &EncodedTerm) -> Result<Self, StorageError> {
+    pub(super) fn decode(
+        reader: &StorageReader<'_>,
+        encoded: &EncodedTerm,
+    ) -> Result<Self, StorageError> {
         use EncodedTerm::*;
         Ok(match encoded {
             DefaultGraph => {
@@ -246,24 +249,35 @@ impl<'a> QuadIter<'a> {
     }
 }
 
+/// Share field selection while preserving each cursor's explicit term domain.
+pub(super) fn project<const GENERALIZED: bool>(
+    reader: &StorageReader<'_>,
+    quad: &EncodedQuad,
+    selected: [bool; 3],
+) -> Result<[Option<LexicalTerm>; 3], StorageError> {
+    let decode = |encoded: &EncodedTerm, position| {
+        if GENERALIZED {
+            LexicalTerm::decode(reader, encoded)
+        } else {
+            LexicalTerm::decode_position(reader, encoded, position)
+        }
+    };
+    Ok([
+        selected[0].then(|| decode(&quad.subject, 0)).transpose()?,
+        selected[1]
+            .then(|| decode(&quad.predicate, 1))
+            .transpose()?,
+        selected[2].then(|| decode(&quad.object, 2)).transpose()?,
+    ])
+}
+
 impl Iterator for LexicalQuadIter<'_> {
     type Item = Result<[Option<LexicalTerm>; 3], StorageError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.iter.next().map(|quad| {
-            let quad = quad?;
-            let reader = &self.inner.reader;
-            Ok([
-                self.selected[0]
-                    .then(|| LexicalTerm::decode_position(reader, &quad.subject, 0))
-                    .transpose()?,
-                self.selected[1]
-                    .then(|| LexicalTerm::decode_position(reader, &quad.predicate, 1))
-                    .transpose()?,
-                self.selected[2]
-                    .then(|| LexicalTerm::decode_position(reader, &quad.object, 2))
-                    .transpose()?,
-            ])
-        })
+        self.inner
+            .iter
+            .next()
+            .map(|quad| project::<false>(&self.inner.reader, &quad?, self.selected))
     }
 }

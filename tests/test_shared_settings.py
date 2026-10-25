@@ -3,8 +3,18 @@
 import pytest
 from pyshacl_turbo.rdf import decode
 from rdflib.compare import isomorphic
-from rdflib_turbo import Dataset
-from rdflib_turbo._native import SharedShapes
+from rdflib_turbo._native import NativeDataset, SharedShapes
+from rdflib_turbo._native import shacl as _native_shacl
+
+
+def load_dataset(data, source):
+    data.load(source, "turtle", None, True)
+    return data
+
+
+def native_dataset(source):
+    return load_dataset(NativeDataset(), source)
+
 
 SHAPES = """@prefix sh:<http://www.w3.org/ns/shacl#>.
 <urn:S> sh:targetNode <urn:a>; sh:property [sh:path <urn:p>; sh:minCount 1]."""
@@ -26,12 +36,14 @@ SHAPES = """@prefix sh:<http://www.w3.org/ns/shacl#>.
     ],
 )
 def test_duplicate_known_settings_fail_without_mutating_receiver(field, value):
-    data = Dataset().parse(data="<urn:a> <urn:p> <urn:b>.")
-    before = data.serialize(), tuple(data.namespaces())
+    data = native_dataset("<urn:a> <urn:p> <urn:b>.")
+    before = data.dump("nquads"), tuple(data.namespaces())
     settings = f'{{"{field}":{value},"{field}":{value}}}'
     with pytest.raises(ValueError, match="duplicate field"):
-        SharedShapes(SHAPES, False, []).validate(data._native, settings, True)
-    assert (data.serialize(), tuple(data.namespaces())) == before
+        SharedShapes(SHAPES, False, [], _policy=_native_shacl._REGEX_POLICY).validate(
+            data, settings, True
+        )
+    assert (data.dump("nquads"), tuple(data.namespaces())) == before
 
 
 @pytest.mark.parametrize(
@@ -57,17 +69,19 @@ def test_duplicate_known_settings_fail_without_mutating_receiver(field, value):
 )
 def test_nonobjects_malformed_unknown_and_wrong_typed_settings_fail(settings):
     with pytest.raises(ValueError):
-        SharedShapes(SHAPES, False, []).validate(Dataset()._native, settings, False)
+        SharedShapes(SHAPES, False, [], _policy=_native_shacl._REGEX_POLICY).validate(
+            NativeDataset(), settings, False
+        )
 
 
 def test_all_valid_settings_and_default_settings_have_same_report():
-    data = Dataset().parse(data="@prefix custom:<urn:>. custom:a custom:p custom:b.")
-    program = SharedShapes(SHAPES, False, [])
+    data = native_dataset("@prefix custom:<urn:>. custom:a custom:p custom:b.")
+    program = SharedShapes(SHAPES, False, [], _policy=_native_shacl._REGEX_POLICY)
     complete = """{"iterate_rules":false,"max_rule_iterations":10,
     "max_validation_depth":15,"allow_infos":false,"allow_warnings":false,
     "abort_on_first":false,"focus_nodes":[],"use_shapes":[]}"""
-    actual = program.validate(data._native, complete, False)
-    default = program.validate(data._native, "{}", False)
+    actual = program.validate(data, complete, False)
+    default = program.validate(data, "{}", False)
     assert actual[0] == default[0]
     assert actual[2:] == default[2:]
     assert isomorphic(

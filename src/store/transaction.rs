@@ -337,6 +337,16 @@ impl NativeTransaction {
         .map_err(error)
     }
 
+    fn match_context_quads(&self, py: Python<'_>, source: String) -> PyResult<String> {
+        py.detach(
+            || match self.session.execute(Operation::MatchContexts(source))? {
+                Reply::Text(text) => Ok(text),
+                _ => unreachable!("native scoped context match reply type"),
+            },
+        )
+        .map_err(error)
+    }
+
     #[pyo3(signature = (source, graph, bindings=None))]
     fn query_graph(
         &self,

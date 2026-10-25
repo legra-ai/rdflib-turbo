@@ -1,4 +1,4 @@
-"""Legacy Dataset rule output remains private through report and warning policy."""
+"""Canonical Dataset rule output stays private until report acceptance."""
 
 import pyshacl_turbo as turbo
 import pytest
@@ -38,20 +38,25 @@ def test_report_decode_error_preserves_original_dataset_and_namespaces(monkeypat
 
 
 @pytest.mark.parametrize("source", ["", "<urn:callback> <urn:p> 2."])
-def test_report_callback_mutation_conflicts_and_preserves_its_own_writes(monkeypatch, source):
+def test_report_callback_cannot_acquire_a_second_writer(monkeypatch, source):
     data = Dataset().parse(data=SOURCE)
+    before = snapshot(data)
     compiled = program()
     decode = turbo._graph
     observed = []
 
     def callback(*args, **kwargs):
         assert not data.query("ASK {<urn:s> <urn:derived> true}")
-        data.parse(data=source)
         observed.append(snapshot(data))
+        data.parse(data=source)
         return decode(*args, **kwargs)
 
     monkeypatch.setattr(turbo, "_graph", callback)
-    with pytest.raises(RuntimeError, match=r"Dataset changed.*validation"):
+    with pytest.raises(RuntimeError, match="Store has an active transaction"):
         compiled.validate(data, inplace=True)
-    assert observed and snapshot(data) == observed[0]
+    assert observed == [before]
+    assert snapshot(data) == before
     assert not data.query("ASK {<urn:s> <urn:derived> true}")
+    # Report rejection releases the borrowed writer; a later writer succeeds.
+    data.parse(data="<urn:after> <urn:p> 3.")
+    assert data.query("ASK {<urn:after> <urn:p> 3}")

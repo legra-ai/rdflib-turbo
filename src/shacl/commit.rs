@@ -5,11 +5,12 @@ use pyo3::prelude::*;
 
 use super::Output;
 use crate::NativeDataset;
+use crate::inference::InferenceDelta;
 use oxigraph::model::Dataset;
 
 pub(super) struct Pending {
     additions: Option<Dataset>,
-    inference: Option<Dataset>,
+    inference: Option<InferenceDelta>,
     diagnostics: bool,
     expected_revision: u64,
 }
@@ -35,7 +36,7 @@ impl Pending {
 
     pub(super) fn inferred(
         additions: Dataset,
-        inference: Dataset,
+        inference: InferenceDelta,
         diagnostics: bool,
         expected_revision: u64,
     ) -> Self {
@@ -63,9 +64,15 @@ impl Pending {
             self.check_revision(current.revision)?;
             if let Some(additions) = self.additions {
                 let revision = current.next_revision().map_err(crate::error)?;
-                current.extend(additions.iter());
-                if let Some(inference) = self.inference {
-                    current.extend(inference.iter());
+                {
+                    let mut transaction = current.data.transaction();
+                    if let Some(inference) = self.inference {
+                        inference.apply_dataset(&mut transaction);
+                    }
+                    for quad in additions.iter() {
+                        transaction.insert(quad);
+                    }
+                    transaction.commit();
                 }
                 if self.diagnostics {
                     crate::inference::bind_error_namespace(&mut current.namespaces);
@@ -153,5 +160,47 @@ impl Prepared<Output> {
         // Published consumers still process this field; do not emit twice.
         let warnings = std::mem::take(&mut output.3);
         Self::ready(output, warnings)
+    }
+}
+
+#[cfg(test)]
+mod generalized_tests {
+    use super::*;
+    use oxigraph::model::*;
+    use std::sync::RwLock;
+
+    #[test]
+    fn accepted_pending_commit_keeps_strict_rules_and_full_inference_rows() {
+        let rule = Quad::new(
+            NamedNode::new_unchecked("urn:s"),
+            NamedNode::new_unchecked("urn:p"),
+            NamedNode::new_unchecked("urn:o"),
+            GraphName::DefaultGraph,
+        );
+        let inferred = GeneralizedQuad::new(
+            Literal::new_typed_literal("01", NamedNode::new_unchecked("urn:datatype")),
+            NamedNode::new_unchecked("urn:inferred"),
+            NamedNode::new_unchecked("urn:value"),
+            GraphName::DefaultGraph,
+        );
+        let rules = Dataset::from_iter([rule.clone()]);
+        let inference = GeneralizedDataset::from_iter([inferred.clone()]);
+        let owner = NativeDataset {
+            inner: RwLock::new(crate::DatasetState::new(
+                GeneralizedDataset::new(),
+                Vec::new(),
+            )),
+        };
+        Python::initialize();
+        Python::attach(|py| {
+            Pending::inferred(rules, InferenceDelta::from_additions(inference), false, 0)
+                .apply(py, &owner)
+                .unwrap();
+            let state = owner.inner.read().unwrap();
+            assert!(state.contains(rule.as_ref()));
+            assert!(state.contains(inferred.as_ref()));
+            assert_eq!(state.len(), 2);
+            assert_eq!(state.revision, 1);
+        });
     }
 }

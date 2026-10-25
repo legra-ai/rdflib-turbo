@@ -17,6 +17,7 @@ fn readonly_validation_can_run_while_another_reader_holds_the_dataset() {
             false,
             Vec::new(),
             true,
+            crate::native_tests::host_regex_policy(py),
         )
         .unwrap()
         });
@@ -65,7 +66,7 @@ fn dataset_preinference_uses_read_lease_and_keeps_derived_output_private() {
     Python::attach(|py| {
         let shapes = SharedShapes::new(py,
             "@prefix sh:<http://www.w3.org/ns/shacl#>. <urn:S> sh:targetSubjectsOf <urn:parent>; sh:class <urn:Required>.",
-            false, vec![], true).unwrap();
+            false, vec![], true, crate::native_tests::host_regex_policy(py)).unwrap();
         let owner = pyo3::Py::new(py, NativeDataset::new()).unwrap();
         let dataset = owner.bind(py).get();
         dataset.load(py, "<urn:s> <urn:child> <urn:o>. <urn:child> <http://www.w3.org/2000/01/rdf-schema#subPropertyOf> <urn:parent>.", "turtle", None, false).unwrap();
@@ -97,7 +98,7 @@ fn dataset_preinference_uses_read_lease_and_keeps_derived_output_private() {
 fn diagnostic_namespace_is_private_for_report_and_published_only_at_acceptance() {
     Python::initialize();
     Python::attach(|py| {
-        let shapes = SharedShapes::new(py, "@prefix sh:<http://www.w3.org/ns/shacl#>. <urn:S> sh:targetClass <http://www.daml.org/2002/03/agents/agent-ont#ErrorMessage>; sh:class <urn:Required>.", false, vec![], true).unwrap();
+        let shapes = SharedShapes::new(py, "@prefix sh:<http://www.w3.org/ns/shacl#>. <urn:S> sh:targetClass <http://www.daml.org/2002/03/agents/agent-ont#ErrorMessage>; sh:class <urn:Required>.", false, vec![], true, crate::native_tests::host_regex_policy(py)).unwrap();
         let owner = pyo3::Py::new(py, NativeDataset::new()).unwrap();
         let dataset = owner.bind(py).get();
         dataset

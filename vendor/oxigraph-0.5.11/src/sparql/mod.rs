@@ -720,6 +720,33 @@ impl<'a, D: QueryableDataset<'a>> BoundPreparedSparqlQuery<'a, D> {
         prepared.execute(self.queryable_dataset)
     }
 
+    /// Executes only internal inference CONSTRUCT heads without narrowing term roles.
+    pub fn execute_inference_construct(
+        self,
+    ) -> Result<QueryTripleIter<'a, oxrdf::GeneralizedTriple>, QueryEvaluationError> {
+        let mut prepared = self.evaluator.prepare(&self.query);
+        for (variable, term) in self.substitutions {
+            prepared = prepared.substitute_variable(variable, term);
+        }
+        *prepared.dataset_mut() = self.dataset;
+        prepared.execute_inference_construct(self.queryable_dataset)
+    }
+
+    /// Explains inference-only heads while retaining measured body execution statistics.
+    pub fn explain_inference_construct(
+        self,
+    ) -> (
+        Result<QueryTripleIter<'a, oxrdf::GeneralizedTriple>, QueryEvaluationError>,
+        QueryExplanation,
+    ) {
+        let mut prepared = self.evaluator.prepare(&self.query);
+        for (variable, term) in self.substitutions {
+            prepared = prepared.substitute_variable(variable, term);
+        }
+        *prepared.dataset_mut() = self.dataset;
+        prepared.explain_inference_construct(self.queryable_dataset)
+    }
+
     /// Compute statistics during evaluation and fills them in the explanation tree.
     pub fn compute_statistics(mut self) -> Self {
         self.evaluator = self.evaluator.compute_statistics();

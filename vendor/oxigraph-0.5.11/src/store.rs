@@ -29,6 +29,12 @@
 //! };
 //! # Result::<_, Box<dyn std::error::Error>>::Ok(())
 //! ```
+mod generalized;
+pub use generalized::{
+    CommittedChanges, GeneralizedLexicalGraphRows, GeneralizedLexicalQuadIter,
+    GeneralizedLexicalQuadRows, GeneralizedLexicalUnionRows, GeneralizedQuadIter, LexicalGraphName,
+    LexicalQuad, LexicalUnionRow, PreparedChanges,
+};
 mod lexical;
 mod projection;
 mod read_snapshot;

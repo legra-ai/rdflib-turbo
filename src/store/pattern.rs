@@ -1,8 +1,6 @@
 //! Exact term transport for RDFLib Store operations, without RDF document copies.
-use oxigraph::model::{
-    BlankNode, GraphName, GraphNameRef, Literal, NamedNode, NamedOrBlankNode, Quad, Term,
-};
-use oxigraph::store::{QuadIter, StorageError};
+use oxigraph::model::{GeneralizedQuad, GraphName, GraphNameRef, Term};
+use oxigraph::store::{GeneralizedQuadIter, StorageError};
 use serde::Deserialize;
 
 use super::operations::{invalid, runtime};
@@ -10,8 +8,8 @@ use super::output::OwnedTermOutput;
 use crate::{Error, Result};
 
 pub(super) struct Pattern {
-    pub subject: Option<NamedOrBlankNode>,
-    pub predicate: Option<NamedNode>,
+    pub subject: Option<Term>,
+    pub predicate: Option<Term>,
     pub object: Option<Term>,
     pub graph: Option<GraphName>,
 }
@@ -32,21 +30,7 @@ impl InputTerm {
     }
 
     pub(super) fn term(self) -> Result<Term> {
-        // The Python boundary already supplies RDFLib terms. Do not reinterpret
-        // their spelling through an RDF parser (RDFLib permits relative URIRefs).
-        match self.kind.as_str() {
-            "uri" => Ok(NamedNode::new_unchecked(self.value).into()),
-            "bnode" => Ok(BlankNode::new_unchecked(self.value).into()),
-            "literal" => Ok(if let Some(language) = self.language {
-                Literal::new_language_tagged_literal(self.value, language).map_err(invalid)?
-            } else if let Some(datatype) = self.datatype {
-                Literal::new_typed_literal(self.value, NamedNode::new_unchecked(datatype))
-            } else {
-                Literal::new_simple_literal(self.value)
-            }
-            .into()),
-            _ => Err(Error::Invalid("Unknown RDF term type".into())),
-        }
+        super::typed::term((self.kind, self.value, self.datatype, self.language))
     }
 }
 
@@ -70,7 +54,7 @@ impl Pattern {
     pub fn count<'a>(
         &'a self,
         graph_len: impl FnOnce(GraphNameRef<'a>) -> Result<usize>,
-        quads: impl FnOnce() -> QuadIter<'a>,
+        quads: impl FnOnce() -> GeneralizedQuadIter<'a>,
     ) -> Result<usize> {
         if self.subject.is_none()
             && self.predicate.is_none()
@@ -82,36 +66,6 @@ impl Pattern {
         count(quads(), self.graph.is_none())
     }
 
-    pub fn parse_read(source: &str) -> Result<Option<Self>> {
-        let (subject, predicate, object, graph_name): (
-            Option<InputTerm>,
-            Option<InputTerm>,
-            Option<InputTerm>,
-            Option<String>,
-        ) = serde_json::from_str(source).map_err(invalid)?;
-        let subject = subject.map(InputTerm::term).transpose()?;
-        let predicate = predicate.map(InputTerm::term).transpose()?;
-        let object = object.map(InputTerm::term).transpose()?;
-        let graph = graph_name.map(|source| graph(&source)).transpose()?;
-        let subject = match subject {
-            Some(Term::NamedNode(node)) => Some(node.into()),
-            Some(Term::BlankNode(node)) => Some(node.into()),
-            Some(Term::Literal(_)) => return Ok(None),
-            None => None,
-        };
-        let predicate = match predicate {
-            Some(Term::NamedNode(node)) => Some(node),
-            Some(_) => return Ok(None),
-            None => None,
-        };
-        Ok(Some(Self {
-            subject,
-            predicate,
-            object,
-            graph,
-        }))
-    }
-
     pub fn parse(source: &str) -> Result<Self> {
         let (subject, predicate, object, graph_name): (
             Option<InputTerm>,
@@ -120,21 +74,8 @@ impl Pattern {
             Option<String>,
         ) = serde_json::from_str(source).map_err(invalid)?;
         Ok(Self {
-            subject: subject
-                .map(|source| match source.term()? {
-                    Term::NamedNode(node) => Ok(node.into()),
-                    Term::BlankNode(node) => Ok(node.into()),
-                    _ => Err(Error::Invalid(
-                        "Subject must be an IRI or blank node".into(),
-                    )),
-                })
-                .transpose()?,
-            predicate: predicate
-                .map(|source| match source.term()? {
-                    Term::NamedNode(node) => Ok(node),
-                    _ => Err(Error::Invalid("Predicate must be an IRI".into())),
-                })
-                .transpose()?,
+            subject: subject.map(InputTerm::term).transpose()?,
+            predicate: predicate.map(InputTerm::term).transpose()?,
             object: object.map(InputTerm::term).transpose()?,
             graph: graph_name.map(|source| graph(&source)).transpose()?,
         })
@@ -142,13 +83,13 @@ impl Pattern {
 }
 
 pub(super) fn output(
-    quads: impl Iterator<Item = std::result::Result<Quad, StorageError>>,
+    quads: impl Iterator<Item = std::result::Result<GeneralizedQuad, StorageError>>,
 ) -> Result<String> {
     let mut rows = Vec::new();
     for quad in quads {
         let quad = quad.map_err(runtime)?;
-        let subject: Term = quad.subject.into();
-        let predicate: Term = quad.predicate.into();
+        let subject = quad.subject;
+        let predicate = quad.predicate;
         let graph: Option<Term> = match quad.graph_name {
             GraphName::DefaultGraph => None,
             GraphName::NamedNode(node) => Some(node.into()),
@@ -164,23 +105,16 @@ pub(super) fn output(
     serde_json::to_string(&rows).map_err(runtime)
 }
 
-pub(super) fn count(quads: QuadIter<'_>, union: bool) -> Result<usize> {
-    if union {
-        let mut triples = std::collections::HashSet::new();
-        for quad in quads {
-            let quad = quad.map_err(runtime)?;
-            triples.insert((quad.subject, quad.predicate, quad.object));
-        }
-        Ok(triples.len())
-    } else {
-        let mut count = 0;
-        // A fixed graph has no duplicate SPO rows: count encoded matches without decoding terms.
-        for row in quads.project(false, false, false) {
-            row.map_err(runtime)?;
-            count += 1;
-        }
-        Ok(count)
+pub(super) fn count(quads: GeneralizedQuadIter<'_>, union: bool) -> Result<usize> {
+    let quads = if union { quads.unique_spo() } else { quads };
+    let mut count = 0;
+    // Count encoded representatives without lexical decoding or a retained SPO set.
+    // The selector and its exact representative probes share this same reader.
+    for row in quads.project_lexical(false, false, false) {
+        row.map_err(runtime)?;
+        count += 1;
     }
+    Ok(count)
 }
 
 #[cfg(test)]

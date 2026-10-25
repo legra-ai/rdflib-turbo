@@ -2,47 +2,38 @@ use datalog_structural_model::{
     AggregateBody, Aggregator, Atom, BindExpr, BuiltinFilter, ConstantSymbol, Literal,
     PredicateSymbol, Rule, Term, VariableSymbol,
 };
-use oxigraph::model::{Dataset, GraphName, NamedNode, NamedOrBlankNode, Quad, Triple};
-use oxigraph::sparql::{PreparedSparqlQuery, QueryEvaluationError, QueryResults};
+use oxigraph::model::{GeneralizedQuad, GraphName, NamedNode};
+use oxigraph::sparql::QueryResults;
+use oxrdf::GeneralizedDataset;
 use rdf_reasoning::RuleId;
-
-fn heads(
-    query: PreparedSparqlQuery,
-    data: &Dataset,
-) -> impl Iterator<Item = Result<Triple, QueryEvaluationError>> + '_ {
-    let QueryResults::Solutions(rows) = query.on_queryable_dataset(data).execute().unwrap() else {
-        panic!("expected shared head bindings")
-    };
-    rows.map(|row| {
-        let row = row?;
-        Ok(Triple::new(
-            NamedOrBlankNode::try_from(row.get("__head_s").unwrap().clone()).unwrap(),
-            NamedNode::try_from(row.get("__head_p").unwrap().clone()).unwrap(),
-            row.get("__head_o").unwrap().clone(),
-        ))
-    })
-}
 
 #[test]
 fn shared_domain_rule_executes_with_exact_backend_terms() {
     let subject = NamedNode::new("urn:shared:subject").unwrap();
     let property = NamedNode::new("urn:shared:property").unwrap();
     let class = NamedNode::new("urn:shared:Class").unwrap();
-    let mut dataset = Dataset::new();
-    dataset.insert(&Quad::new(
+    let mut dataset = GeneralizedDataset::new();
+    dataset.insert(&GeneralizedQuad::new(
         property.clone(),
         NamedNode::new("http://www.w3.org/2000/01/rdf-schema#domain").unwrap(),
         class.clone(),
         GraphName::DefaultGraph,
     ));
-    dataset.insert(&Quad::new(
+    dataset.insert(&GeneralizedQuad::new(
         subject.clone(),
         property,
         oxigraph::model::Literal::new_simple_literal("exact"),
         GraphName::DefaultGraph,
     ));
     let query = super::shared::CompiledRule::try_new(&RuleId::Rdfs2.definition()).unwrap();
-    let mut triples = heads(query.into_query(), &dataset);
+    let QueryResults::Graph(mut triples) = query
+        .into_query()
+        .on_queryable_dataset(&dataset)
+        .execute()
+        .unwrap()
+    else {
+        panic!("expected a graph result")
+    };
     let triple = triples.next().unwrap().unwrap();
     assert_eq!(triple.subject.to_string(), subject.to_string());
     assert_eq!(triple.object.to_string(), class.to_string());
@@ -114,11 +105,11 @@ fn shared_inequality_compares_exact_term_identity() {
         ],
     )
     .unwrap();
-    let mut dataset = Dataset::new();
+    let mut dataset = GeneralizedDataset::new();
     let subject = NamedNode::new("urn:identity:s").unwrap();
     let predicate = NamedNode::new("urn:identity:p").unwrap();
     for object in ["urn:identity:equal", "urn:identity:different"] {
-        dataset.insert(&Quad::new(
+        dataset.insert(&GeneralizedQuad::new(
             subject.clone(),
             predicate.clone(),
             NamedNode::new(object).unwrap(),
@@ -126,7 +117,14 @@ fn shared_inequality_compares_exact_term_identity() {
         ));
     }
     let query = super::shared::CompiledRule::try_new(&rule).unwrap();
-    let mut triples = heads(query.into_query(), &dataset);
+    let QueryResults::Graph(mut triples) = query
+        .into_query()
+        .on_queryable_dataset(&dataset)
+        .execute()
+        .unwrap()
+    else {
+        panic!("expected graph result")
+    };
     assert_eq!(
         triples.next().unwrap().unwrap().object.to_string(),
         "<urn:identity:different>"
@@ -150,9 +148,9 @@ fn shared_inequality_retains_distinct_numeric_lexical_forms() {
         ],
     )
     .unwrap();
-    let mut dataset = Dataset::new();
+    let mut dataset = GeneralizedDataset::new();
     for lexical in ["1", "01"] {
-        dataset.insert(&Quad::new(
+        dataset.insert(&GeneralizedQuad::new(
             NamedNode::new("urn:numeric:s").unwrap(),
             NamedNode::new("urn:numeric:p").unwrap(),
             oxigraph::model::Literal::new_typed_literal(
@@ -163,7 +161,14 @@ fn shared_inequality_retains_distinct_numeric_lexical_forms() {
         ));
     }
     let query = super::shared::CompiledRule::try_new(&rule).unwrap();
-    let triples = heads(query.into_query(), &dataset);
+    let QueryResults::Graph(triples) = query
+        .into_query()
+        .on_queryable_dataset(&dataset)
+        .execute()
+        .unwrap()
+    else {
+        panic!("expected graph result")
+    };
     assert_eq!(triples.count(), 2);
 }
 
@@ -172,7 +177,7 @@ fn shared_owl_mode_executes_restrictions_and_reference_schema() {
     let n = |name: &str| NamedNode::new(name.to_owned()).unwrap();
     let rdf = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
     let owl = "http://www.w3.org/2002/07/owl#";
-    let mut dataset = Dataset::new();
+    let mut dataset = GeneralizedDataset::new();
     for (subject, predicate, object) in [
         ("urn:R", format!("{owl}onProperty"), "urn:p".to_owned()),
         ("urn:R", format!("{owl}hasValue"), "urn:v".to_owned()),
@@ -180,7 +185,7 @@ fn shared_owl_mode_executes_restrictions_and_reference_schema() {
         ("urn:p", format!("{rdf}type"), format!("{rdf}Property")),
         ("urn:C", format!("{owl}equivalentClass"), "urn:C".to_owned()),
     ] {
-        dataset.insert(&Quad::new(
+        dataset.insert(&GeneralizedQuad::new(
             n(subject),
             n(&predicate),
             n(&object),
@@ -190,7 +195,10 @@ fn shared_owl_mode_executes_restrictions_and_reference_schema() {
     let mut value = false;
     let mut self_equivalent = false;
     for query in super::shared::CompiledRule::for_mode("owlrl").unwrap() {
-        let triples = heads(query, &dataset);
+        let QueryResults::Graph(triples) = query.on_queryable_dataset(&dataset).execute().unwrap()
+        else {
+            panic!("expected graph result")
+        };
         for triple in triples {
             let triple = triple.unwrap();
             value |= triple.subject == n("urn:a").into()
@@ -245,7 +253,7 @@ fn shared_list_relation_reaches_cycles_and_branches_without_crossing_lists() {
         ],
     )
     .unwrap();
-    let mut dataset = Dataset::new();
+    let mut dataset = GeneralizedDataset::new();
     let first = "http://www.w3.org/1999/02/22-rdf-syntax-ns#first";
     let rest = "http://www.w3.org/1999/02/22-rdf-syntax-ns#rest";
     for (subject, predicate, object) in [
@@ -258,7 +266,7 @@ fn shared_list_relation_reaches_cycles_and_branches_without_crossing_lists() {
         ("urn:branch", first, "urn:C"),
         ("urn:other", first, "urn:unrelated"),
     ] {
-        dataset.insert(&Quad::new(
+        dataset.insert(&GeneralizedQuad::new(
             NamedNode::new(subject).unwrap(),
             NamedNode::new(predicate).unwrap(),
             NamedNode::new(object).unwrap(),
@@ -266,7 +274,14 @@ fn shared_list_relation_reaches_cycles_and_branches_without_crossing_lists() {
         ));
     }
     let query = super::shared::CompiledRule::try_new(&rule).unwrap();
-    let triples = heads(query.into_query(), &dataset);
+    let QueryResults::Graph(triples) = query
+        .into_query()
+        .on_queryable_dataset(&dataset)
+        .execute()
+        .unwrap()
+    else {
+        panic!("expected graph result")
+    };
     // bounded: the three reachable members in this eight-triple fixture.
     let subjects = triples
         .map(|triple| triple.unwrap().subject.to_string())

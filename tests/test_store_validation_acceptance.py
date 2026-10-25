@@ -3,6 +3,7 @@
 import pytest
 from rdflib_turbo import Graph, Store
 from rdflib_turbo._native import SharedShapes
+from rdflib_turbo._native import shacl as _native_shacl
 
 SHAPES = """@prefix sh:<http://www.w3.org/ns/shacl#>.
 <urn:S> sh:targetNode <urn:s>; sh:rule [a sh:TripleRule;
@@ -12,7 +13,7 @@ SOURCE = "<urn:s> <urn:p> 1."
 
 
 def test_report_callback_reads_only_original_pending_writes():
-    program = SharedShapes(SHAPES, True, [])
+    program = SharedShapes(SHAPES, True, [], _policy=_native_shacl._REGEX_POLICY)
     with Store() as store:
         with store.transaction() as tx:
             tx.parse(data=SOURCE)
@@ -26,7 +27,7 @@ def test_report_callback_reads_only_original_pending_writes():
 
 @pytest.mark.parametrize("update", ["INSERT DATA {<urn:callback> <urn:p> 2}", "INSERT DATA {}"])
 def test_report_callback_mutation_dooms_transaction_even_when_noop(update):
-    program = SharedShapes(SHAPES, True, [])
+    program = SharedShapes(SHAPES, True, [], _policy=_native_shacl._REGEX_POLICY)
     with Store() as store:
         with pytest.raises(RuntimeError, match="closed"), store.transaction() as tx:
             tx.parse(data=SOURCE)
@@ -37,7 +38,7 @@ def test_report_callback_mutation_dooms_transaction_even_when_noop(update):
 
 
 def test_scoped_empty_inference_attempt_invalidates_report_acceptance():
-    program = SharedShapes(SHAPES, True, [])
+    program = SharedShapes(SHAPES, True, [], _policy=_native_shacl._REGEX_POLICY)
     with Store() as store:
         with pytest.raises(RuntimeError, match="closed"), store.transaction() as tx:
             tx.parse(data=SOURCE)
@@ -51,7 +52,7 @@ def test_scoped_empty_inference_attempt_invalidates_report_acceptance():
 
 
 def test_report_decode_error_discards_pending_original_and_rule_writes():
-    program = SharedShapes(SHAPES, True, [])
+    program = SharedShapes(SHAPES, True, [], _policy=_native_shacl._REGEX_POLICY)
     with Store() as store:
         with pytest.raises(RuntimeError, match="closed"), store.transaction() as tx:
             tx.parse(data=SOURCE)
@@ -73,7 +74,7 @@ ex:C sh:node ex:C.
 
 def test_successful_nonconformance_accepts_rules_outside_a_commit_gate():
     shapes = SHAPES + "<urn:S> sh:property [sh:path <urn:missing>; sh:minCount 1]."
-    program = SharedShapes(shapes, True, [])
+    program = SharedShapes(shapes, True, [], _policy=_native_shacl._REGEX_POLICY)
     with Store() as store:
         store.parse(data=SOURCE)
         with store._validate_shared_shapes(program, "{}", True) as result:

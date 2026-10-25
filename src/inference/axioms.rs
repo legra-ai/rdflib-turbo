@@ -68,8 +68,82 @@ fn datatype_parent(name: &str) -> Option<&'static str> {
     })
 }
 
-fn triple(s: impl Into<NamedOrBlankNode>, p: NamedNode, o: impl Into<Term>) -> Quad {
-    Quad::new(s, p, o, GraphName::DefaultGraph)
+fn triple(s: impl Into<Term>, p: NamedNode, o: impl Into<Term>) -> GeneralizedQuad {
+    GeneralizedQuad::new(s, p, o, GraphName::DefaultGraph)
+}
+
+enum DatatypeTyping<'a> {
+    Implicit {
+        literal: &'a Term,
+        alias: Option<&'a Term>,
+        datatype: NamedNode,
+    },
+    Explicit {
+        subject: &'a Term,
+        datatype: NamedNode,
+    },
+}
+
+impl<'a> DatatypeTyping<'a> {
+    fn from_quad(quad: &'a GeneralizedQuad, allowed: &HashSet<NamedNode>) -> Option<Self> {
+        match &quad.object {
+            Term::Literal(literal)
+                if literal.has_explicit_datatype()
+                    && allowed.contains(&literal.datatype().into_owned()) =>
+            {
+                Some(Self::Implicit {
+                    literal: &quad.object,
+                    alias: (quad.predicate == Term::from(iri(OWL, "sameAs")))
+                        .then_some(&quad.subject),
+                    datatype: literal.datatype().into_owned(),
+                })
+            }
+            Term::NamedNode(datatype)
+                if quad.predicate == Term::from(iri(RDF, "type")) && allowed.contains(datatype) =>
+            {
+                Some(Self::Explicit {
+                    subject: &quad.subject,
+                    datatype: datatype.clone(),
+                })
+            }
+            _ => None,
+        }
+    }
+    fn datatype(&self) -> &NamedNode {
+        match self {
+            Self::Implicit { datatype, .. } | Self::Explicit { datatype, .. } => datatype,
+        }
+    }
+    fn subjects(&self) -> impl Iterator<Item = &Term> {
+        // bounded: the implicit literal and at most one source sameAs alias.
+        let (first, second) = match self {
+            Self::Implicit { literal, alias, .. } => (Some(*literal), *alias),
+            Self::Explicit { subject, .. } => (Some(*subject), None),
+        };
+        first.into_iter().chain(second)
+    }
+    fn initial(&self, data: &impl Graph, additions: &mut Pending) -> Result<()> {
+        if let Self::Implicit {
+            literal,
+            alias,
+            datatype,
+        } = self
+        {
+            additions.push(
+                data,
+                triple((*literal).clone(), iri(RDF, "type"), datatype.clone()),
+            )?;
+            if let Some(alias) = alias {
+                // Original OWL7.6.2's explicit-map reverse edge classifies the
+                // alias as rdfs:Datatype; its base literal type is not copied.
+                additions.push(
+                    data,
+                    triple((*alias).clone(), iri(RDF, "type"), iri(RDFS, "Datatype")),
+                )?;
+            }
+        }
+        Ok(())
+    }
 }
 
 pub(super) fn owl(
@@ -77,7 +151,6 @@ pub(super) fn owl(
     combined: bool,
     diagnostics: &mut Diagnostics,
     context: &LexicalContext,
-    generalized: &mut super::generalized::Generalized,
 ) -> Result<()> {
     // bounded: the fixed XSD/RDF datatype vocabulary below.
     let datatypes: HashSet<NamedNode> = XSD_TYPES
@@ -100,52 +173,29 @@ pub(super) fn owl(
                 super::diagnostics::valid_lexical(literal, context)
             })?;
         }
-        let typed = match &q.object {
-            Term::Literal(literal)
-                if (literal.has_explicit_datatype() || literal.language().is_some())
-                    && datatypes.contains(&literal.datatype().into_owned()) =>
-            {
-                Some((
-                    q.predicate == iri(OWL, "sameAs"),
-                    literal.datatype().into_owned(),
-                ))
-            }
-            Term::NamedNode(datatype)
-                if q.predicate == iri(RDF, "type") && datatypes.contains(datatype) =>
-            {
-                Some((true, datatype.clone()))
-            }
-            _ => None,
-        };
-        let Some((has_subject, datatype)) = typed else {
+        let Some(typing) = DatatypeTyping::from_quad(&q, &datatypes) else {
             continue;
         };
-        used.insert(datatype.clone());
-        if let Term::Literal(literal) = &q.object {
-            generalized.literal_type(literal, datatype.clone());
-        }
-        if has_subject {
-            additions.push(
-                data,
-                triple(q.subject.clone(), iri(RDF, "type"), datatype.clone()),
-            )?;
-        }
-        let mut parent = datatype
+        used.insert(typing.datatype().clone());
+        typing.initial(data, &mut additions)?;
+        let mut parent = typing
+            .datatype()
             .as_str()
             .strip_prefix(XSD)
             .and_then(datatype_parent);
         while let Some(name) = parent {
             let datatype = iri(XSD, name);
             used.insert(datatype.clone());
-            if let Term::Literal(literal) = &q.object {
-                generalized.literal_type(literal, datatype.clone());
-            }
-            if has_subject {
-                additions.push(data, triple(q.subject.clone(), iri(RDF, "type"), datatype))?;
+            for subject in typing.subjects() {
+                additions.push(
+                    data,
+                    triple(subject.clone(), iri(RDF, "type"), datatype.clone()),
+                )?;
             }
             parent = datatype_parent(name);
         }
     }
+
     // bounded: only the fixed datatype and schema axioms below.
     let mut fixed = Vec::new();
     fixed.extend(
@@ -226,17 +276,12 @@ pub(super) fn owl(
     Ok(())
 }
 
-pub(super) fn resources(data: &impl Graph) -> impl Iterator<Item = Result<Quad>> + '_ {
+pub(super) fn resources(data: &impl Graph) -> impl Iterator<Item = Result<GeneralizedQuad>> + '_ {
     data.quads(None, None, None)
         .flat_map(|q| {
             let q = match q {
                 Ok(q) => q,
                 Err(error) => return [Some(Err(error)), None],
-            };
-            let object: Option<NamedOrBlankNode> = match q.object {
-                Term::NamedNode(n) => Some(n.into()),
-                Term::BlankNode(n) => Some(n.into()),
-                Term::Literal(_) => None,
             };
             [
                 Some(Ok(triple(
@@ -244,7 +289,11 @@ pub(super) fn resources(data: &impl Graph) -> impl Iterator<Item = Result<Quad>>
                     iri(RDF, "type"),
                     iri(RDFS, "Resource"),
                 ))),
-                object.map(|node| Ok(triple(node, iri(RDF, "type"), iri(RDFS, "Resource")))),
+                Some(Ok(triple(
+                    q.object,
+                    iri(RDF, "type"),
+                    iri(RDFS, "Resource"),
+                ))),
             ]
         })
         .flatten()

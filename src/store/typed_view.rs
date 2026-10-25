@@ -17,9 +17,8 @@ pub(super) struct TermView<'a> {
 
 #[derive(Clone, Copy)]
 pub(super) enum Position {
-    Subject,
-    Predicate,
-    Object,
+    Data,
+    GraphName,
 }
 
 pub(super) enum Kind {
@@ -61,13 +60,12 @@ impl<'a> TermView<'a> {
             }
             _ => return Err(Error::Invalid("Invalid RDF term tuple".into())),
         };
-        match (&kind, position) {
-            (_, Position::Object) | (Kind::Iri, _) | (Kind::Blank, Position::Subject) => Ok(kind),
-            (_, Position::Subject) => Err(Error::Invalid(
-                "Subject must be an IRI or blank node".into(),
-            )),
-            (_, Position::Predicate) => Err(Error::Invalid("Predicate must be an IRI".into())),
+        if matches!(position, Position::GraphName) && matches!(kind, Kind::Literal) {
+            return Err(Error::Invalid(
+                "Graph name must be an IRI or blank node".into(),
+            ));
         }
+        Ok(kind)
     }
 }
 
@@ -115,18 +113,11 @@ impl<'a> PreparedTerm<'a> {
         }
     }
 
-    pub(super) fn subject_ref(&self) -> NamedOrBlankNodeRef<'_> {
+    pub(super) fn graph_name_ref(&self) -> NamedOrBlankNodeRef<'_> {
         match self.term_ref() {
             TermRef::NamedNode(node) => node.into(),
             TermRef::BlankNode(node) => node.into(),
-            _ => unreachable!("subject position was validated before preparing this term"),
-        }
-    }
-
-    pub(super) fn predicate_ref(&self) -> NamedNodeRef<'_> {
-        match self.term_ref() {
-            TermRef::NamedNode(node) => node,
-            _ => unreachable!("predicate position was validated before preparing this term"),
+            _ => unreachable!("graph name was validated before preparing this term"),
         }
     }
 }

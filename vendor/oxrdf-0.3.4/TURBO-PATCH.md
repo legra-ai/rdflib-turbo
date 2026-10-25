@@ -57,3 +57,33 @@ Dataset pattern iterators encode filters before returning so they borrow only
 Dataset-owned terms. Fixed graph patterns select existing graph-scoped indexes
 before decoding candidates; global patterns retain their original selection.
 Lifetime, candidate-visit and observed-order regressions accompany ADR 0029.
+
+## Adaptive change-only transaction undo
+
+Dataset transactions retain the existing one-Arc-per-insertion journal until an
+actual removal. They then track disjoint initially-absent and initially-present
+record sets, preserving the first stored Arc. Rollback removes current aliases
+before restoring original records, then releases newly interned dictionary words.
+The delta iterator reads current records for initially absent/finally present
+keys. No base copy, new index or dictionary GC is introduced. Regression tests
+cover no-op deletion, add/remove/readd, original-Arc restoration across all six
+indexes, graph-kind separation and unwinding with dictionary rollback.
+
+## Explicit generalized in-memory dataset core
+
+GeneralizedDataset owns the same six-index Dataset core without exposing strict
+RDF readers. The112-byte common record accepts full-Term subjects and named
+predicates; only non-IRI predicates allocate a boxed full-Term record. All index
+comparisons, equality and hashing use borrowed typed role views, without unsafe
+tuple projections or row filtering. Ordinary Dataset insertion/read APIs retain
+their strict subject/predicate types. Canonicalization retains borrowed immutable
+records rather than references to reconstructed tuple temporaries. Generalized
+transactions use the same adaptive undo journal; no parser, generic CONSTRUCT,
+Python ingress, garbage collection or raw-language spelling contract changes.
+
+Generalized transaction predicate removal resumes through the existing POSG
+ordering with one retained shared record. It journals only actual removals,
+retains the additive journal when no predicate matches, and restores original
+record identities before rollback releases newly interned words. No base relation
+copy or extra index is created. Mandatory regressions cover graph kinds, all
+pattern masks, current additions, original Arc restoration and predicate unwind.

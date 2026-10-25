@@ -4,9 +4,9 @@ use std::sync::Arc;
 
 use oxigraph::io::RdfFormat;
 use oxigraph::model::{Dataset, GraphNameRef, TermRef};
-use pyo3::exceptions::{PyNotImplementedError, PyRuntimeError, PyValueError};
+use pyo3::exceptions::{PyNotImplementedError, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyshacl_turbo_engine::{CompiledShapes, Error, ValidationReport, parse_graph};
+use pyshacl_turbo_engine::{CompiledShapes, Error, ValidationReport};
 
 use crate::NativeDataset;
 use crate::store::{NativeStore, NativeTransaction};
@@ -24,12 +24,21 @@ mod commit;
 mod dataset_validation;
 mod expansion;
 mod inferred_dataset;
+#[cfg(test)]
+mod provider_binding_tests;
 
 pyo3::create_exception!(_native, SharedValidationFailure, PyValueError);
 
 pub(crate) fn error(error: Error) -> PyErr {
     match error {
         Error::ValidationFailure(_) => SharedValidationFailure::new_err(error.to_string()),
+        Error::ShapeLoad { message, link } => {
+            shacl_bindings::ShapeLoadFailure::new_err((message, link))
+        }
+        Error::ConstraintLoad { message, link } => {
+            shacl_bindings::ConstraintLoadFailure::new_err((message, link))
+        }
+        Error::TypeError(message) => PyTypeError::new_err(message),
         Error::Unsupported(_) => PyNotImplementedError::new_err(error.to_string()),
         Error::Invalid(_) => PyValueError::new_err(error.to_string()),
         _ => PyRuntimeError::new_err(error.to_string()),
@@ -102,27 +111,47 @@ pub(crate) struct SharedShapes {
 
 #[pymethods]
 impl SharedShapes {
+    #[staticmethod]
+    fn from_compiled(program: &shacl_bindings::PyCompiledShapes) -> Self {
+        Self {
+            inner: program.shared_program(),
+        }
+    }
+
+    fn shares_program(&self, program: &shacl_bindings::PyCompiledShapes) -> bool {
+        Arc::ptr_eq(&self.inner, &program.shared_program())
+    }
+
     #[new]
-    #[pyo3(signature = (source, advanced, namespaces, numeric_booleans=true))]
+    #[pyo3(signature = (source, advanced, namespaces, numeric_booleans=true, *, _policy))]
     pub(crate) fn new(
         py: Python<'_>,
         source: &str,
         advanced: bool,
         namespaces: Vec<(String, String)>,
         numeric_booleans: bool,
+        _policy: Py<shacl_bindings::NativeRegexPolicy>,
     ) -> PyResult<Self> {
-        py.detach(|| {
-            let graph = parse_graph(source, RdfFormat::Turtle, None)?;
+        let policy = shacl_bindings::compilation_policy(py, _policy)?;
+        let result = py.detach(|| {
+            let graph = pyshacl_turbo_engine::IndexedShapesSource::parse_graph(
+                source,
+                RdfFormat::Turtle,
+                None,
+            )?;
             Ok(Self {
-                inner: Arc::new(CompiledShapes::compile_with_namespaces(
+                inner: Arc::new(CompiledShapes::compile_with_host_policy(
                     graph,
                     advanced,
                     numeric_booleans,
                     &namespaces,
+                    shacl_bindings::python_decimal_digit,
+                    policy.scalar(),
+                    policy.resolver(),
                 )?),
             })
-        })
-        .map_err(error)
+        });
+        policy.finish_with(result, error)
     }
 
     pub(crate) fn expand(
@@ -198,6 +227,33 @@ impl SharedShapes {
             .map_err(crate::error)
     }
 
+    #[pyo3(signature = (transaction, settings, graph=None))]
+    fn prepare_rules_transaction(
+        &self,
+        py: Python<'_>,
+        transaction: &NativeTransaction,
+        settings: &str,
+        graph: Option<&str>,
+    ) -> PyResult<crate::store::PreparedRules> {
+        let parsed = Settings::parse(settings).and_then(|options| {
+            graph
+                .map(crate::store::parse_graph_scope)
+                .transpose()
+                .map(|graph| (options, graph))
+                .map_err(crate::error)
+        });
+        let (options, graph) = match parsed {
+            Ok(parsed) => parsed,
+            Err(error) => {
+                py.detach(|| transaction.abort_validation())
+                    .map_err(crate::error)?;
+                return Err(error);
+            }
+        };
+        py.detach(|| transaction.prepare_rules(self.inner.clone(), options, graph))
+            .map_err(crate::error)
+    }
+
     #[pyo3(signature = (transaction, settings, inplace, graph=None))]
     fn prepare_transaction(
         &self,
@@ -258,14 +314,15 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<SharedShapes>()?;
     module.add_class::<dataset_validation::PreparedDatasetValidation>()?;
     module.add_class::<crate::store::PreparedValidation>()?;
+    module.add_class::<crate::store::PreparedRules>()?;
     module.add("SHARED_SHACL_PROTOCOL", 1)?;
     module.add(
         "SHACL_ENGINE_FINGERPRINT",
         pyshacl_turbo_engine::engine_fingerprint(),
     )?;
     module.add(
-        "SHACL_ENGINE_REVISION",
-        env!("RDFLIB_TURBO_SHACL_ENGINE_REVISION"),
+        "SHACL_ENGINE_SOURCE",
+        env!("RDFLIB_TURBO_SHACL_ENGINE_SOURCE"),
     )?;
     module.add(
         "SharedValidationFailure",

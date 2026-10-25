@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use oxigraph::model::GraphName;
 use oxigraph::store::{Store, Transaction};
+use pyshacl_turbo_engine::GraphRead;
 
 use super::NativeStore;
 use super::operations::{Reply, runtime};
@@ -48,26 +49,31 @@ impl NativeStore {
 
 pub(super) fn fork(source: &Transaction<'_>, graph: Option<String>) -> Result<Store> {
     let graph = graph.as_deref().map(pattern::graph).transpose()?;
+    copy_graph(source, graph)
+}
+
+pub(super) fn copy_graph(
+    source: &(impl GraphRead + ?Sized),
+    graph: Option<GraphName>,
+) -> Result<Store> {
     let copied = Store::new().map_err(runtime)?;
     let mut output = copied.start_transaction().map_err(runtime)?;
-    for quad in
-        source.quads_for_pattern(None, None, None, graph.as_ref().map(|graph| graph.as_ref()))
-    {
-        output.insert(&quad.map_err(runtime)?);
+    for quad in source.matching_quads(None, None, None, graph.as_ref().map(GraphName::as_ref)) {
+        output.insert_generalized(&quad?);
     }
     match graph {
         None => {
             for graph in source.named_graphs() {
-                output.insert_named_graph(&graph.map_err(runtime)?);
+                output.insert_named_graph(&graph?);
             }
         }
         Some(GraphName::NamedNode(graph)) => {
-            if source.contains_named_graph(&graph).map_err(runtime)? {
+            if source.contains_named_graph(&graph.clone().into())? {
                 output.insert_named_graph(&graph);
             }
         }
         Some(GraphName::BlankNode(graph)) => {
-            if source.contains_named_graph(&graph).map_err(runtime)? {
+            if source.contains_named_graph(&graph.clone().into())? {
                 output.insert_named_graph(&graph);
             }
         }

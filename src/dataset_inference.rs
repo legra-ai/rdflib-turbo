@@ -73,7 +73,10 @@ mod tests {
                 .err()
                 .unwrap();
             assert!(failure.is_instance_of::<PyRuntimeError>(py));
-            assert!(failure.to_string().contains("Dataset lock poisoned"));
+            assert!(
+                failure.to_string().contains("Dataset lock poisoned"),
+                "Unexpected failure: {failure}"
+            );
         });
     }
 }

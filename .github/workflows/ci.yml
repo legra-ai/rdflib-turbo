@@ -78,6 +78,14 @@ jobs:
         env:
           PREPARED_VERSION: ${{ steps.release.outputs.version }}
         run: uv run --no-project python scripts/release_version.py
+      - name: Prepare one immutable test-only pure facade cohort
+        run: uv run --no-project --python 3.13 python -B scripts/ci_facade.py prepare --output "$RUNNER_TEMP/candidate-facade-evidence"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: candidate-facade-evidence
+          path: ${{ runner.temp }}/candidate-facade-evidence
+          include-hidden-files: true
+          if-no-files-found: error
 
   sdist:
     needs: prepare
@@ -162,13 +170,18 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: release-sdist
-          path: source-dist
+          path: ${{ runner.temp }}/release-source-dist
+      - uses: actions/download-artifact@v8
+        with:
+          name: candidate-facade-evidence
+          path: ${{ runner.temp }}/candidate-facade-evidence
+          include-hidden-files: true
+      - name: Verify the facade cohort and arrange the original locked peer
+        run: uv run --no-project --python 3.13 python -B scripts/ci_facade.py consume --input "$RUNNER_TEMP/candidate-facade-evidence" --environment-file "$GITHUB_ENV"
       - name: Unpack the tested source distribution once for every interpreter
-        run: |
-          mkdir source-build || exit 1
-          # Restored Cargo outputs can be newer than archive timestamps. Establish
-          # checkout freshness while preserving the tested archive and source bytes.
-          tar -xzmf source-dist/*.tar.gz --strip-components=1 -C source-build || exit 1
+        # New files retain executable modes and invalidate stale restored Cargo
+        # outputs. Native Python paths also preserve Windows drive semantics.
+        run: uv run --no-project --python 3.13 python -I -B scripts/extract_source.py --archive-directory "$RUNNER_TEMP/release-source-dist" --destination source-build
       - name: Build native manylinux wheel from source archive
         if: runner.os == 'Linux'
         run: sh scripts/build_manylinux.sh '${{ matrix.container }}' '${{ matrix.target }}' cp311-cp311 cp312-cp312 cp313-cp313 cp314-cp314 cp315-cp315
@@ -184,7 +197,7 @@ jobs:
           done
       - run: uv tool run --from twine==6.2.0 twine check --strict dist/*
       - name: Test the installed wheel without source-tree imports
-        run: uv run --no-project python scripts/test_wheel.py --python-versions ${{ matrix.python-versions }}
+        run: uv run --no-project python scripts/test_wheel.py --python-versions ${{ matrix.python-versions }} --shacl-wheel "$SHACL_WHEEL" --owlrl-wheel "$OWLRL_WHEEL" --yaml-authority "$YAML_AUTHORITY"
       - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
@@ -196,6 +209,7 @@ jobs:
     uses: ./.github/workflows/native-coverage.yml
     with:
       revision: ${{ needs.prepare.outputs.revision }}
+      facade-artifact: candidate-facade-evidence
 
   verify:
     needs: prepare
@@ -216,6 +230,13 @@ jobs:
         with:
           toolchain: nightly-2026-10-16
           components: rustfmt
+      - uses: actions/download-artifact@v8
+        with:
+          name: candidate-facade-evidence
+          path: ${{ runner.temp }}/candidate-facade-evidence
+          include-hidden-files: true
+      - name: Verify the facade cohort and arrange the original locked peer
+        run: uv run --no-project --python 3.13 python -B scripts/ci_facade.py consume --input "$RUNNER_TEMP/candidate-facade-evidence" --environment-file "$GITHUB_ENV"
       - run: cargo +nightly-2026-10-16 fmt --check
       - run: cargo clippy --locked -- -D warnings
       - name: Immutable native engine source metadata
@@ -224,14 +245,16 @@ jobs:
         run: cargo test --locked -p oxsdatatypes --lib
       - name: CONSTRUCT ownership and identity regressions
         run: uv run --no-project python -m scripts.vendor_evaluator_tests
+      - name: Upstream matcher, Unicode and Python VM regressions
+        run: uv run --no-project python -m scripts.vendor_regex_tests
       - name: Dataset ownership, ordering and transaction regressions
         run: uv run --no-project python -m scripts.vendor_dataset_tests
       - name: Exact-term transactional storage contracts
         run: make test-store-contract
       - name: Native allocation regression budgets
         run: uv run --no-project --python 3.13 python -m scripts.allocation_budgets
-      - run: uv run --locked --extra test ruff check python tests scripts
-      - run: uv run --locked --extra test ruff format --check python tests scripts
+      - run: uv run --locked --only-group dev ruff check python tests scripts
+      - run: uv run --locked --only-group dev ruff format --check python tests scripts
 
   test:
     name: test

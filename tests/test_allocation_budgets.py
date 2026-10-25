@@ -86,3 +86,14 @@ def test_borrowed_validation_view_budget_is_required(budgets):
 )
 def test_inference_boolean_allocation_budgets_are_required(budgets, name):
     assert name in budgets.TESTS
+
+
+@pytest.mark.parametrize(
+    "name",
+    (
+        "store::pattern::count_tests::union_count_does_not_allocate_decoded_lexical_payloads",
+        "store::pattern::count_tests::transaction_union_count_does_not_allocate_decoded_lexical_payloads",
+    ),
+)
+def test_union_count_allocation_budgets_are_required(budgets, name):
+    assert name in budgets.TESTS

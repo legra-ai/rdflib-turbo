@@ -1,4 +1,4 @@
-"""Impossible standard-RDF read positions are empty after complete input validation."""
+"""Graph reads validate every term and preserve generalized RDF roles."""
 
 import json
 
@@ -73,12 +73,39 @@ def test_later_literal_metadata_errors_are_not_swallowed_by_impossible_subject()
         (Literal("subject"), PREDICATE, bad) in graph
 
 
-def test_mutations_still_reject_nonstandard_rdf_positions():
+@pytest.mark.parametrize(
+    "subject,predicate",
+    [
+        (Literal("subject"), PREDICATE),
+        (SUBJECT, BNode("predicate")),
+        (SUBJECT, Literal("predicate")),
+    ],
+)
+def test_mutations_preserve_generalized_roles_like_reference(subject, predicate):
     graph = Graph()
-    for triple in ((Literal("subject"), PREDICATE, OBJECT), (SUBJECT, BNode("predicate"), OBJECT)):
-        with pytest.raises(ValueError):
-            graph.add(triple)
-    assert not graph
+    reference = ReferenceGraph()
+    statement = (subject, predicate, OBJECT)
+    graph.add(statement)
+    reference.add(statement)
+    assert set(graph) == set(reference)
+    assert statement in graph
+    graph.remove(statement)
+    reference.remove(statement)
+    assert set(graph) == set(reference) == set()
+
+
+def test_invalid_mutation_metadata_leaves_graph_unchanged():
+    graph = Graph()
+    statement = (SUBJECT, PREDICATE, OBJECT)
+    graph.add(statement)
+    with pytest.raises(ValueError, match="datatype and language"):
+        graph.store.backend._native.insert_terms(
+            ("uri", "urn:discard", None, None),
+            ("uri", str(PREDICATE), None, None),
+            ("literal", "invalid", "urn:type", "en"),
+            None,
+        )
+    assert set(graph) == {statement}
 
 
 @pytest.mark.parametrize("membership", [False, True])

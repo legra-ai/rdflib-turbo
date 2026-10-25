@@ -13,6 +13,9 @@ mod errors;
 use errors::{Error, Result, error};
 mod graph;
 mod inference;
+mod regex_policy;
+#[cfg(test)]
+mod regex_policy_tests;
 mod shacl;
 mod store;
 
@@ -33,9 +36,11 @@ fn format(name: &str) -> PyResult<RdfFormat> {
     }
 }
 
-fn serialize(data: &Dataset, format: RdfFormat) -> PyResult<String> {
+fn serialize(data: &GeneralizedDataset, format: RdfFormat) -> PyResult<String> {
     let mut writer = RdfSerializer::from_format(format).for_writer(Vec::new());
     for quad in data.iter() {
+        let quad =
+            QuadRef::try_from(quad).map_err(|error| PyValueError::new_err(error.to_string()))?;
         writer
             .serialize_quad(quad)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
@@ -67,15 +72,15 @@ fn term(term: &Term) -> Value {
 /// One runtime-owned exact-term dataset. Locks cover whole native operations.
 #[derive(Clone, Default)]
 struct DatasetState {
-    data: Dataset,
+    data: GeneralizedDataset,
     namespaces: Vec<(String, String)>,
     revision: u64,
 }
 
 impl DatasetState {
-    fn new(data: Dataset, namespaces: Vec<(String, String)>) -> Self {
+    fn new(data: impl Into<GeneralizedDataset>, namespaces: Vec<(String, String)>) -> Self {
         Self {
-            data,
+            data: data.into(),
             namespaces,
             revision: 0,
         }
@@ -103,14 +108,14 @@ impl DatasetState {
 }
 
 impl Deref for DatasetState {
-    type Target = Dataset;
-    fn deref(&self) -> &Dataset {
+    type Target = GeneralizedDataset;
+    fn deref(&self) -> &GeneralizedDataset {
         &self.data
     }
 }
 
 impl DerefMut for DatasetState {
-    fn deref_mut(&mut self) -> &mut Dataset {
+    fn deref_mut(&mut self) -> &mut GeneralizedDataset {
         &mut self.data
     }
 }
@@ -175,10 +180,10 @@ impl NativeDataset {
                 .write()
                 .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
             let revision = state.next_revision().map_err(error)?;
-            let mut transaction = state.data.insert_transaction();
+            let mut transaction = state.data.transaction();
             for quad in reader.by_ref() {
                 let quad = quad.map_err(|e| PyValueError::new_err(e.to_string()))?;
-                transaction.insert(&quad);
+                transaction.insert(quad.as_ref());
             }
             let prefixes = reader
                 .prefixes()
@@ -240,8 +245,8 @@ impl NativeDataset {
                         GraphNameRef::BlankNode(n) => term(&n.into_owned().into()),
                     };
                     json!([
-                        term(&q.subject.into_owned().into()),
-                        term(&q.predicate.into_owned().into()),
+                        term(&q.subject.into_owned()),
+                        term(&q.predicate.into_owned()),
                         term(&q.object.into_owned()),
                         graph
                     ])
@@ -271,14 +276,17 @@ impl NativeDataset {
                 .inner
                 .read()
                 .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
-            let union = default_union.then(|| graph::with_union(&data));
-            let view = union.as_ref().unwrap_or(&data);
+            let union = default_union.then(|| pyshacl_turbo_engine::UnionGraph::new(&data.data));
+            let query = SparqlEvaluator::new().for_query(parsed);
             // SERVICE would require network execution, which this runtime does not enable.
-            let result = SparqlEvaluator::new()
-                .for_query(parsed)
-                .on_queryable_dataset(view)
-                .execute()
-                .map_err(|e| error(e.into()))?;
+            let result = if let Some(view) = &union {
+                query
+                    .on_queryable_dataset(pyshacl_turbo_engine::QueryGraph::new(view))
+                    .execute()
+            } else {
+                query.on_queryable_dataset(&data.data).execute()
+            }
+            .map_err(|e| error(e.into()))?;
             store::output::query_output(result, graph_kind).map_err(error)
         })
     }
@@ -353,6 +361,9 @@ impl NativeDataset {
 
 #[pymodule]
 fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    let standalone_shacl = PyModule::new(module.py(), "shacl")?;
+    shacl_bindings::register(&standalone_shacl, regex_policy::build(module.py())?)?;
+    module.add_submodule(&standalone_shacl)?;
     module.add_class::<NativeDataset>()?;
     module.add_class::<inference::InferenceOutcome>()?;
     shacl::register(module)?;
@@ -374,3 +385,6 @@ mod construct_tests;
 
 #[cfg(test)]
 mod dataset_revision_tests;
+
+#[cfg(test)]
+mod dataset_generalized_tests;

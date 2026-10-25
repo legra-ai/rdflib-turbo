@@ -6,6 +6,7 @@
 
 mod blank_node;
 pub mod dataset;
+mod generalized;
 pub mod graph;
 mod interning;
 mod literal;
@@ -16,7 +17,11 @@ mod variable;
 pub mod vocab;
 
 pub use crate::blank_node::{BlankNode, BlankNodeIdParseError, BlankNodeRef};
-pub use crate::dataset::Dataset;
+pub use crate::dataset::{Dataset, GeneralizedDataset, GeneralizedTransaction};
+pub use crate::generalized::{
+    GeneralizedNarrowingError, GeneralizedQuad, GeneralizedQuadRef, GeneralizedTermPosition,
+    GeneralizedTriple, GeneralizedTripleRef,
+};
 pub use crate::graph::Graph;
 #[cfg(feature = "rdf-12")]
 pub use crate::literal::BaseDirection;

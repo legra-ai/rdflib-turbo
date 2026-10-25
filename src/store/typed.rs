@@ -1,5 +1,7 @@
 //! One typed RDF boundary shared by graph scans and mutations.
-use oxigraph::model::{BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, Quad, Term};
+use oxigraph::model::{
+    BlankNode, GeneralizedQuad, GraphName, Literal, NamedNode, NamedOrBlankNode, Term,
+};
 
 use super::typed_view::{Kind, Position, TermView};
 use crate::Result;
@@ -7,7 +9,7 @@ use crate::Result;
 pub(super) type TermTuple = (String, String, Option<String>, Option<String>);
 
 pub(super) fn term(source: TermTuple) -> Result<Term> {
-    term_in_position(source, Position::Object)
+    term_in_position(source, Position::Data)
 }
 
 fn term_in_position(
@@ -31,23 +33,16 @@ fn term_in_position(
     })
 }
 
-pub(super) fn subject(source: TermTuple) -> Result<NamedOrBlankNode> {
-    match term_in_position(source, Position::Subject)? {
+pub(super) fn graph_name(source: TermTuple) -> Result<NamedOrBlankNode> {
+    match term_in_position(source, Position::GraphName)? {
         Term::NamedNode(node) => Ok(node.into()),
         Term::BlankNode(node) => Ok(node.into()),
-        _ => unreachable!("subject kind was validated before model conversion"),
-    }
-}
-
-pub(super) fn predicate(source: TermTuple) -> Result<NamedNode> {
-    match term_in_position(source, Position::Predicate)? {
-        Term::NamedNode(node) => Ok(node),
-        _ => unreachable!("predicate kind was validated before model conversion"),
+        _ => unreachable!("graph name kind was validated before model conversion"),
     }
 }
 
 pub(super) fn graph(source: Option<TermTuple>) -> Result<GraphName> {
-    Ok(match source.map(subject).transpose()? {
+    Ok(match source.map(graph_name).transpose()? {
         None => GraphName::DefaultGraph,
         Some(NamedOrBlankNode::NamedNode(node)) => node.into(),
         Some(NamedOrBlankNode::BlankNode(node)) => node.into(),
@@ -76,10 +71,10 @@ impl QuadInput {
         }
     }
 
-    pub fn quad(self) -> Result<Quad> {
-        Ok(Quad::new(
-            subject(self.subject)?,
-            predicate(self.predicate)?,
+    pub fn quad(self) -> Result<GeneralizedQuad> {
+        Ok(GeneralizedQuad::new(
+            term(self.subject)?,
+            term(self.predicate)?,
             term(self.object)?,
             graph(self.graph)?,
         ))

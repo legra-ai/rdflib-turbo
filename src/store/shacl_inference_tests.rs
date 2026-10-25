@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use oxigraph::io::RdfFormat;
 use oxigraph::model::*;
 use oxigraph::store::Store;
-use pyshacl_turbo_engine::{CompiledShapes, Options, parse_graph};
+use pyshacl_turbo_engine::{CompiledShapes, Options};
 
 use super::*;
 use crate::inference::InferenceRequest;
@@ -17,7 +17,7 @@ fn node(local: &str) -> NamedNode {
 }
 
 fn shapes() -> Arc<CompiledShapes> {
-    let graph = parse_graph(
+    let graph = pyshacl_turbo_engine::IndexedShapesSource::parse_graph(
         "@prefix sh:<http://www.w3.org/ns/shacl#>. <urn:S> sh:targetSubjectsOf <urn:parent>; sh:class <urn:Required>.",
         RdfFormat::Turtle, None,
     ).unwrap();
@@ -75,11 +75,11 @@ fn inference_validation_private_delta_preserves_named_blank_and_default_scope() 
             .unwrap();
             assert!(!report.into_output().0);
             assert_eq!(transaction.len().unwrap(), 3);
-            assert!(!delta.inference.is_empty());
+            assert!(delta.inference.additions().next().is_some());
             assert!(
                 delta
                     .inference
-                    .iter()
+                    .additions()
                     .all(|quad| quad.graph_name.is_default_graph())
             );
             delta.apply(&mut transaction);
@@ -167,5 +167,57 @@ fn pending_transaction_inference_accepts_only_derived_output_and_cas_failure_rol
                     .is_ok()
             );
         }
+    }
+}
+
+#[test]
+fn publication_keeps_full_inference_roles_and_exact_override_graph_kinds() {
+    use std::collections::HashSet;
+    for override_graph in [
+        None,
+        Some(GraphName::DefaultGraph),
+        Some(NamedNode::new_unchecked("urn:scope").into()),
+        Some(BlankNode::new_unchecked("urn:scope").into()),
+    ] {
+        let rule = Quad::new(
+            node("s"),
+            node("p"),
+            node("o"),
+            NamedNode::new_unchecked("urn:logical"),
+        );
+        let inferred = GeneralizedQuad::new(
+            Literal::new_simple_literal("subject"),
+            Literal::new_simple_literal("predicate"),
+            node("value"),
+            BlankNode::new_unchecked("urn:logical"),
+        );
+        let delta = ValidationDelta {
+            data: Dataset::from_iter([rule.clone()]),
+            inference: crate::inference::InferenceDelta::from_additions(
+                GeneralizedDataset::from_iter([inferred.clone()]),
+            ),
+            graph: override_graph.clone(),
+        };
+        let store = Store::new().unwrap();
+        let mut transaction = store.start_transaction().unwrap();
+        delta.apply(&mut transaction);
+        let mut wanted_rule = GeneralizedQuad::from(rule);
+        let mut wanted_inferred = inferred;
+        if let Some(graph) = override_graph {
+            wanted_rule.graph_name = graph.clone();
+            wanted_inferred.graph_name = graph;
+        }
+        let wanted = HashSet::from([wanted_rule, wanted_inferred]);
+        let actual = transaction
+            .generalized_quads_for_pattern(None, None, None, None)
+            .collect::<std::result::Result<HashSet<_>, _>>()
+            .unwrap();
+        assert_eq!(actual, wanted);
+        transaction.commit().unwrap();
+        let committed = store
+            .generalized_quads_for_pattern(None, None, None, None)
+            .collect::<std::result::Result<HashSet<_>, _>>()
+            .unwrap();
+        assert_eq!(committed, wanted);
     }
 }

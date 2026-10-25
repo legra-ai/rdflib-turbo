@@ -1,6 +1,6 @@
 //! RDFS one-time substitution joins caller-profile value classes.
-use oxigraph::model::{GraphName, Literal, NamedNode, Quad, Term};
-use oxigraph::sparql::{PreparedSparqlQuery, QueryResults, SparqlEvaluator};
+use oxigraph::model::{GeneralizedQuad, GraphName, Literal, NamedNode, Term};
+use oxigraph::sparql::{PreparedSparqlQuery, SparqlEvaluator};
 use rdf_reasoning::{LITERAL_VALUE_RELATION, LiteralRuleId};
 
 use super::Pending;
@@ -84,37 +84,22 @@ pub(super) fn substitute(data: &mut impl Graph, context: &LexicalContext) -> Res
             ));
         }
     }
-    let QueryResults::Solutions(rows) = data.query(value_query(context.clone())?)? else {
-        unreachable!("Literal substitution uses a SELECT query")
-    };
+    let triples = data.inference_heads(value_query(context.clone())?)?;
     let mut additions = Pending::default();
-    for row in rows {
-        let row = row?;
-        let subject = row
-            .get("__head_s")
-            .expect("safe literal rule subject")
-            .clone()
-            .try_into()
-            .map_err(|_| Error::Unsupported("Literal rule produced a non-RDF subject".into()))?;
-        let predicate = row
-            .get("__head_p")
-            .expect("safe literal rule predicate")
-            .clone()
-            .try_into()
-            .map_err(|_| Error::Unsupported("Literal rule produced a non-IRI predicate".into()))?;
-        let object = row
-            .get("__head_o")
-            .expect("safe literal rule object")
-            .clone();
-        additions.push(
-            data,
-            Quad {
-                subject,
-                predicate,
-                object,
-                graph_name: GraphName::DefaultGraph,
-            },
-        )?;
+    for triple in triples {
+        let triple = triple?;
+        let quad = GeneralizedQuad::new(
+            triple.subject,
+            triple.predicate,
+            triple.object,
+            GraphName::DefaultGraph,
+        );
+        // Original RDFS one_time_rules uses destination.add directly, unlike
+        // OWL Core.store_triple: literal predicates are valid substitutions.
+        // Retain immutable query evaluation and only distinct destination delta.
+        if !additions.0.contains(&quad) && !data.contains_destination(quad.as_ref())? {
+            additions.0.insert(quad);
+        }
     }
     for quad in additions.0 {
         data.insert(quad)?;

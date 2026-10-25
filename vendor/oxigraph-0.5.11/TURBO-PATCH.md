@@ -109,3 +109,55 @@ proof of absence. No cache, index, retained pattern or production counter is
 added. Per-reader test instrumentation counts actual index probes; regressions
 cover all missing component positions, all sixteen masks, commits, rollback and
 retained snapshots. Installed-wheel measurements report boundary costs separately.
+
+## Exact persistent prefix bounds
+
+RocksDB prefix scans increment the last non-`0xff` byte and truncate the carried
+suffix when constructing their exclusive upper bound. Retaining trailing
+`0xff` bytes admitted adjacent graph or term identities, including maximum
+numeric blank-node IDs. Empty and all-`0xff` prefixes have no finite successor;
+their unbounded upper limit is the mathematical range, not an alternate lookup.
+Encoded term tags, index key bytes and the on-disk version remain unchanged.
+
+Raw-byte regressions cover carry and both unbounded cases. Public Store tests
+compare memory and persistent results across all sixteen masks, default/named/
+blank scopes, maximum 64/128-bit IDs, empty blank labels, pending writes,
+rollback, pinned snapshots and reopen. Both native storage profiles require
+these regressions in CI. This preserves the exact-term and scoped transaction
+contracts in [ADR 0006](../../docs/adr/0006-exact-term-transactional-store.md)
+and [ADR 0007](../../docs/adr/0007-store-api-and-scoped-transactions.md).
+
+The encoded quad graph slot uses the graph-only domain from ADR 0060 rather than
+retaining a full literal-capable term. All default, named and full-width blank
+representations remain unchanged. Checked decoding rejects invalid literal graph
+slots; converting valid values through the existing term codec preserves exact
+v1 bytes. Graph dictionaries and indexes retain their existing types. Native
+layout, nine index-order golden bytes, scope/transaction/snapshot and reopen
+regressions are mandatory in both storage profiles. Allocator/RSS savings remain
+unmeasured by these source tests.
+
+## Borrowed generalized point membership
+
+Store and Transaction expose contains_generalized on borrowed full-Term quads.
+It encodes the requested terms directly into the existing quad key and invokes
+the same versioned reader.contains path as ordinary membership. Stored terms
+are never decoded for this boolean, and no storage index, wire shape or
+publication behavior changes. Native controls cover all subject/predicate kinds,
+exact default/named/blank contexts and pending mutation rollback; the existing
+isolated transaction membership budget also checks long generalized roles on
+both Store and Transaction without replacing its ordinary membership guard.
+
+The bound prepared-query wrapper exposes the separate
+`execute_inference_construct` capability from the patched evaluator. It retains
+substitutions, dataset specification and the actual bound source, returning
+full-Term heads without changing ordinary execute/QueryResults::Graph. The
+inference-only evaluator rejects other query forms and propagates source errors;
+publication and predicate policy remain at the provider's Pending boundary.
+
+GeneralizedQuadIter has an explicit lexical projection capability retaining its
+existing owning Arc and encoded iterator. Strict QuadIter projection retains its
+positional validation. Both project selected fields through one compile-time
+term-domain helper; full-Term projection accepts every stored subject/predicate
+kind without copying its dictionary or constructing temporary model strings.
+Mandatory owner regressions cover all roles/masks, strict errors and lexical
+lifetimes after source mutation and drop. No encoded wire/index shape changes.

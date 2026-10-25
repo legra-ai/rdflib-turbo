@@ -1,14 +1,21 @@
 use super::memory_counts::{PendingCounts, PublishedCounts};
-use crate::model::{GraphNameRef, NamedOrBlankNodeRef, QuadRef, TermRef};
+#[cfg(test)]
+use crate::model::QuadRef;
+#[path = "memory_changes.rs"]
+mod changes;
+use crate::model::{GeneralizedQuadRef, GraphNameRef, NamedOrBlankNodeRef, TermRef};
 use crate::storage::CorruptionError;
 pub use crate::storage::error::StorageError;
 use crate::storage::numeric_encoder::{
     Decoder, EncodedQuad, EncodedTerm, StrHash, StrHashHasher, StrLookup, insert_term,
 };
+use changes::Capture;
+pub(crate) use changes::{MemoryChangedRows, MemoryPreparedChanges};
 use dashmap::iter::Iter;
 use dashmap::mapref::entry::Entry;
 use dashmap::{DashMap, DashSet};
 use oxrdf::Quad;
+use parking_lot::Mutex as QuadRangeMutex;
 use rustc_hash::FxHasher;
 use std::borrow::Borrow;
 use std::hash::{BuildHasherDefault, Hash, Hasher};
@@ -93,6 +100,7 @@ impl MemoryStorage {
             counts,
             _transaction_guard: transaction_guard,
             committed: false,
+            capture: None,
         }
     }
 
@@ -279,13 +287,13 @@ impl<'a> MemoryStorageReader<'a> {
                     CorruptionError::new("Quad in previous chain but not in quad set").into(),
                 );
             }
-            self.decode_quad(&current.quad)?;
+            self.decode_generalized_quad(&current.quad)?;
             if !current.quad.graph_name.is_default_graph()
                 && !self
                     .storage
                     .content
                     .graphs
-                    .contains_key(&current.quad.graph_name)
+                    .contains_key(&current.quad.graph_name.into())
             {
                 return Err(
                     CorruptionError::new("Quad in named graph that does not exists").into(),
@@ -435,7 +443,7 @@ impl<'a> MemoryStorageReader<'a> {
     fn is_node_in_range(&self, node: &QuadListNode) -> bool {
         #[cfg(test)]
         self.visited_nodes.fetch_add(1, Ordering::Relaxed);
-        let range = node.range.lock().unwrap();
+        let range = node.range.lock();
         self.is_in_range(&range)
     }
 }
@@ -453,6 +461,7 @@ pub struct MemoryStorageTransaction<'a> {
     transaction_id: usize,
     snapshot_id: usize,
     committed: bool,
+    capture: Option<Box<Capture>>,
     counts: PendingCounts,
     _transaction_guard: LockGuard<'a>,
 }
@@ -483,7 +492,8 @@ impl MemoryStorageTransaction<'_> {
         }
     }
 
-    pub fn insert(&mut self, quad: QuadRef<'_>) {
+    pub fn insert<'a>(&mut self, quad: impl Into<GeneralizedQuadRef<'a>>) {
+        let quad = quad.into();
         let encoded: EncodedQuad = quad.into();
         if let Some(node) = self
             .storage
@@ -492,26 +502,27 @@ impl MemoryStorageTransaction<'_> {
             .get(&encoded)
             .map(|node| Arc::clone(&node))
         {
-            let added = node.range.lock().unwrap().add(self.transaction_id);
+            let added = node.range.lock().add(self.transaction_id);
             if added {
-                self.record_count(&encoded.graph_name, true);
+                self.record_count(&encoded.graph_name.into(), true);
+                self.capture_insert(&node);
                 self.log.push(LogEntry::QuadNode(node));
                 if !quad.graph_name.is_default_graph()
                     && self
                         .storage
                         .content
                         .graphs
-                        .get_mut(&encoded.graph_name)
+                        .get_mut(&encoded.graph_name.into())
                         .unwrap()
                         .add(self.transaction_id)
                 {
-                    self.log.push(LogEntry::Graph(encoded.graph_name.clone()));
+                    self.log.push(LogEntry::Graph(encoded.graph_name.into()));
                 }
             }
         } else {
             let node = Arc::new(QuadListNode {
                 quad: encoded.clone(),
-                range: Mutex::new(VersionRange::Start(self.transaction_id)),
+                range: QuadRangeMutex::new(VersionRange::Start(self.transaction_id)),
                 previous: self.storage.content.last_quad.read().unwrap().clone(),
                 previous_subject: self
                     .storage
@@ -532,7 +543,7 @@ impl MemoryStorageTransaction<'_> {
                     .storage
                     .content
                     .last_quad_by_graph_name
-                    .view(&encoded.graph_name, |_, (node, _)| Weak::clone(node)),
+                    .view(&encoded.graph_name.into(), |_, (node, _)| Weak::clone(node)),
             });
             self.storage.content.quad_set.insert(Arc::clone(&node));
             *self.storage.content.last_quad.write().unwrap() = Some(Arc::downgrade(&node));
@@ -566,7 +577,7 @@ impl MemoryStorageTransaction<'_> {
             self.storage
                 .content
                 .last_quad_by_graph_name
-                .entry(encoded.graph_name.clone())
+                .entry(encoded.graph_name.into())
                 .and_modify(|(e, count)| {
                     *e = Arc::downgrade(&node);
                     *count += 1;
@@ -579,14 +590,15 @@ impl MemoryStorageTransaction<'_> {
 
             match quad.graph_name {
                 GraphNameRef::NamedNode(graph_name) => {
-                    self.insert_encoded_named_graph(graph_name.into(), encoded.graph_name.clone());
+                    self.insert_encoded_named_graph(graph_name.into(), encoded.graph_name.into());
                 }
                 GraphNameRef::BlankNode(graph_name) => {
-                    self.insert_encoded_named_graph(graph_name.into(), encoded.graph_name.clone());
+                    self.insert_encoded_named_graph(graph_name.into(), encoded.graph_name.into());
                 }
                 GraphNameRef::DefaultGraph => (),
             }
-            self.record_count(&encoded.graph_name, true);
+            self.record_count(&encoded.graph_name.into(), true);
+            self.capture_insert(&node);
             self.log.push(LogEntry::QuadNode(node));
         }
     }
@@ -631,7 +643,8 @@ impl MemoryStorageTransaction<'_> {
         debug_assert_eq!(inserted.as_ref(), value, "Hash conflict for two strings");
     }
 
-    pub fn remove(&mut self, quad: QuadRef<'_>) {
+    pub fn remove<'a>(&mut self, quad: impl Into<GeneralizedQuadRef<'a>>) {
+        let quad = quad.into();
         self.remove_encoded(&quad.into())
     }
 
@@ -645,9 +658,10 @@ impl MemoryStorageTransaction<'_> {
         else {
             return;
         };
-        let removed = node.range.lock().unwrap().remove(self.transaction_id);
+        let removed = node.range.lock().remove(self.transaction_id);
         if removed {
-            self.record_count(&quad.graph_name, false);
+            self.record_count(&quad.graph_name.into(), false);
+            self.capture_remove(&node);
             self.log.push(LogEntry::QuadNode(node));
         }
     }
@@ -663,9 +677,10 @@ impl MemoryStorageTransaction<'_> {
             .last_quad_by_graph_name
             .view(graph_name, |_, (node, _)| Weak::clone(node));
         while let Some(current) = next.take().and_then(|c| c.upgrade()) {
-            let removed = current.range.lock().unwrap().remove(self.transaction_id);
+            let removed = current.range.lock().remove(self.transaction_id);
             if removed {
-                self.record_count(&current.quad.graph_name, false);
+                self.record_count(&current.quad.graph_name.into(), false);
+                self.capture_remove(&current);
                 self.log.push(LogEntry::QuadNode(Arc::clone(&current)));
             }
             next.clone_from(&current.previous_graph_name);
@@ -682,9 +697,10 @@ impl MemoryStorageTransaction<'_> {
     pub fn clear_all_graphs(&mut self) {
         let storage = self.storage;
         storage.content.quad_set.iter().for_each(|node| {
-            let removed = node.range.lock().unwrap().remove(self.transaction_id);
+            let removed = node.range.lock().remove(self.transaction_id);
             if removed {
-                self.record_count(&node.quad.graph_name, false);
+                self.record_count(&node.quad.graph_name.into(), false);
+                self.capture_remove(&node);
                 self.log.push(LogEntry::QuadNode(Arc::clone(&node)));
             }
         });
@@ -730,6 +746,14 @@ impl MemoryStorageTransaction<'_> {
     }
 
     pub fn commit(mut self) {
+        assert!(
+            self.capture.is_none(),
+            "Active change capture requires commit_with_changes"
+        );
+        self.publish();
+    }
+
+    fn publish(&mut self) {
         let new_version_id = self
             .snapshot_id
             .checked_add(1)
@@ -739,7 +763,6 @@ impl MemoryStorageTransaction<'_> {
                 LogEntry::QuadNode(node) => {
                     node.range
                         .lock()
-                        .unwrap()
                         .upgrade_transaction(self.transaction_id, new_version_id);
                 }
                 LogEntry::Graph(graph_name) => {
@@ -768,10 +791,7 @@ impl Drop for MemoryStorageTransaction<'_> {
             for operation in take(&mut self.log) {
                 match operation {
                     LogEntry::QuadNode(node) => {
-                        node.range
-                            .lock()
-                            .unwrap()
-                            .rollback_transaction(self.transaction_id);
+                        node.range.lock().rollback_transaction(self.transaction_id);
                     }
                     LogEntry::Graph(graph_name) => {
                         if let Some(mut entry) = self.storage.content.graphs.get_mut(&graph_name) {
@@ -902,7 +922,9 @@ enum LogEntry {
 
 struct QuadListNode {
     quad: EncodedQuad,
-    range: Mutex<VersionRange>,
+    // Keep each quad's uncontended version lock inline; Darwin's standard
+    // mutex otherwise allocates a separate pthread mutex on first access.
+    range: QuadRangeMutex<VersionRange>,
     previous: Option<Weak<Self>>,
     previous_subject: Option<Weak<Self>>,
     previous_predicate: Option<Weak<Self>>,
@@ -1287,3 +1309,11 @@ mod cardinality_tests;
 #[cfg(test)]
 #[path = "memory_missing_pattern_tests.rs"]
 mod missing_pattern_tests;
+
+#[cfg(test)]
+#[path = "memory_lock_tests.rs"]
+mod lock_tests;
+
+#[cfg(test)]
+#[path = "memory_changes_tests.rs"]
+mod changes_tests;

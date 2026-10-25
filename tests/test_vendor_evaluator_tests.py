@@ -47,3 +47,22 @@ def test_missing_mode_specific_guard_fails_before_tests(runner, monkeypatch, tmp
     with pytest.raises(RuntimeError, match="Missing evaluator regressions"):
         runner.run(tmp_path)
     assert len(calls) == 1
+
+
+def test_explicit_inference_heads_are_mandatory_in_every_feature_profile(runner):
+    expected = {
+        "inference_construct_stats_tests::inference_construct_explanation_retains_positive_strict_body_work",
+        "inference_construct_stats_tests::inference_construct_explanation_keeps_empty_construct_distinct_from_wrong_form",
+        "inference_construct_tests::inference_construct_retains_all_roles_without_widening_default_construct",
+        "inference_construct_tests::inference_construct_shares_constant_variable_ids_and_rejects_unbound_heads",
+        "inference_construct_tests::inference_construct_generated_blank_labels_stay_per_solution_with_literal_predicates",
+        "inference_construct_tests::inference_construct_explicitly_refuses_select_ask_and_describe",
+        "inference_construct_tests::inference_construct_empty_valid_graph_is_not_a_query_form_error",
+        "inference_construct_tests::inference_construct_propagates_source_and_externalization_errors",
+        "inference_construct_tests::inference_construct_preserves_strict_row_order_constants_and_generated_node_policy",
+    }
+    assert expected <= set(runner.GUARDS)
+    assert (
+        "inference_construct_tests::inference_construct_retains_quoted_roles_and_propagates_nested_template_errors"
+        in runner.ALL_GUARDS
+    )

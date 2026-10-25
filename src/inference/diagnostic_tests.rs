@@ -2,25 +2,26 @@
 
 use oxigraph::model::*;
 use oxigraph::sparql::{PreparedSparqlQuery, QueryResults};
-use oxrdf::dataset::InsertTransaction;
+use oxrdf::GeneralizedDataset;
+use oxrdf::dataset::GeneralizedTransaction;
 
 use super::backend::Graph;
 use super::{InferenceRequest, expand_inner};
 use crate::{Error, Result};
 
 struct Fault<'a, 'data> {
-    journal: &'a mut InsertTransaction<'data>,
+    journal: &'a mut GeneralizedTransaction<'data>,
     predicate: &'static str,
 }
 
-impl<'graph, 'data> Graph for Fault<'graph, 'data> {
+impl<'owner, 'data> Graph for Fault<'owner, 'data> {
     fn quads<'a>(
         &'a self,
-        subject: Option<NamedOrBlankNodeRef<'_>>,
-        predicate: Option<NamedNodeRef<'_>>,
+        subject: Option<TermRef<'_>>,
+        predicate: Option<TermRef<'_>>,
         object: Option<TermRef<'_>>,
-    ) -> impl Iterator<Item = Result<Quad>> + use<'a, 'graph, 'data> {
-        let failed = predicate.is_some_and(|predicate| predicate.as_str() == self.predicate);
+    ) -> impl Iterator<Item = Result<GeneralizedQuad>> + use<'a, 'owner, 'data> {
+        let failed = predicate.is_some_and(|predicate| matches!(predicate, TermRef::NamedNode(node) if node.as_str() == self.predicate));
         let rows = self.journal.quads_for_pattern(
             subject,
             predicate,
@@ -38,7 +39,20 @@ impl<'graph, 'data> Graph for Fault<'graph, 'data> {
         Ok(query.on_queryable_dataset(&**self.journal).execute()?)
     }
 
-    fn insert(&mut self, quad: Quad) -> Result<()> {
+    fn inference_heads(
+        &self,
+        query: PreparedSparqlQuery,
+    ) -> Result<oxigraph::sparql::QueryTripleIter<'_, GeneralizedTriple>> {
+        Ok(query
+            .on_queryable_dataset(&**self.journal)
+            .execute_inference_construct()?)
+    }
+
+    fn cleanup_blank_predicates(&mut self) -> Result<()> {
+        self.journal.cleanup_blank_predicates()
+    }
+
+    fn insert(&mut self, quad: GeneralizedQuad) -> Result<()> {
         self.journal.insert(&quad);
         Ok(())
     }
@@ -50,15 +64,15 @@ fn diagnostic_iterator_failure_rolls_back_derived_facts_and_publishes_no_error_n
         "http://www.w3.org/2002/07/owl#differentFrom",
         "http://www.w3.org/2002/07/owl#sourceIndividual",
     ] {
-        let original = Quad::new(
+        let original = GeneralizedQuad::new(
             NamedNode::new("urn:x").unwrap(),
             NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap(),
             NamedNode::new("http://www.w3.org/2002/07/owl#Nothing").unwrap(),
             GraphName::DefaultGraph,
         );
-        let mut data = Dataset::from_iter([original.clone()]);
+        let mut data = GeneralizedDataset::from_iter([original.clone()]);
         {
-            let mut journal = data.insert_transaction();
+            let mut journal = data.transaction();
             let failure = expand_inner(
                 &mut Fault {
                     journal: &mut journal,
@@ -77,9 +91,12 @@ fn diagnostic_iterator_failure_rolls_back_derived_facts_and_publishes_no_error_n
                 journal
                     .quads_for_pattern(
                         None,
-                        Some(NamedNodeRef::new_unchecked(
-                            "http://www.daml.org/2002/03/agents/agent-ont#error"
-                        )),
+                        Some(
+                            NamedNodeRef::new_unchecked(
+                                "http://www.daml.org/2002/03/agents/agent-ont#error"
+                            )
+                            .into()
+                        ),
                         None,
                         None
                     )

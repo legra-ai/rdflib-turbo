@@ -14,7 +14,15 @@ fn every_mutator_rejects_exhausted_revision_before_changes() {
         native.inner.write().unwrap().revision = u64::MAX;
         let before = native.dump(py, "nquads").unwrap();
         let namespaces = native.namespaces().unwrap();
-        let shapes = shacl::SharedShapes::new(py, RULE, true, vec![], true).unwrap();
+        let shapes = shacl::SharedShapes::new(
+            py,
+            RULE,
+            true,
+            vec![],
+            true,
+            crate::native_tests::host_regex_policy(py),
+        )
+        .unwrap();
         let failures = [
             native
                 .load(py, "@prefix fresh:<urn:fresh:>.", "turtle", None, true)
@@ -63,7 +71,15 @@ fn successful_noop_writes_advance_once_and_copies_are_independent() {
         assert_eq!(copied.inner.read().unwrap().revision, 0);
         copied.bind_namespaces(vec![]).unwrap();
         assert_eq!(native.inner.read().unwrap().revision, 4);
-        let shapes = shacl::SharedShapes::new(py, RULE, true, vec![], true).unwrap();
+        let shapes = shacl::SharedShapes::new(
+            py,
+            RULE,
+            true,
+            vec![],
+            true,
+            crate::native_tests::host_regex_policy(py),
+        )
+        .unwrap();
         shapes.validate(py, &native, "{}", true).unwrap();
         assert_eq!(native.inner.read().unwrap().revision, 5);
         shapes.validate(py, &native, "{}", false).unwrap();

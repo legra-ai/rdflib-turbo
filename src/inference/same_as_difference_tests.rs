@@ -1,4 +1,5 @@
 //! Existing-head probe budgets for immutable one-round equality composition.
+use oxrdf::GeneralizedDataset;
 use std::cell::Cell;
 
 use oxigraph::model::*;
@@ -8,7 +9,7 @@ use super::{Graph, Pending, Rows, SubjectRow};
 use crate::Result;
 
 struct ExistingHeads<'a> {
-    data: &'a Dataset,
+    data: &'a GeneralizedDataset,
     probes: Cell<usize>,
     work: Cell<usize>,
     incoming: Cell<usize>,
@@ -18,10 +19,10 @@ struct ExistingHeads<'a> {
 impl<'data> Graph for ExistingHeads<'data> {
     fn quads<'a>(
         &'a self,
-        s: Option<NamedOrBlankNodeRef<'_>>,
-        p: Option<NamedNodeRef<'_>>,
+        s: Option<TermRef<'_>>,
+        p: Option<TermRef<'_>>,
         o: Option<TermRef<'_>>,
-    ) -> impl Iterator<Item = Result<Quad>> + use<'a, 'data> {
+    ) -> impl Iterator<Item = Result<GeneralizedQuad>> + use<'a, 'data> {
         self.work.set(self.work.get() + 1);
         if s.is_none() && o.is_none() {
             self.full_scans.set(self.full_scans.get() + 1);
@@ -37,7 +38,7 @@ impl<'data> Graph for ExistingHeads<'data> {
             })
     }
 
-    fn contains(&self, quad: &Quad) -> Result<bool> {
+    fn contains(&self, quad: GeneralizedQuadRef<'_>) -> Result<bool> {
         let present = self.data.contains(quad);
         if present {
             self.probes.set(self.probes.get() + 1);
@@ -49,7 +50,18 @@ impl<'data> Graph for ExistingHeads<'data> {
         panic!("equality composition uses indexed source reads")
     }
 
-    fn insert(&mut self, _: Quad) -> Result<()> {
+    fn inference_heads(
+        &self,
+        _: PreparedSparqlQuery,
+    ) -> Result<oxigraph::sparql::QueryTripleIter<'_, GeneralizedTriple>> {
+        panic!("equality composition uses indexed source reads")
+    }
+
+    fn cleanup_blank_predicates(&mut self) -> Result<()> {
+        panic!("immutable kernel fixture must not postprocess storage")
+    }
+
+    fn insert(&mut self, _: GeneralizedQuad) -> Result<()> {
         panic!("one round must not publish into its immutable source")
     }
 }
@@ -60,8 +72,8 @@ fn node(index: usize) -> NamedNode {
 
 #[test]
 fn indexed_test_graph_owns_temporary_pattern_filters() {
-    let mut data = Dataset::new();
-    let quad = Quad::new(node(0), node(1), node(2), GraphName::DefaultGraph);
+    let mut data = GeneralizedDataset::new();
+    let quad = GeneralizedQuad::new(node(0), node(1), node(2), GraphName::DefaultGraph);
     data.insert(quad.as_ref());
     let reads = ExistingHeads {
         data: &data,
@@ -76,7 +88,7 @@ fn indexed_test_graph_owns_temporary_pattern_filters() {
         let object = node(2);
         reads.quads(
             Some(subject.as_ref().into()),
-            Some(predicate.as_ref()),
+            Some(predicate.as_ref().into()),
             Some(object.as_ref().into()),
         )
     };
@@ -88,10 +100,10 @@ fn indexed_test_graph_owns_temporary_pattern_filters() {
 fn ring_composition_never_probes_already_present_heads() {
     let predicate = NamedNode::new("http://www.w3.org/2002/07/owl#sameAs").unwrap();
     for size in [64, 128] {
-        let mut data = Dataset::new();
+        let mut data = GeneralizedDataset::new();
         for index in 0..size {
             data.insert(
-                Quad::new(
+                GeneralizedQuad::new(
                     node(index),
                     predicate.clone(),
                     node((index + 1) % size),
@@ -136,12 +148,12 @@ fn disjoint_closed_groups_do_not_repeat_incoming_row_reads() {
     let predicate = NamedNode::new("http://www.w3.org/2002/07/owl#sameAs").unwrap();
     const GROUPS: usize = 32;
     for size in [1, 2, 16] {
-        let mut data = Dataset::new();
+        let mut data = GeneralizedDataset::new();
         for group in 0..GROUPS {
             for left in 0..size {
                 for right in 0..size {
                     data.insert(
-                        Quad::new(
+                        GeneralizedQuad::new(
                             node(group * size + left),
                             predicate.clone(),
                             node(group * size + right),

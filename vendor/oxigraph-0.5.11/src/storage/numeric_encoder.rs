@@ -1,6 +1,7 @@
 #![allow(clippy::unreadable_literal)]
 
 use crate::model::*;
+pub use super::encoded_graph_name::EncodedGraphName;
 use crate::storage::error::{CorruptionError, StorageError};
 use crate::storage::small_string::SmallString;
 use oxsdatatypes::*;
@@ -723,7 +724,7 @@ pub struct EncodedQuad {
     pub subject: EncodedTerm,
     pub predicate: EncodedTerm,
     pub object: EncodedTerm,
-    pub graph_name: EncodedTerm,
+    pub graph_name: EncodedGraphName,
 }
 
 impl EncodedQuad {
@@ -731,7 +732,7 @@ impl EncodedQuad {
         subject: EncodedTerm,
         predicate: EncodedTerm,
         object: EncodedTerm,
-        graph_name: EncodedTerm,
+        graph_name: EncodedGraphName,
     ) -> Self {
         Self {
             subject,
@@ -744,6 +745,12 @@ impl EncodedQuad {
 
 impl From<QuadRef<'_>> for EncodedQuad {
     fn from(quad: QuadRef<'_>) -> Self {
+        GeneralizedQuadRef::from(quad).into()
+    }
+}
+
+impl From<GeneralizedQuadRef<'_>> for EncodedQuad {
+    fn from(quad: GeneralizedQuadRef<'_>) -> Self {
         Self {
             subject: quad.subject.into(),
             predicate: quad.predicate.into(),
@@ -990,30 +997,61 @@ pub trait Decoder: StrLookup {
     }
 
     fn decode_quad(&self, encoded: &EncodedQuad) -> Result<Quad, StorageError> {
+        match &encoded.subject {
+            EncodedTerm::DefaultGraph
+            | EncodedTerm::NamedNode { .. }
+            | EncodedTerm::NumericalBlankNode { .. }
+            | EncodedTerm::SmallBlankNode(_)
+            | EncodedTerm::BigBlankNode { .. } => (),
+            _ => {
+                return Err(GeneralizedNarrowingError::new(GeneralizedTermPosition::Subject).into());
+            }
+        }
+        let subject = self.decode_named_or_blank_node(&encoded.subject)?;
+        match &encoded.predicate {
+            EncodedTerm::DefaultGraph | EncodedTerm::NamedNode { .. } => (),
+            _ => {
+                return Err(
+                    GeneralizedNarrowingError::new(GeneralizedTermPosition::Predicate).into(),
+                );
+            }
+        }
         Ok(Quad::new(
-            self.decode_named_or_blank_node(&encoded.subject)?,
+            subject,
             self.decode_named_node(&encoded.predicate)?,
             self.decode_term(&encoded.object)?,
-            if encoded.graph_name == EncodedTerm::DefaultGraph {
-                GraphName::DefaultGraph
-            } else {
-                match self.decode_term(&encoded.graph_name)? {
-                    Term::NamedNode(named_node) => named_node.into(),
-                    Term::BlankNode(blank_node) => blank_node.into(),
-                    Term::Literal(_) => {
-                        return Err(
-                            CorruptionError::msg("A literal is not a valid graph name").into()
-                        );
-                    }
-                    #[cfg(feature = "rdf-12")]
-                    Term::Triple(_) => {
-                        return Err(
-                            CorruptionError::msg("A triple is not a valid graph name").into()
-                        );
-                    }
-                }
-            },
+            self.decode_graph_name(&encoded.graph_name.into())?,
         ))
+    }
+
+    fn decode_generalized_quad(
+        &self,
+        encoded: &EncodedQuad,
+    ) -> Result<GeneralizedQuad, StorageError> {
+        Ok(GeneralizedQuad::new(
+            self.decode_term(&encoded.subject)?,
+            self.decode_term(&encoded.predicate)?,
+            self.decode_term(&encoded.object)?,
+            self.decode_graph_name(&encoded.graph_name.into())?,
+        ))
+    }
+
+    fn decode_graph_name(&self, encoded: &EncodedTerm) -> Result<GraphName, StorageError> {
+        Ok(if *encoded == EncodedTerm::DefaultGraph {
+            GraphName::DefaultGraph
+        } else {
+            match self.decode_term(encoded)? {
+                Term::NamedNode(named_node) => named_node.into(),
+                Term::BlankNode(blank_node) => blank_node.into(),
+                Term::Literal(_) => {
+                    return Err(CorruptionError::msg("A literal is not a valid graph name").into());
+                }
+                #[cfg(feature = "rdf-12")]
+                Term::Triple(_) => {
+                    return Err(CorruptionError::msg("A triple is not a valid graph name").into());
+                }
+            }
+        })
     }
 }
 
@@ -1233,7 +1271,8 @@ mod tests {
     #[test]
     fn test_size_and_alignment() {
         assert_eq!(size_of::<EncodedTerm>(), 40);
-        assert_eq!(size_of::<EncodedQuad>(), 160);
+        assert_eq!(size_of::<EncodedGraphName>(), 17);
+        assert_eq!(size_of::<EncodedQuad>(), 144);
         assert_eq!(align_of::<EncodedTerm>(), 8);
     }
 }

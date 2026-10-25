@@ -6,6 +6,7 @@ import pytest
 from rdflib_turbo import Graph
 from rdflib_turbo._namespaces import NamespaceBindings
 from rdflib_turbo._native import SharedShapes
+from rdflib_turbo._native import shacl as _native_shacl
 from rdflib_turbo._validation import _bound_settings
 
 
@@ -29,7 +30,7 @@ def test_scoped_settings_capture_authoritative_namespace_pairs():
 )
 def test_scoped_settings_fail_without_accepting_pending_data(settings):
     source = Graph()
-    program = SharedShapes("", False, [])
+    program = SharedShapes("", False, [], _policy=_native_shacl._REGEX_POLICY)
     with pytest.raises(ValueError), source.transaction() as pending:
         pending.parse(data="<urn:s> <urn:p> <urn:o>.")
         with pending._validate_shared_shapes(program, settings, True):
@@ -43,7 +44,7 @@ def test_diagnostic_namespace_binding_is_inside_graph_acceptance(binding_failure
     source = Graph().parse(
         data='<urn:s> <urn:p> "bad"^^<http://www.w3.org/2001/XMLSchema#integer>.'
     )
-    program = SharedShapes("", False, [])
+    program = SharedShapes("", False, [], _policy=_native_shacl._REGEX_POLICY)
     before = source.serialize(format="nt"), tuple(source.namespaces())
     error_namespace = "http://www.daml.org/2002/03/agents/agent-ont#"
 
@@ -79,7 +80,7 @@ def test_reentrant_diagnostic_binding_rechecks_original_namespace_revision(monke
     source = Graph().parse(
         data='<urn:s> <urn:p> "bad"^^<http://www.w3.org/2001/XMLSchema#integer>.'
     )
-    program = SharedShapes("", False, [])
+    program = SharedShapes("", False, [], _policy=_native_shacl._REGEX_POLICY)
     before = source.serialize(format="nt")
     original_bind = Graph.bind
 

@@ -41,3 +41,34 @@ and caller-owned diagnostic history. Scoped sources initialize options through
 the existing configured expansion path; separate destinations receive axioms
 without becoming rule sources. Transaction failure, caller Decimal status
 publication and provisional diagnostic metadata retain their existing boundaries.
+
+## Full-Term datatype subjects
+
+Implicit datatype membership belongs to the original literal term, including
+its exact lexical form and explicit datatype. Emit that membership and its
+ancestor types in the one-time phase. Plain and language-tagged RDFLib literals
+have no explicit datatype for this purpose. Explicitly typed source subjects
+receive the reference's ancestor types without copying their existing base type
+to a separate destination.
+
+Keep sameAs aliases distinct from implicit literal subjects. OWL7.6.2's explicit
+map also classifies such an alias as rdfs:Datatype and emits its ancestor types;
+it does not directly copy the literal's base datatype membership to the alias.
+Synthetic original one-time probes and native regressions preserve these roles,
+including explicit xsd:string, integer/decimal ancestry, plain/language controls
+and separate-destination behavior.
+
+## Full-Term initial resource membership
+
+RDFS cycle-one `rdfs4b` seeds every original object as `rdfs:Resource`, including
+plain, language-tagged and explicitly typed literals. Preserve the full term in
+this initializer independently of OWL's explicit-datatype membership boundary.
+Combined mode then derives the corresponding `owl:Thing` membership. This does
+not make later-round terms part of the initial resource domain or change strict
+RDF parsing and public SPARQL projection.
+
+Complete synthetic OWL7.6.2 closures for four literal kinds and all three modes
+compare both GeneralizedDataset and Store backends without filtering generalized
+subjects. The plain/language combined controls expose the former missing
+resource/Thing facts that datatype initialization happened to hide for numeric
+literals.

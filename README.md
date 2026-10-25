@@ -103,32 +103,33 @@ covers each complete native read or write. Parsing and inference commit only on
 success. Parsing separate documents gives blank nodes separate scopes.
 
 Supported native format names: turtle, nt, nquads, trig, xml, n3, json-ld.
-Dataset and Store accept UTF-8 text, bytes or a local path; their source URL and
-file-object inputs are not implemented.
-Default-graph querying is standard; request default_union=True for a union view.
-Graph-only serializers reject named-graph data rather than discarding contexts.
+Store accepts UTF-8 text, bytes or a local path; its source URL and file-object
+inputs are not implemented. Graph and Dataset use RDFLib input-source handling.
+Dataset queries use the default graph unless `default_union=True` is selected.
+Low-level Store serializers reject graph-only formats with named-graph data;
+Graph and Dataset retain their RDFLib format semantics.
 
 This is **not a complete drop-in RDFLib replacement**. It uses the rdflib_turbo
-namespace. Dataset has inference/SHACL integration; Store has persistence,
-SPARQL Update, direct inference and explicit transactions. The unreleased Graph
-and StoreDataset APIs add RDFLib facades over that native Store. Arbitrary RDFLib
+namespace. Dataset and Graph provide inference/SHACL integration over the native
+Store, which also supplies persistence, SPARQL Update and explicit transactions.
+Dataset and StoreDataset name the same RDFLib Dataset facade. Arbitrary RDFLib
 storage plugins, initial query bindings, custom functions and remote SERVICE
 execution are not provided. RDFLib conversions
 copy data and explicitly preserve caller blank-node identifiers. Query results are
-eagerly materialized. Performance measurements apply to the documented workloads;
-complete conformance is not claimed.
+eagerly materialized. Performance results apply to their recorded versions and
+workloads; complete conformance is not claimed.
 
 ## RDFLib Graph and dataset facades
 
-Import Graph and StoreDataset explicitly from rdflib_turbo; importing rdflib
+Import Graph and Dataset explicitly from rdflib_turbo; importing rdflib
 continues to select the original RDFLib classes.
 
 | API | Data owner and intended use |
 |---|---|
-| Dataset | Native dataset with the shared companion inference and SHACL adapters |
+| Dataset | RDFLib Dataset facade over one native Store, with inference/SHACL adapters |
 | Store | Native memory or persistent storage, SPARQL Update and scoped transactions |
 | Graph | RDFLib Graph facade over one native Store graph |
-| StoreDataset | RDFLib Dataset facade with default and named views of one native Store |
+| StoreDataset | Another name for the same Dataset class |
 
 ```python
 from rdflib import Literal, URIRef
@@ -152,9 +153,10 @@ assert list(named.objects(alice, name)) == [Literal("Alice")]
 These facades reuse RDFLib terms, namespace management, serializers and graph
 utility algorithms. Statements, pattern matching, counts and SPARQL remain in
 native storage; no reference Memory graph or Python SPARQL evaluator runs.
-Ordinary scoped Graph iteration reads bounded native batches. Dataset-wide and
-explicit-transaction iteration, query results and serialization can still
-materialize larger results.
+Committed Graph and Dataset iteration reads bounded native batches. Union
+statements and their lazy context iterators share one pinned snapshot. Explicit
+transaction iteration retains its pending-state reader; query results and
+serialization can still materialize larger results.
 
 StoreDataset graph views share their native backend and namespace bindings.
 Queries use the default graph unless StoreDataset(default_union=True) is selected;
@@ -237,8 +239,9 @@ See the [direct inference contract](docs/adr/0008-direct-transaction-inference.m
 Dataset, Store and Transaction also accept `axiomatic_triples=True` and
 `datatype_axioms=True` on `infer`; Dataset supports these flags on `infer_delta`
 as well. Both flags default to false and apply only to that invocation. They add
-the selected reference RDFS/OWL-RL axiom tables before reasoning. Native results
-use ordinary RDF: literal subjects and global Python datatype-conversion hooks
+the selected reference RDFS/OWL-RL axiom tables before reasoning. Programmatic
+results retain generalized RDF terms, including literal subjects; document
+formats keep their own syntax contracts. Global Python datatype-conversion hooks
 are not supported. See the [axiom options contract](docs/adr/0038-per-call-inference-axioms.md).
 The low-level Store has no namespace-binding API. Graph and StoreDataset
 provide namespace management through their RDFLibStore adapter, without
@@ -246,7 +249,7 @@ registering a named RDFLib storage plugin.
 Compiled pyshacl-turbo shapes validate Store and open Transaction directly;
 stored data is never copied into Dataset for inference or validation.
 
-The pinned shared engine includes `sh:singleLine` from the
+The shared native engine includes `sh:singleLine` from the
 [SHACL 1.2 Core Working Draft of 14 October 2026](https://www.w3.org/TR/2026/WD-shacl12-core-20261014/#SingleLineConstraintComponent).
 Borrowed Graph and StoreDataset validation retains literal identity and reports
 the draft constraint through the same native owner. This selected, at-risk draft
@@ -270,9 +273,10 @@ constructed. Nonconformance raises ValidationError carrying report and text,
 and aborts all pending writes, inference and rule additions. Exceptions abort
 the same owner; caught native execution or report-processing errors leave the
 transaction closed. Direct shapes.validate(tx) returns a report and lets the
-caller choose acceptance. Companion wheels must contain identical engine sources.
+caller choose acceptance. Companion facades share the provider's one compiled
+engine and compiled program types.
 
-![Borrowed reads and transaction validation commit gate](https://raw.githubusercontent.com/legra-ai/pyshacl-turbo/main/crates/engine/src/architecture.svg)
+![Borrowed reads and transaction validation commit gate](https://raw.githubusercontent.com/legra-ai/rdflib-turbo/main/crates/engine/src/architecture.svg)
 
 Oxigraph buffers the transaction delta in memory. The base dataset is not copied
 for rollback; transaction changes, parsed input documents and materialized query
@@ -290,13 +294,14 @@ expand(data, inference="rdfs", inplace=True)
 conforms, report, text = validate(data, shacl_graph="shapes.ttl")
 ```
 
-This shared companion path uses Dataset, Store or Transaction, not Graph or StoreDataset. Store-backed
-facades can invoke direct inference through their native store.backend, including
-inside a transaction; pass their native backend to compiled SHACL shapes. Converting
-them through Dataset.from_rdflib is explicitly rejected to prevent copying input.
+This shared companion path accepts Dataset, Graph, Store and Transaction owners.
+Graph views retain their selected physical scope; Dataset validation reads its
+union. StoreDataset is the same class as Dataset. Converting native facades through
+Dataset.from_rdflib is explicitly rejected to prevent copying input.
 
-The shared validation path requires this runtime's 0.2.0a1 release, owlrl-turbo
-0.1.0a3 or later, and the companion pyshacl-turbo shared-dataset release. Parsing,
+The canonical-facade integration requires coordinated provider and companion
+artifacts with matching runtime and engine identities; installed-wheel acceptance
+of this source integration remains pending. Parsing,
 in-place inference and ordinary validation retain the same native data object.
 Only the validation report becomes an RDFLib graph. Rules stage changes privately
 and commit only after success when inplace=True is requested. See

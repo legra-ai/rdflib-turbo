@@ -96,16 +96,16 @@ pub struct Dataset {
 }
 
 impl Dataset {
-    /// Begins an additive transaction without cloning the dataset or its indexes.
+    /// Begins a transaction without cloning the dataset or its indexes.
     ///
-    /// The guard permits reads and insertions only. Dropping it before `commit`
-    /// removes inserted quads from every index and releases newly interned terms,
-    /// including during unwinding. The journal contains compact interned keys.
+    /// The guard journals insertions compactly and promotes only on actual removal.
+    /// Dropping it before `commit` restores the original records in every index
+    /// before releasing newly interned terms, including during unwinding.
     pub fn insert_transaction(&mut self) -> InsertTransaction<'_> {
         self.interner.begin_insertions();
         InsertTransaction {
             dataset: self,
-            inserted: Vec::new(),
+            journal: MutationJournal::default(),
             committed: false,
         }
     }
@@ -195,7 +195,7 @@ impl Dataset {
         subject: &InternedNamedOrBlankNode,
     ) -> impl Iterator<
         Item = (
-            &'a InternedNamedOrBlankNode,
+            InternedNamedOrBlankNode,
             &'a InternedNamedNode,
             &'a InternedTerm,
             &'a InternedGraphName,
@@ -235,7 +235,7 @@ impl Dataset {
         predicate: InternedNamedNode,
     ) -> impl Iterator<
         Item = (
-            &InternedNamedOrBlankNode,
+            InternedNamedOrBlankNode,
             &InternedNamedNode,
             &InternedTerm,
             &InternedGraphName,
@@ -276,7 +276,7 @@ impl Dataset {
         object: &InternedTerm,
     ) -> impl Iterator<
         Item = (
-            &'a InternedNamedOrBlankNode,
+            InternedNamedOrBlankNode,
             &'a InternedNamedNode,
             &'a InternedTerm,
             &'a InternedGraphName,
@@ -317,7 +317,7 @@ impl Dataset {
         graph_name: &InternedGraphName,
     ) -> impl Iterator<
         Item = (
-            &'a InternedNamedOrBlankNode,
+            InternedNamedOrBlankNode,
             &'a InternedNamedNode,
             &'a InternedTerm,
             &'a InternedGraphName,
@@ -414,16 +414,18 @@ impl Dataset {
     }
 
     fn remove_record(&mut self, record: &QuadRecord) -> bool {
-        let Some(key) = self.gspo.take(record) else {
-            return false;
-        };
+        self.take_record(record).is_some()
+    }
+
+    fn take_record(&mut self, record: &QuadRecord) -> Option<Arc<QuadRecord>> {
+        let key = self.gspo.take(record)?;
         let record = key.record;
         assert!(self.gpos.remove(&GposKey::new(record.clone())));
         assert!(self.gosp.remove(&GospKey::new(record.clone())));
         assert!(self.spog.remove(&SpogKey::new(record.clone())));
         assert!(self.posg.remove(&PosgKey::new(record.clone())));
-        assert!(self.ospg.remove(&OspgKey::new(record)));
-        true
+        assert!(self.ospg.remove(&OspgKey::new(record.clone())));
+        Some(record)
     }
 
     /// Clears the dataset.
@@ -506,7 +508,7 @@ impl Dataset {
     fn decode_spog(
         &self,
         quad: (
-            &InternedNamedOrBlankNode,
+            InternedNamedOrBlankNode,
             &InternedNamedNode,
             &InternedTerm,
             &InternedGraphName,
@@ -524,7 +526,7 @@ impl Dataset {
 
     fn decode_spo(
         &self,
-        triple: (&InternedNamedOrBlankNode, &InternedNamedNode, &InternedTerm),
+        triple: (InternedNamedOrBlankNode, &InternedNamedNode, &InternedTerm),
     ) -> TripleRef<'_> {
         #[cfg(test)]
         scoped_pattern_tests::candidate_row_visited();
@@ -618,14 +620,14 @@ impl Dataset {
             if let InternedNamedOrBlankNode::BlankNode(bnode) = quad.0 {
                 Self::add_quad_to_blank_node_to_quads_map_for_blank_node(
                     bnode,
-                    quad,
+                    &key.record,
                     &mut canonicalization_state.blank_node_to_quads_map,
                 );
             }
             if let InternedTerm::BlankNode(bnode) = &quad.2 {
                 Self::add_quad_to_blank_node_to_quads_map_for_blank_node(
                     *bnode,
-                    quad,
+                    &key.record,
                     &mut canonicalization_state.blank_node_to_quads_map,
                 );
             }
@@ -633,14 +635,14 @@ impl Dataset {
             if let InternedTerm::Triple(t) = &quad.2 {
                 Self::add_quad_to_blank_node_to_quads_map_based_on_triple(
                     t,
-                    quad,
+                    &key.record,
                     &mut canonicalization_state.blank_node_to_quads_map,
                 );
             }
             if let InternedGraphName::BlankNode(bnode) = &quad.3 {
                 Self::add_quad_to_blank_node_to_quads_map_for_blank_node(
                     *bnode,
-                    quad,
+                    &key.record,
                     &mut canonicalization_state.blank_node_to_quads_map,
                 );
             }
@@ -724,12 +726,7 @@ impl Dataset {
     #[cfg(feature = "rdf-12")]
     fn add_quad_to_blank_node_to_quads_map_based_on_triple<'a>(
         triple: &InternedTriple,
-        quad: &'a (
-            InternedNamedOrBlankNode,
-            InternedNamedNode,
-            InternedTerm,
-            InternedGraphName,
-        ),
+        quad: &'a QuadRecord,
         blank_node_to_quads_map: &mut QuadsPerBlankNode<'a>,
     ) {
         if let InternedNamedOrBlankNode::BlankNode(bnode) = triple.subject {
@@ -756,12 +753,7 @@ impl Dataset {
 
     fn add_quad_to_blank_node_to_quads_map_for_blank_node<'a>(
         bnode: InternedBlankNode,
-        quad: &'a (
-            InternedNamedOrBlankNode,
-            InternedNamedNode,
-            InternedTerm,
-            InternedGraphName,
-        ),
+        quad: &'a QuadRecord,
         blank_node_to_quads_map: &mut QuadsPerBlankNode<'a>,
     ) {
         let entry = blank_node_to_quads_map.entry(bnode).or_default();
@@ -805,10 +797,11 @@ impl Dataset {
         let quads =
             &canonicalization_state.blank_node_to_quads_map[&reference_blank_node_identifier];
         // 3)
-        for (subject, predicate, object, graph_name) in quads {
+        for record in quads {
+            let (subject,predicate,object,graph_name)=record.parts();
             // 3.1)
             let subject = self.hash_first_degree_quads_decode_named_or_blank_node(
-                subject,
+                &subject,
                 &reference_blank_node_identifier,
             );
             let predicate = predicate.decode_from(&self.interner);
@@ -957,14 +950,15 @@ impl Dataset {
         // 2)
         let quads = &canonicalization_state.blank_node_to_quads_map[&identifier];
         // 3)
-        for quad in quads {
+        for record in quads {
+            let quad = record.as_tuple();
             // 3.1)
             if let InternedNamedOrBlankNode::BlankNode(component) = quad.0 {
                 self.hash_related_blank_node_on_possible_component(
                     canonicalization_state,
                     component,
                     identifier,
-                    quad,
+                    &quad,
                     &issuer,
                     "s",
                     &mut h_n,
@@ -976,7 +970,7 @@ impl Dataset {
                     canonicalization_state,
                     component,
                     identifier,
-                    quad,
+                    &quad,
                     &issuer,
                     "o",
                     &mut h_n,
@@ -989,7 +983,7 @@ impl Dataset {
                     canonicalization_state,
                     t,
                     identifier,
-                    quad,
+                    &quad,
                     &issuer,
                     &mut h_n,
                     hash_algorithm,
@@ -1000,7 +994,7 @@ impl Dataset {
                     canonicalization_state,
                     component,
                     identifier,
-                    quad,
+                    &quad,
                     &issuer,
                     "g",
                     &mut h_n,
@@ -1202,7 +1196,7 @@ impl Dataset {
         old_quads
             .into_iter()
             .map(|q| {
-                let (s, p, o, g) = q.as_tuple().clone();
+                let (s, p, o, g) = q.as_tuple();
                 (
                     match s {
                         InternedNamedOrBlankNode::NamedNode(_) => s,
@@ -1945,15 +1939,7 @@ impl<'a> Iterator for GraphViewIter<'a> {
     }
 }
 
-type QuadsPerBlankNode<'a> = HashMap<
-    InternedBlankNode,
-    Vec<&'a (
-        InternedNamedOrBlankNode,
-        InternedNamedNode,
-        InternedTerm,
-        InternedGraphName,
-    )>,
->;
+type QuadsPerBlankNode<'a> = HashMap<InternedBlankNode,Vec<&'a QuadRecord>>;
 
 /// An algorithm used to canonicalize graph and datasets.
 ///
@@ -2031,67 +2017,10 @@ fn generate_permutations<T: Copy>(items: impl IntoIterator<Item = T>) -> Vec<Vec
     current_output
 }
 
-/// An additive transaction. There is deliberately no mutable dataset dereference:
-/// removals, clears and nested transactions cannot bypass the insertion journal.
-pub struct InsertTransaction<'a> {
-    dataset: &'a mut Dataset,
-    inserted: Vec<Arc<QuadRecord>>,
-    committed: bool,
-}
-
-impl InsertTransaction<'_> {
-    /// Inserts only a previously absent quad, recording its compact interned key.
-    pub fn insert<'a>(&mut self, quad: impl Into<QuadRef<'a>>) -> bool {
-        let encoded = self.dataset.encode_quad(quad.into());
-        let record = QuadRecord::from_spog(encoded);
-        if self.dataset.gspo.contains(&record) {
-            return false;
-        }
-        let record = Arc::new(record);
-        self.inserted.push(record.clone());
-        self.dataset.insert_record(record);
-        true
-    }
-
-    /// Quads inserted by this transaction, excluding preexisting or duplicate quads.
-    pub fn inserted(&self) -> impl Iterator<Item = QuadRef<'_>> {
-        self.inserted
-            .iter()
-            .map(|q| self.dataset.decode_spog(q.parts()))
-    }
-
-    /// Retains all insertions. Dropping the journal does not copy the dataset.
-    pub fn commit(mut self) {
-        self.committed = true;
-    }
-}
-
-impl std::ops::Deref for InsertTransaction<'_> {
-    type Target = Dataset;
-
-    fn deref(&self) -> &Dataset {
-        self.dataset
-    }
-}
-
-impl Extend<Quad> for InsertTransaction<'_> {
-    fn extend<T: IntoIterator<Item = Quad>>(&mut self, iter: T) {
-        for quad in iter {
-            self.insert(&quad);
-        }
-    }
-}
-
-impl Drop for InsertTransaction<'_> {
-    fn drop(&mut self) {
-        if !self.committed {
-            for quad in self.inserted.drain(..).rev() {
-                self.dataset.remove_record(&quad);
-            }
-        }
-        self.dataset.interner.finish_insertions(self.committed);
-    }
-}
+#[path = "dataset_transaction.rs"]
+mod transaction;
+use transaction::MutationJournal;
+pub use transaction::InsertTransaction;
 
 #[cfg(feature = "rdfc-10")]
 #[cfg(test)]
@@ -2168,3 +2097,19 @@ mod shared_tests;
 #[cfg(test)]
 #[path = "dataset_shared_edge_tests.rs"]
 mod shared_edge_tests;
+
+#[cfg(test)]
+#[path = "dataset_mutation_tests.rs"]
+mod mutation_tests;
+
+#[cfg(test)]
+#[path = "dataset_generalized_tests.rs"]
+mod generalized_tests;
+
+#[path = "dataset_generalized.rs"]
+mod generalized;
+pub use generalized::{GeneralizedDataset, GeneralizedTransaction};
+
+#[cfg(test)]
+#[path = "dataset_generalized_remove_tests.rs"]
+mod generalized_remove_tests;

@@ -1,7 +1,7 @@
 use crate::storage::error::{CorruptionError, StorageError};
 #[cfg(feature = "rdf-12")]
 use crate::storage::numeric_encoder::EncodedTriple;
-use crate::storage::numeric_encoder::{EncodedQuad, EncodedTerm, StrHash};
+use crate::storage::numeric_encoder::{EncodedGraphName, EncodedQuad, EncodedTerm, StrHash};
 use crate::storage::small_string::SmallString;
 use oxsdatatypes::*;
 use std::io::Read;
@@ -111,7 +111,7 @@ pub trait TermReader {
         let subject = self.read_term()?;
         let predicate = self.read_term()?;
         let object = self.read_term()?;
-        let graph_name = self.read_term()?;
+        let graph_name = self.read_term()?.try_into()?;
         Ok(EncodedQuad {
             subject,
             predicate,
@@ -124,7 +124,7 @@ pub trait TermReader {
         let predicate = self.read_term()?;
         let object = self.read_term()?;
         let subject = self.read_term()?;
-        let graph_name = self.read_term()?;
+        let graph_name = self.read_term()?.try_into()?;
         Ok(EncodedQuad {
             subject,
             predicate,
@@ -137,7 +137,7 @@ pub trait TermReader {
         let object = self.read_term()?;
         let subject = self.read_term()?;
         let predicate = self.read_term()?;
-        let graph_name = self.read_term()?;
+        let graph_name = self.read_term()?.try_into()?;
         Ok(EncodedQuad {
             subject,
             predicate,
@@ -147,7 +147,7 @@ pub trait TermReader {
     }
 
     fn read_gspo_quad(&mut self) -> Result<EncodedQuad, StorageError> {
-        let graph_name = self.read_term()?;
+        let graph_name = self.read_term()?.try_into()?;
         let subject = self.read_term()?;
         let predicate = self.read_term()?;
         let object = self.read_term()?;
@@ -160,7 +160,7 @@ pub trait TermReader {
     }
 
     fn read_gpos_quad(&mut self) -> Result<EncodedQuad, StorageError> {
-        let graph_name = self.read_term()?;
+        let graph_name = self.read_term()?.try_into()?;
         let predicate = self.read_term()?;
         let object = self.read_term()?;
         let subject = self.read_term()?;
@@ -173,7 +173,7 @@ pub trait TermReader {
     }
 
     fn read_gosp_quad(&mut self) -> Result<EncodedQuad, StorageError> {
-        let graph_name = self.read_term()?;
+        let graph_name = self.read_term()?.try_into()?;
         let object = self.read_term()?;
         let subject = self.read_term()?;
         let predicate = self.read_term()?;
@@ -193,7 +193,7 @@ pub trait TermReader {
             subject,
             predicate,
             object,
-            graph_name: EncodedTerm::DefaultGraph,
+            graph_name: EncodedGraphName::DefaultGraph,
         })
     }
 
@@ -205,7 +205,7 @@ pub trait TermReader {
             subject,
             predicate,
             object,
-            graph_name: EncodedTerm::DefaultGraph,
+            graph_name: EncodedGraphName::DefaultGraph,
         })
     }
 
@@ -217,7 +217,7 @@ pub trait TermReader {
             subject,
             predicate,
             object,
-            graph_name: EncodedTerm::DefaultGraph,
+            graph_name: EncodedGraphName::DefaultGraph,
         })
     }
 }
@@ -532,39 +532,39 @@ pub fn write_spog_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
     write_term(sink, &quad.subject);
     write_term(sink, &quad.predicate);
     write_term(sink, &quad.object);
-    write_term(sink, &quad.graph_name);
+    write_term(sink, &quad.graph_name.into());
 }
 
 pub fn write_posg_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
     write_term(sink, &quad.predicate);
     write_term(sink, &quad.object);
     write_term(sink, &quad.subject);
-    write_term(sink, &quad.graph_name);
+    write_term(sink, &quad.graph_name.into());
 }
 
 pub fn write_ospg_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
     write_term(sink, &quad.object);
     write_term(sink, &quad.subject);
     write_term(sink, &quad.predicate);
-    write_term(sink, &quad.graph_name);
+    write_term(sink, &quad.graph_name.into());
 }
 
 pub fn write_gspo_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    write_term(sink, &quad.graph_name);
+    write_term(sink, &quad.graph_name.into());
     write_term(sink, &quad.subject);
     write_term(sink, &quad.predicate);
     write_term(sink, &quad.object);
 }
 
 pub fn write_gpos_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    write_term(sink, &quad.graph_name);
+    write_term(sink, &quad.graph_name.into());
     write_term(sink, &quad.predicate);
     write_term(sink, &quad.object);
     write_term(sink, &quad.subject);
 }
 
 pub fn write_gosp_quad(sink: &mut Vec<u8>, quad: &EncodedQuad) {
-    write_term(sink, &quad.graph_name);
+    write_term(sink, &quad.graph_name.into());
     write_term(sink, &quad.object);
     write_term(sink, &quad.subject);
     write_term(sink, &quad.predicate);
@@ -971,7 +971,7 @@ mod tests {
         for term in terms {
             let encoded = term.as_ref().into();
             store.insert_term(term.as_ref(), &encoded);
-            assert_eq!(encoded, term.as_ref().into());
+            assert_eq!(encoded, EncodedTerm::from(term.as_ref()));
             assert_eq!(term, store.decode_term(&encoded).unwrap());
 
             let mut buffer = Vec::new();

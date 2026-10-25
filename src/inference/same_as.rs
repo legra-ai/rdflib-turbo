@@ -14,7 +14,7 @@ mod dense;
 use components::Components;
 
 struct RowGroup {
-    members: Vec<NamedOrBlankNode>,
+    members: Vec<Term>,
 }
 
 #[derive(Clone, Copy)]
@@ -46,19 +46,19 @@ impl SubjectRow {
 }
 
 struct Rows {
-    subjects: HashMap<NamedOrBlankNode, SubjectRow>,
+    subjects: HashMap<Term, SubjectRow>,
     groups: Vec<RowGroup>,
     components: Components,
 }
 
-fn row(
-    data: &impl Graph,
-    subject: &NamedOrBlankNode,
-    predicate: &NamedNode,
-) -> Result<HashSet<Term>> {
-    data.quads(Some(subject.as_ref()), Some(predicate.as_ref()), None)
-        .map(|quad| quad.map(|quad| quad.object))
-        .collect()
+fn row(data: &impl Graph, subject: &Term, predicate: &NamedNode) -> Result<HashSet<Term>> {
+    data.quads(
+        Some(subject.as_ref()),
+        Some(predicate.as_ref().into()),
+        None,
+    )
+    .map(|quad| quad.map(|quad| quad.object))
+    .collect()
 }
 
 fn signature(values: &HashSet<Term>) -> (usize, u64) {
@@ -80,19 +80,17 @@ impl Rows {
             components: Components::default(),
         };
         let mut signatures: HashMap<(usize, u64), Vec<usize>> = HashMap::new();
-        for quad in data.quads(None, Some(predicate.as_ref()), None) {
+        for quad in data.quads(None, Some(predicate.as_ref().into()), None) {
             let quad = quad?;
-            if let Ok(inverse_subject) = NamedOrBlankNode::try_from(quad.object) {
-                pending.push(
-                    data,
-                    Quad::new(
-                        inverse_subject,
-                        predicate.clone(),
-                        Term::from(quad.subject.clone()),
-                        GraphName::DefaultGraph,
-                    ),
-                )?;
-            }
+            pending.push(
+                data,
+                GeneralizedQuad::new(
+                    quad.object,
+                    predicate.clone(),
+                    quad.subject.clone(),
+                    GraphName::DefaultGraph,
+                ),
+            )?;
             if output.subjects.contains_key(&quad.subject) {
                 continue;
             }
@@ -105,7 +103,7 @@ impl Rows {
                 let mut equal = true;
                 for candidate in data.quads(
                     Some(representative.as_ref()),
-                    Some(predicate.as_ref()),
+                    Some(predicate.as_ref().into()),
                     None,
                 ) {
                     if !values.contains(&candidate?.object) {
@@ -150,28 +148,25 @@ impl Rows {
             // Transient missing-target delta for this group only, not a second edge relation.
             let mut missing = HashSet::new();
             for intermediate in &values {
-                let Ok(intermediate) = NamedOrBlankNode::try_from(intermediate.clone()) else {
-                    continue;
-                };
                 if self
                     .subjects
-                    .get(&intermediate)
+                    .get(intermediate)
                     .is_some_and(|row| row.group() == id)
                 {
                     continue;
                 }
                 // This representative row proves an incoming witness from this
                 // source group. Mark before dense-source early continuation.
-                if let Some(row) = self.subjects.get_mut(&intermediate) {
+                if let Some(row) = self.subjects.get_mut(intermediate) {
                     row.mark_cross_group_incoming();
                 }
                 // A terminal subject has no outgoing row to subtract. Its
                 // common-predecessor consequences remain grouped by this row.
-                if !self.subjects.contains_key(&intermediate) {
+                if !self.subjects.contains_key(intermediate) {
                     for target in &values {
                         pending.push(
                             data,
-                            Quad::new(
+                            GeneralizedQuad::new(
                                 intermediate.clone(),
                                 predicate.clone(),
                                 target.clone(),
@@ -184,9 +179,11 @@ impl Rows {
                     continue;
                 }
                 // R R: only successors absent from the group's existing row can add facts.
-                for successor in
-                    data.quads(Some(intermediate.as_ref()), Some(predicate.as_ref()), None)
-                {
+                for successor in data.quads(
+                    Some(intermediate.as_ref()),
+                    Some(predicate.as_ref().into()),
+                    None,
+                ) {
                     let target = successor?.object;
                     if !values.contains(&target) {
                         missing.insert(target);
@@ -197,7 +194,7 @@ impl Rows {
                 for target in &missing {
                     pending.push(
                         data,
-                        Quad::new(
+                        GeneralizedQuad::new(
                             member.clone(),
                             predicate.clone(),
                             target.clone(),
@@ -239,7 +236,7 @@ impl Rows {
                 }
                 missing.clear();
                 for predecessor in
-                    data.quads(None, Some(predicate.as_ref()), Some(member.as_ref().into()))
+                    data.quads(None, Some(predicate.as_ref().into()), Some(member.as_ref()))
                 {
                     let predecessor = predecessor?.subject;
                     let predecessor_group = self.subjects[&predecessor].group();
@@ -250,9 +247,11 @@ impl Rows {
                     }
                     // Identical predecessor rows all contain this member; their
                     // representative is therefore an actual source witness too.
-                    for target in
-                        data.quads(Some(predecessor.as_ref()), Some(predicate.as_ref()), None)
-                    {
+                    for target in data.quads(
+                        Some(predecessor.as_ref()),
+                        Some(predicate.as_ref().into()),
+                        None,
+                    ) {
                         let target = target?.object;
                         if !values.contains(&target) {
                             missing.insert(target);
@@ -262,7 +261,7 @@ impl Rows {
                 for target in &missing {
                     pending.push(
                         data,
-                        Quad::new(
+                        GeneralizedQuad::new(
                             member.clone(),
                             predicate.clone(),
                             target.clone(),
@@ -281,34 +280,38 @@ fn replacements(data: &impl Graph, predicate: &NamedNode, pending: &mut Pending)
         let quad = quad?;
         // Equality-predicate consequences are R R / R^-1 R above. Reject these
         // before alias lookups, rather than filtering a cubic SPARQL witness bag.
-        if quad.predicate == *predicate {
+        if quad.predicate.as_ref() == TermRef::NamedNode(predicate.as_ref()) {
             continue;
         }
-        for alias in data.quads(Some(quad.subject.as_ref()), Some(predicate.as_ref()), None) {
-            if let Ok(subject) = NamedOrBlankNode::try_from(alias?.object) {
-                pending.push(
-                    data,
-                    Quad::new(
-                        subject,
-                        quad.predicate.clone(),
-                        quad.object.clone(),
-                        GraphName::DefaultGraph,
-                    ),
-                )?;
-            }
+        for alias in data.quads(
+            Some(quad.subject.as_ref()),
+            Some(predicate.as_ref().into()),
+            None,
+        ) {
+            pending.push(
+                data,
+                GeneralizedQuad::new(
+                    alias?.object,
+                    quad.predicate.clone(),
+                    quad.object.clone(),
+                    GraphName::DefaultGraph,
+                ),
+            )?;
         }
-        if let Ok(object) = NamedOrBlankNode::try_from(quad.object.clone()) {
-            for alias in data.quads(Some(object.as_ref()), Some(predicate.as_ref()), None) {
-                pending.push(
-                    data,
-                    Quad::new(
-                        quad.subject.clone(),
-                        quad.predicate.clone(),
-                        alias?.object,
-                        GraphName::DefaultGraph,
-                    ),
-                )?;
-            }
+        for alias in data.quads(
+            Some(quad.object.as_ref()),
+            Some(predicate.as_ref().into()),
+            None,
+        ) {
+            pending.push(
+                data,
+                GeneralizedQuad::new(
+                    quad.subject.clone(),
+                    quad.predicate.clone(),
+                    alias?.object,
+                    GraphName::DefaultGraph,
+                ),
+            )?;
         }
     }
     Ok(())

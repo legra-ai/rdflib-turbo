@@ -1,0 +1,10 @@
+{
+  "crates/engine/src/lib.rs": {
+    "sha256": "c2dbaae6636e32927478a91a658b46866a4e0398a3ab24a8e3398a57a2ab8ef8",
+    "reason": "Module declarations, re-exports, type alias and derived error enum: a Rust 1.99.1/LLVM 23.1.1 DEBUG instrumented engine test binary (128 tests passed) has no file or function mapping for these exact bytes, verified by unfiltered llvm-cov export (794 files, 41949 functions)."
+  },
+  "crates/engine/src/model.rs": {
+    "sha256": "b4e7ef47bbf266bec27ee6c73f3c0270b29b0076c40a50272af2a137b573097a",
+    "reason": "Shared model re-exports and native type aliases: a Rust 1.99.1/LLVM 23.1.1 DEBUG engine test binary (-Cinstrument-coverage, no cfg coverage; 128 tests passed) has no file or function mapping for these exact bytes, verified by an unfiltered llvm-cov export containing 794 files and 41956 functions. Retain missing-executable-mapping checks."
+  }
+}

@@ -4,12 +4,18 @@
 #![doc(html_favicon_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/main/logo.svg")]
 #![doc(html_logo_url = "https://raw.githubusercontent.com/oxigraph/oxigraph/main/logo.svg")]
 
+mod construct_cache;
+mod construct_projection;
 #[cfg(test)]
 mod construct_tests;
 mod dataset;
 mod error;
 mod eval;
 mod expression;
+#[cfg(test)]
+mod inference_construct_stats_tests;
+#[cfg(test)]
+mod inference_construct_tests;
 mod model;
 #[cfg(feature = "cached-query-plans")]
 mod plan_cache;
@@ -743,6 +749,76 @@ impl PreparedQuery<'_> {
         dataset: impl QueryableDataset<'b>,
     ) -> Result<QueryResults<'b>, QueryEvaluationError> {
         self.explain(dataset).0
+    }
+
+    /// Executes only a backend inference CONSTRUCT, retaining full-Term heads.
+    /// Ordinary execute and QueryResults::Graph retain their strict RDF domain.
+    pub fn execute_inference_construct<'b>(
+        self,
+        dataset: impl QueryableDataset<'b>,
+    ) -> Result<QueryTripleIter<'b, oxrdf::GeneralizedTriple>, QueryEvaluationError> {
+        self.explain_inference_construct(dataset).0
+    }
+
+    /// Explains the same inference-only head execution without losing body statistics.
+    pub fn explain_inference_construct<'b>(
+        self,
+        dataset: impl QueryableDataset<'b>,
+    ) -> (
+        Result<QueryTripleIter<'b, oxrdf::GeneralizedTriple>, QueryEvaluationError>,
+        QueryExplanation,
+    ) {
+        let start_planning = Timer::now();
+        let failure = |message| {
+            (
+                Err(QueryEvaluationError::Unexpected(Box::new(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    message,
+                )))),
+                QueryExplanation {
+                    inner: Rc::new(EvalNodeWithStats::empty()),
+                    with_stats: self.evaluator.run_stats,
+                    planning_duration: start_planning.elapsed(),
+                },
+            )
+        };
+        let Query::Construct {
+            template,
+            pattern,
+            base_iri,
+            ..
+        } = self.query
+        else {
+            return failure("Inference heads require a CONSTRUCT query");
+        };
+        if self
+            .evaluator
+            .prepared_algebra
+            .as_ref()
+            .is_some_and(|algebra| !algebra.matches(self.query))
+        {
+            return failure("Prepared RDFLib algebra does not match its query");
+        }
+        let pattern = self.evaluator.prepare_pattern(pattern, &self.substitutions);
+        let planning_duration = start_planning.elapsed();
+        let (results, inner) =
+            match self
+                .evaluator
+                .simple_evaluator(dataset, self.dataset, base_iri)
+            {
+                Ok(evaluator) => {
+                    evaluator.evaluate_inference_construct(&pattern, template, self.substitutions)
+                }
+                Err(error) => (Err(error), Rc::new(EvalNodeWithStats::empty())),
+            };
+        (
+            results,
+            QueryExplanation {
+                inner,
+                with_stats: self.evaluator.run_stats,
+                planning_duration,
+            },
+        )
     }
 
     pub fn explain<'b>(

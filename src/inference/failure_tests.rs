@@ -1,8 +1,7 @@
 //! Storage failures must not publish partial round results or retain journal writes.
+use oxrdf::GeneralizedDataset;
 #[path = "failure_storage_tests.rs"]
 mod storage;
-
-use oxigraph::model::Dataset;
 
 use super::{Pending, intersections, same_as};
 use crate::Error;
@@ -15,24 +14,17 @@ enum Kernel {
 
 fn failure_rolls_back(kernel: Kernel, input: &[(&str, &str, &str)], fault: Fault, partial: bool) {
     // bounded: these hand-written synthetic fixtures contain at most a few triples.
-    let mut data = Dataset::from_iter(input.iter().map(|(s, p, o)| quad(s, p, o)));
+    let mut data = GeneralizedDataset::from_iter(input.iter().map(|(s, p, o)| quad(s, p, o)));
     let original = data.clone();
     let previous_round = quad("previous-round", "p", "staged");
     {
-        let mut journal = data.insert_transaction();
+        let mut journal = data.transaction();
         journal.insert(previous_round.as_ref());
         let source = Storage::new(&journal, fault);
         let mut pending = Pending::default();
         let error = match kernel {
             Kernel::Equality => same_as::apply(&source, &mut pending),
-            Kernel::Intersection => intersections::additions(
-                &super::generalized::Tuples {
-                    data: &source,
-                    extra: &super::generalized::Generalized::default(),
-                },
-                &mut pending,
-                &mut super::generalized::Generalized::default(),
-            ),
+            Kernel::Intersection => intersections::additions(&source, &mut pending),
         }
         .expect_err("storage error was swallowed or retried");
         assert!(
@@ -60,7 +52,7 @@ fn failure_rolls_back(kernel: Kernel, input: &[(&str, &str, &str)], fault: Fault
         "failed inference retained a prior round's staged writes"
     );
     let recovery = quad("recovered", "p", "value");
-    let mut journal = data.insert_transaction();
+    let mut journal = data.transaction();
     journal.insert(recovery.as_ref());
     journal.commit();
     assert!(

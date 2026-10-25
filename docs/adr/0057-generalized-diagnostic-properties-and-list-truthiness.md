@@ -15,9 +15,12 @@ cases. Empty, zero and false list controls already pass.
 ## Decision
 
 Allow exact term selectors in the existing diagnostic tuple view. Property
-collectors accept named and blank properties, matching the pinned Python
-reasoner. Preserve its deliberate rejection of derived literal predicates:
-Core.store_triple excludes them. Do not treat that compatibility boundary as
+collectors preserve every asserted property term, including literal predicates
+already present in a programmatically populated graph. The pinned Python
+reasoner diagnoses those facts. Preserve its deliberate rejection of derived
+literal predicates at the pending-publication boundary: Core.store_triple
+excludes them. A blanket literal-property guard in the collectors would wrongly
+suppress diagnostics for asserted facts. Do not treat that compatibility boundary as
 proof of standard OWL-RL/RDF generalized-domain completeness.
 
 Traverse literal-valued diagnostic list cells using the default RDFLib scalar
@@ -34,8 +37,8 @@ unchanged; this does not claim preservation of values absent from exact terms.
 Pass the existing immutable per-invocation context through list cursors.
 Preserve first-edge witnesses, per-round snapshots, cycle errors and reference
 last-member quirks. No Python reasoner, graph copy, dependency, persistence shape,
-public API or standard-profile preset is introduced. Output remains ordinary RDF
-and diagnostics publish only after successful closure.
+public API or standard-profile preset is introduced. Asserted generalized facts
+remain intact and diagnostics publish only after successful closure.
 
 ## Remaining semantic foundation work
 

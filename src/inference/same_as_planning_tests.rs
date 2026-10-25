@@ -1,4 +1,5 @@
 //! Planner resource contracts use actual indexed reads, independent of wall time.
+use oxrdf::GeneralizedDataset;
 use std::cell::Cell;
 
 use oxigraph::model::*;
@@ -8,7 +9,7 @@ use super::super::{Graph, Pending, Rows};
 use crate::Result;
 
 struct Reads<'a> {
-    data: &'a Dataset,
+    data: &'a GeneralizedDataset,
     incoming_calls: Cell<usize>,
     incoming_rows: Cell<usize>,
 }
@@ -16,10 +17,10 @@ struct Reads<'a> {
 impl<'data> Graph for Reads<'data> {
     fn quads<'a>(
         &'a self,
-        s: Option<NamedOrBlankNodeRef<'_>>,
-        p: Option<NamedNodeRef<'_>>,
+        s: Option<TermRef<'_>>,
+        p: Option<TermRef<'_>>,
         o: Option<TermRef<'_>>,
-    ) -> impl Iterator<Item = Result<Quad>> + use<'a, 'data> {
+    ) -> impl Iterator<Item = Result<GeneralizedQuad>> + use<'a, 'data> {
         let incoming = s.is_none() && o.is_some();
         if incoming {
             self.incoming_calls.set(self.incoming_calls.get() + 1);
@@ -36,7 +37,18 @@ impl<'data> Graph for Reads<'data> {
     fn query(&self, _: PreparedSparqlQuery) -> Result<QueryResults<'_>> {
         panic!("planner must use indexed reads")
     }
-    fn insert(&mut self, _: Quad) -> Result<()> {
+
+    fn inference_heads(
+        &self,
+        _: PreparedSparqlQuery,
+    ) -> Result<oxigraph::sparql::QueryTripleIter<'_, GeneralizedTriple>> {
+        panic!("planner must use indexed reads")
+    }
+    fn cleanup_blank_predicates(&mut self) -> Result<()> {
+        panic!("immutable kernel fixture must not postprocess storage")
+    }
+
+    fn insert(&mut self, _: GeneralizedQuad) -> Result<()> {
         panic!("planner must not publish facts")
     }
 }
@@ -49,9 +61,9 @@ fn predicate() -> NamedNode {
     NamedNode::new("http://www.w3.org/2002/07/owl#sameAs").unwrap()
 }
 
-fn add(data: &mut Dataset, left: usize, right: usize) {
+fn add(data: &mut GeneralizedDataset, left: usize, right: usize) {
     data.insert(
-        Quad::new(
+        GeneralizedQuad::new(
             node(left),
             predicate(),
             node(right),
@@ -61,7 +73,7 @@ fn add(data: &mut Dataset, left: usize, right: usize) {
     );
 }
 
-fn pairs(data: &mut Dataset, offset: usize, nodes: usize) {
+fn pairs(data: &mut GeneralizedDataset, offset: usize, nodes: usize) {
     for start in (offset..offset + nodes).step_by(2) {
         for a in 0..2 {
             for b in 0..2 {
@@ -71,7 +83,7 @@ fn pairs(data: &mut Dataset, offset: usize, nodes: usize) {
     }
 }
 
-fn inspect(data: &Dataset, check: impl FnOnce(&Rows, &Reads<'_>)) {
+fn inspect(data: &GeneralizedDataset, check: impl FnOnce(&Rows, &Reads<'_>)) {
     let reads = Reads {
         data,
         incoming_calls: Cell::new(0),
@@ -87,13 +99,13 @@ fn balanced_cliques_and_closed_pairs_allocate_no_component_index() {
         std::mem::size_of::<super::super::RowGroup>(),
         std::mem::size_of::<Vec<NamedOrBlankNode>>()
     );
-    let mut clique = Dataset::new();
+    let mut clique = GeneralizedDataset::new();
     for left in 0..32 {
         for right in 0..32 {
             add(&mut clique, left, right);
         }
     }
-    let mut separate_pairs = Dataset::new();
+    let mut separate_pairs = GeneralizedDataset::new();
     pairs(&mut separate_pairs, 0, 5000);
     for data in [&clique, &separate_pairs] {
         inspect(data, |rows, reads| {
@@ -118,7 +130,7 @@ fn balanced_cliques_and_closed_pairs_allocate_no_component_index() {
 
 #[test]
 fn near_closed_search_does_not_index_unrelated_closed_pairs() {
-    let mut data = Dataset::new();
+    let mut data = GeneralizedDataset::new();
     for left in 0..16 {
         for right in 0..16 {
             if left != right {
@@ -142,7 +154,7 @@ fn near_closed_search_does_not_index_unrelated_closed_pairs() {
 
 #[test]
 fn oversized_branching_component_stops_at_seed_degree_bound() {
-    let mut data = Dataset::new();
+    let mut data = GeneralizedDataset::new();
     add(&mut data, 0, 1);
     add(&mut data, 0, 2);
     for index in 3..5003 {
@@ -163,8 +175,8 @@ fn oversized_branching_component_stops_at_seed_degree_bound() {
 }
 
 #[test]
-fn completed_component_classifies_balanced_dense_rows_too() {
-    let mut data = Dataset::new();
+fn completed_component_reuses_candidates_for_unbalanced_and_balanced_dense_rows() {
+    let mut data = GeneralizedDataset::new();
     for left in 0..3 {
         for right in [0, 1, 3] {
             add(&mut data, left, right);
@@ -174,6 +186,6 @@ fn completed_component_classifies_balanced_dense_rows_too() {
     add(&mut data, 3, 2);
     inspect(&data, |rows, _| {
         assert!(rows.dense(&node(0).into()));
-        assert!(!rows.dense(&node(3).into()));
+        assert!(rows.dense(&node(3).into()));
     });
 }

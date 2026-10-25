@@ -706,3 +706,14 @@ impl<'a> From<&'a TermCow<'a>> for TermRef<'a> {
 #[cfg(test)]
 #[path = "dataset_scope_tests.rs"]
 mod scope_tests;
+
+#[cfg(test)]
+#[path = "dataset_generalized_tests.rs"]
+mod generalized_tests;
+
+#[path = "dataset_generalized.rs"]
+mod generalized;
+
+#[cfg(test)]
+#[path = "dataset_generalized_query_tests.rs"]
+mod generalized_query_tests;

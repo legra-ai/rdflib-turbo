@@ -25,6 +25,7 @@ test = [
     "pytest<10,>=8",
     "pytest-cov>=7.1,<8",
     "ruff>=0.12",
+    "owlrl-turbo==0.1.0a3",
 ]
 
 [tool.maturin]
@@ -62,7 +63,7 @@ fail_under = 100
 show_missing = true
 
 [tool.uv.sources]
-pyshacl-turbo = { git = "https://github.com/legra-ai/pyshacl-turbo", rev = "5a5bb294eb0c270c6159e70665f9cf30039e7521" }
+pyshacl-turbo = { path = "../pyshacl-turbo", editable = true }
 
 [dependency-groups]
 dev = [
@@ -73,8 +74,9 @@ coverage = [
     "rdflib==7.6.0",
     "owlrl==7.6.2",
     "pyshacl==0.40.1",
-    "pyshacl-turbo==0.6.5",
+    "pyshacl-turbo[test]==0.7.0",
     "pytest==9.1.1",
     "pytest-cov==7.1.0",
     "ruff==0.17.1",
+    "owlrl-turbo==0.1.0a3",
 ]

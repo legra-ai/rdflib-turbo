@@ -2,10 +2,12 @@
 
 import pytest
 from owlrl import DeductiveClosure, OWLRL_Semantics, RDFS_OWLRL_Semantics, RDFS_Semantics
-from rdflib import RDF, Literal, Namespace
+from rdflib import RDF, Namespace, URIRef
 from rdflib import Graph as ReferenceGraph
 from rdflib.compare import isomorphic
 from rdflib_turbo import Dataset, Store
+
+from .inference_observers import union_graph
 
 ERR = Namespace("http://www.daml.org/2002/03/agents/agent-ont#")
 PREFIXES = """
@@ -38,20 +40,12 @@ CASES = {
 CLASSES = {"rdfs": RDFS_Semantics, "owlrl": OWLRL_Semantics, "both": RDFS_OWLRL_Semantics}
 
 
-def ordinary(graph):
-    result = ReferenceGraph()
-    for triple in graph:
-        if not isinstance(triple[0], Literal):
-            result.add(triple)
-    return result
-
-
 def messages(graph):
     return {str(message) for message in graph.objects(None, ERR.error)}
 
 
 def native_graph(graph):
-    return ReferenceGraph().parse(data=graph.serialize(format="ntriples"), format="nt")
+    return union_graph(graph)
 
 
 @pytest.mark.parametrize("case", CASES)
@@ -74,8 +68,8 @@ def test_builtin_diagnostics_match_reference(case, mode, api):
             actual = native_graph(store)
     assert messages(actual) == messages(expected)
     if api == "dataset" and messages(expected):
-        assert dict(graph.namespaces())["err"] == str(ERR)
-    assert isomorphic(actual, ordinary(expected))
+        assert dict(graph.namespaces())["err"] == URIRef(ERR)
+    assert isomorphic(actual, expected)
     # Every unique message gets its own fresh, unreasoned node after closure.
     for subject in actual.subjects(RDF.type, ERR.ErrorMessage):
         assert set(actual.predicate_objects(subject)) == {
@@ -108,4 +102,4 @@ def test_diagnostics_preserve_per_call_axiom_flags(mode, api, axiomatic, datatyp
                 store.parse(data=document).infer(**options)
             actual = native_graph(store)
     assert messages(actual) == messages(expected)
-    assert isomorphic(actual, ordinary(expected))
+    assert isomorphic(actual, expected)

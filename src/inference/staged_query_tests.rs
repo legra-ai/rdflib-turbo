@@ -1,5 +1,6 @@
 //! Compare borrowed query rows with the old materialized union.
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
+use oxrdf::GeneralizedDataset;
 
 use super::*;
 use crate::inference::backend::Graph;
@@ -32,7 +33,7 @@ fn borrowed_union_matches_frozen_indexes_for_uniform_and_mixed_scopes() {
     ];
     for count in 0..=scopes.len() {
         for first in 0..scopes.len() {
-            let mut source = Dataset::new();
+            let mut source = GeneralizedDataset::new();
             // bounded: at most 24 synthetic quads, including duplicated logical triples.
             for graph in scopes.iter().cycle().skip(first).take(count) {
                 for s in ["urn:s", "urn:other"] {
@@ -52,7 +53,7 @@ fn borrowed_union_matches_frozen_indexes_for_uniform_and_mixed_scopes() {
             let frozen = crate::graph::with_union(&source);
             for mask in 0..8 {
                 let s = (mask & 1 != 0).then(|| NamedNodeRef::new_unchecked("urn:s").into());
-                let p = (mask & 2 != 0).then(|| NamedNodeRef::new_unchecked("urn:p"));
+                let p = (mask & 2 != 0).then(|| NamedNodeRef::new_unchecked("urn:p").into());
                 let o = (mask & 4 != 0).then(|| NamedNodeRef::new_unchecked("urn:o").into());
                 for graph in [
                     None,
@@ -62,11 +63,19 @@ fn borrowed_union_matches_frozen_indexes_for_uniform_and_mixed_scopes() {
                     // bounded: rows from the fixed 24-quad fixture only.
                     let mut actual: Vec<_> = staged
                         .matching_refs(s, p, o, graph)
-                        .map(|q| q.to_string())
+                        .map(|q| {
+                            QuadRef::try_from(q)
+                                .expect("ordinary fixture roles")
+                                .to_string()
+                        })
                         .collect();
                     let mut expected: Vec<_> = frozen
                         .quads_for_pattern(s, p, o, graph)
-                        .map(|q| q.to_string())
+                        .map(|q| {
+                            QuadRef::try_from(q)
+                                .expect("ordinary fixture roles")
+                                .to_string()
+                        })
                         .collect();
                     actual.sort();
                     expected.sort();
@@ -82,7 +91,7 @@ fn borrowed_union_matches_frozen_indexes_for_uniform_and_mixed_scopes() {
 
 #[test]
 fn borrowed_queries_preserve_contexts_exact_terms_and_invalid_bound_patterns() {
-    let mut source = Dataset::new();
+    let mut source = GeneralizedDataset::new();
     let subject = NamedNode::new_unchecked("urn:s");
     let predicate = NamedNode::new_unchecked("urn:p");
     for graph in [
@@ -97,7 +106,7 @@ fn borrowed_queries_preserve_contexts_exact_terms_and_invalid_bound_patterns() {
                 NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#string"),
             ),
         ] {
-            source.insert(&Quad::new(
+            source.insert(&GeneralizedQuad::new(
                 subject.clone(),
                 predicate.clone(),
                 object,
@@ -108,7 +117,7 @@ fn borrowed_queries_preserve_contexts_exact_terms_and_invalid_bound_patterns() {
     let mut staged = JournalGraph::new(&mut source, NamedNode::new_unchecked("urn:output").into());
     // A publication already in a different context must not duplicate the logical union.
     staged
-        .insert(Quad::new(
+        .insert(GeneralizedQuad::new(
             subject.clone(),
             predicate.clone(),
             Literal::new_simple_literal("word"),
@@ -116,7 +125,7 @@ fn borrowed_queries_preserve_contexts_exact_terms_and_invalid_bound_patterns() {
         ))
         .expect("staging the existing logical-union quad succeeds");
     staged
-        .insert(Quad::new(
+        .insert(GeneralizedQuad::new(
             subject,
             predicate,
             Literal::new_simple_literal("derived"),
@@ -148,21 +157,21 @@ fn bound_blank_subject_and_graph_select_existing_identifiers() {
     let subject = BlankNode::new("subject").unwrap();
     let graph = BlankNode::new("graph").unwrap();
     let predicate = NamedNode::new_unchecked("urn:p");
-    let mut source = Dataset::new();
+    let mut source = GeneralizedDataset::new();
     for quad in [
-        Quad::new(
+        GeneralizedQuad::new(
             subject.clone(),
             predicate.clone(),
             Literal::new_simple_literal("selected"),
             graph.clone(),
         ),
-        Quad::new(
+        GeneralizedQuad::new(
             NamedNode::new_unchecked("urn:outside"),
             predicate.clone(),
             Literal::new_simple_literal("other subject"),
             graph.clone(),
         ),
-        Quad::new(
+        GeneralizedQuad::new(
             subject.clone(),
             predicate,
             Literal::new_simple_literal("other graph"),

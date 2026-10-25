@@ -10,7 +10,7 @@ fn prepared_literal_borrows_lexical_and_normalizes_only_language() {
     for language in [None, Some("fr"), Some("fR")] {
         let prepared = PreparedTerm::new(
             TermView::new("literal", &value, None, language),
-            Position::Object,
+            Position::Data,
         )
         .unwrap();
         let TermRef::Literal(literal) = prepared.term_ref() else {
@@ -47,7 +47,7 @@ fn owned_and_borrowed_inputs_share_validation_errors_and_language_semantics() {
         ));
         let borrowed = PreparedTerm::new(
             TermView::new(kind, value, datatype, language),
-            Position::Object,
+            Position::Data,
         );
         match (owned, borrowed) {
             (Ok(owned), Ok(borrowed)) => assert_eq!(owned.as_ref(), borrowed.term_ref()),

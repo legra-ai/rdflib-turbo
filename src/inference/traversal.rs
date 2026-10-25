@@ -1,132 +1,100 @@
-//! Stream indexed matches; never retain the set of graph subjects or instances.
-use std::collections::HashSet;
-
+//! Stream full-Term indexed matches without retaining graph subjects or instances.
 use oxigraph::model::*;
 
 use super::backend::Graph;
-use super::generalized::{Generalized, Tuples};
+use super::diagnostics::rdf_list::{ListWitnesses, RdfList};
 use super::{OWL, Pending};
-use crate::graph::{RDF, iri, subject};
-use crate::{Error, Result};
+use crate::Result;
+use crate::graph::{RDF, iri};
 
 fn objects<'a>(
-    data: &'a Tuples<'_, impl Graph>,
+    data: &'a impl Graph,
     node: &'a Term,
-    predicate: &'a NamedNode,
+    predicate: TermRef<'a>,
 ) -> impl Iterator<Item = Result<Term>> + 'a {
-    data.matching([Some(node.as_ref()), Some(predicate.as_ref().into()), None])
-        .map(|row| row.map(|row| row[2].clone()))
+    data.quads(Some(node.as_ref()), Some(predicate), None)
+        .map(|q| q.map(|q| q.object))
 }
 
-fn unique(data: &Tuples<'_, impl Graph>, node: &Term, predicate: &NamedNode) -> Result<Term> {
-    let mut values = objects(data, node, predicate);
-    let first = values
-        .next()
-        .transpose()?
-        .ok_or_else(|| Error::Invalid(format!("Malformed RDF list at {node}")))?;
-    for value in values {
-        if value? != first {
-            return Err(Error::Invalid(format!("Malformed RDF list at {node}")));
-        }
-    }
-    Ok(first)
-}
-
-fn list(
-    data: &Tuples<'_, impl Graph>,
-    head: &Term,
-    invalid_member: &str,
-) -> Result<Vec<NamedNode>> {
-    let mut node = head.clone();
-    let mut seen = HashSet::new();
-    let mut result = Vec::new();
-    while node != Term::from(iri(RDF, "nil")) {
-        subject(&node)?;
-        if !seen.insert(node.clone()) {
-            return Err(Error::Invalid(format!("Cyclic RDF list at {node}")));
-        }
-        let first = unique(data, &node, &iri(RDF, "first"))?;
-        let next = unique(data, &node, &iri(RDF, "rest"))?;
-        let Term::NamedNode(value) = first else {
-            return Err(Error::Invalid(invalid_member.into()));
-        };
-        result.push(value);
-        node = next;
+fn list(data: &impl Graph, head: &Term, witnesses: &ListWitnesses) -> Result<Vec<Term>> {
+    let list = RdfList::new(data, witnesses, head.clone())?;
+    let mut result = Vec::with_capacity(list.len);
+    let mut cursor = list.cursor();
+    while let Some(member) = cursor.next()? {
+        result.push(member);
     }
     Ok(result)
 }
 
 fn follow(
-    data: &Tuples<'_, impl Graph>,
+    data: &impl Graph,
     start: &Term,
     node: &Term,
-    chain: &[NamedNode],
-    property: &NamedNode,
+    chain: &[Term],
+    property: &Term,
     additions: &mut Pending,
-    generalized: &mut Generalized,
 ) -> Result<()> {
     let Some((step, tail)) = chain.split_first() else {
-        return data.push(
-            [start.clone(), property.clone().into(), node.clone()],
-            additions,
-            generalized,
-        );
+        return additions
+            .push(
+                data,
+                GeneralizedQuad::new(
+                    start.clone(),
+                    property.clone(),
+                    node.clone(),
+                    GraphName::DefaultGraph,
+                ),
+            )
+            .map(|_| ());
     };
-    for value in objects(data, node, step) {
-        follow(data, start, &value?, tail, property, additions, generalized)?;
+    for value in objects(data, node, step.as_ref()) {
+        follow(data, start, &value?, tail, property, additions)?;
     }
     Ok(())
 }
 
 pub(super) fn chains(
-    data: &Tuples<'_, impl Graph>,
+    data: &impl Graph,
     additions: &mut Pending,
-    generalized: &mut Generalized,
+    witnesses: &ListWitnesses,
 ) -> Result<()> {
-    for quad in data.matching([
+    for quad in data.quads(
         None,
         Some(iri(OWL, "propertyChainAxiom").as_ref().into()),
         None,
-    ]) {
+    ) {
         let quad = quad?;
-        let Term::NamedNode(property) = &quad[0] else {
-            return Err(Error::Invalid(
-                "Property chain predicate must be an IRI".into(),
-            ));
-        };
-        let chain = list(data, &quad[2], "Property chain members must be IRIs")?;
+        let property = quad.subject;
+        let chain = list(data, &quad.object, witnesses)?;
         if chain.is_empty() {
             continue;
         }
-        for row in data.matching([None, Some(chain[0].as_ref().into()), None]) {
-            let start = row?[0].clone();
-            follow(
-                data,
-                &start,
-                &start,
-                &chain,
-                property,
-                additions,
-                generalized,
-            )?;
+        for quad in data.quads(None, Some(chain[0].as_ref()), None) {
+            let start = quad?.subject;
+            follow(data, &start, &start, &chain, &property, additions)?;
         }
     }
     Ok(())
 }
 
-fn has_type(data: &Tuples<'_, impl Graph>, node: &Term, class: &Term) -> Result<bool> {
-    data.contains(&[node.clone(), iri(RDF, "type").into(), class.clone()])
+fn has_type(data: &impl Graph, node: &Term, class: &Term) -> Result<bool> {
+    data.contains(GeneralizedQuadRef {
+        subject: node.as_ref(),
+        predicate: iri(RDF, "type").as_ref().into(),
+        object: class.as_ref(),
+        graph_name: GraphNameRef::DefaultGraph,
+    })
 }
 
-fn shared_key(
-    data: &Tuples<'_, impl Graph>,
-    left: &Term,
-    right: &Term,
-    key: &NamedNode,
-) -> Result<bool> {
-    for value in objects(data, left, key) {
+fn shared_key(data: &impl Graph, left: &Term, right: &Term, key: &Term) -> Result<bool> {
+    for value in objects(data, left, key.as_ref()) {
         let value = value?;
-        if data.contains(&[right.clone(), key.clone().into(), value])? {
+        if data.contains(GeneralizedQuadRef {
+            subject: right.as_ref(),
+            predicate: key.as_ref(),
+            object: value.as_ref(),
+            graph_name: GraphNameRef::DefaultGraph,
+        })? {
             return Ok(true);
         }
     }
@@ -134,30 +102,28 @@ fn shared_key(
 }
 
 pub(super) fn keys(
-    data: &Tuples<'_, impl Graph>,
+    data: &impl Graph,
     additions: &mut Pending,
-    generalized: &mut Generalized,
+    witnesses: &ListWitnesses,
 ) -> Result<()> {
-    for quad in data.matching([None, Some(iri(OWL, "hasKey").as_ref().into()), None]) {
+    for quad in data.quads(None, Some(iri(OWL, "hasKey").as_ref().into()), None) {
         let quad = quad?;
-        let keys = list(data, &quad[2], "Key properties must be IRIs")?;
+        let keys = list(data, &quad.object, witnesses)?;
         let Some(first) = keys.first() else {
             continue;
         };
-        let class = &quad[0];
-        for member in data.matching([
+        let class = quad.subject;
+        for member in data.quads(
             None,
             Some(iri(RDF, "type").as_ref().into()),
             Some(class.as_ref()),
-        ]) {
-            let member = member?[0].clone();
-            for value in objects(data, &member, first) {
+        ) {
+            let member = member?.subject;
+            for value in objects(data, &member, first.as_ref()) {
                 let value = value?;
-                for candidate in
-                    data.matching([None, Some(first.as_ref().into()), Some(value.as_ref())])
-                {
-                    let candidate = candidate?[0].clone();
-                    if candidate == member || !has_type(data, &candidate, class)? {
+                for candidate in data.quads(None, Some(first.as_ref()), Some(value.as_ref())) {
+                    let candidate = candidate?.subject;
+                    if candidate == member || !has_type(data, &candidate, &class)? {
                         continue;
                     }
                     let mut matches = true;
@@ -168,10 +134,14 @@ pub(super) fn keys(
                         }
                     }
                     if matches {
-                        data.push(
-                            [member.clone(), iri(OWL, "sameAs").into(), candidate],
-                            additions,
-                            generalized,
+                        additions.push(
+                            data,
+                            GeneralizedQuad::new(
+                                member.clone(),
+                                iri(OWL, "sameAs"),
+                                candidate,
+                                GraphName::DefaultGraph,
+                            ),
                         )?;
                     }
                 }

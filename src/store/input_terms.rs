@@ -1,7 +1,7 @@
 //! Caller-owned raw RDF terms: inspect Python first, pin text, then detach.
 use pyo3::basic::CompareOp;
 use pyo3::class::gc::{PyTraverseError, PyVisit};
-use pyo3::exceptions::PyTypeError;
+use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::pybacked::PyBackedStr;
 use pyo3::types::{PyString, PyTuple, PyType};
@@ -92,6 +92,40 @@ pub(super) struct PinnedPattern {
 }
 
 impl NativeInputTerms {
+    pub(super) fn stage_record<'py>(
+        &self,
+        py: Python<'py>,
+        record: &Bound<'py, PyAny>,
+    ) -> PyResult<RawPattern<'py>> {
+        let record = record.cast::<PyTuple>()?;
+        if record.len() != 4 {
+            return Err(PyValueError::new_err(
+                "An import record must contain exactly four terms",
+            ));
+        }
+        let subject = self.classify(py, record.get_item(0)?)?;
+        let predicate = self.classify(py, record.get_item(1)?)?;
+        let object = self.classify(py, record.get_item(2)?)?;
+        let graph = self.classify(py, record.get_item(3)?)?;
+        Ok(RawPattern {
+            graph,
+            object,
+            predicate,
+            subject,
+        })
+    }
+
+    pub(super) fn stage_graph(
+        &self,
+        py: Python<'_>,
+        graph: Bound<'_, PyAny>,
+    ) -> PyResult<Option<PinnedTerm>> {
+        self.classify(py, graph)?
+            .as_ref()
+            .map(RawTerm::pin)
+            .transpose()
+    }
+
     fn classify<'py>(
         &self,
         py: Python<'py>,

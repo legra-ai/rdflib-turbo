@@ -5,6 +5,30 @@ from rdflib import BNode, Literal, URIRef
 from rdflib_turbo import Graph, StoreDataset
 
 
+@pytest.mark.parametrize("pending", [False, True])
+def test_removal_distinguishes_empty_datatype_uri_from_plain_literal(pending):
+    from rdflib import Graph as ReferenceGraph
+
+    subject, predicate = URIRef("urn:s"), URIRef("urn:p")
+    plain = Literal("value")
+    typed = Literal("value", datatype=URIRef(""), normalize=False)
+    expected = ReferenceGraph()
+    actual = Graph()
+    for obj in (plain, typed):
+        expected.add((subject, predicate, obj))
+        actual.add((subject, predicate, obj))
+    expected.remove((subject, predicate, typed))
+    if pending:
+        with actual.transaction() as transaction:
+            transaction.remove((subject, predicate, typed))
+    else:
+        actual.remove((subject, predicate, typed))
+    assert len(actual) == len(expected) == 1
+    remaining = next(iter(actual))[2]
+    assert remaining.datatype is None
+    assert next(iter(expected))[2].datatype is None
+
+
 def test_add_never_serializes_json(monkeypatch):
     graph = Graph()
     import rdflib_turbo.graph as facade
@@ -38,9 +62,9 @@ def test_typed_insert_transaction_reads_uncommitted_values_and_aborts_invalid_te
             transaction.add((URIRef("urn:discard"), triple[1], triple[2]))
             with pytest.raises(ValueError):
                 transaction.store.backend._native.insert_terms(
-                    ("literal", "invalid subject", None, None),
+                    ("uri", "urn:invalid", None, None),
                     ("uri", "urn:p", None, None),
-                    ("literal", "value", None, None),
+                    ("literal", "value", "urn:type", "en"),
                     None,
                 )
     assert list(graph) == [triple]

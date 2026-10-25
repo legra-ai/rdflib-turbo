@@ -1,17 +1,20 @@
 //! Derived-only private inference over one stable borrowed graph source.
 use oxigraph::model::*;
-use oxigraph::sparql::{PreparedSparqlQuery, QueryResults};
+use oxigraph::sparql::PreparedSparqlQuery;
+#[cfg(test)]
+use oxigraph::sparql::QueryResults;
+use oxrdf::GeneralizedDataset;
 use pyshacl_turbo_engine::{GraphRead, QueryGraph};
 
 use super::backend::Graph;
-use super::{InferenceOutcome, InferenceRequest};
+use super::{InferenceDelta, InferenceOutcome, InferenceRequest};
 use crate::Result;
 
-type Matches<'a> = Box<dyn Iterator<Item = pyshacl_turbo_engine::Result<Quad>> + 'a>;
+type Matches<'a> = Box<dyn Iterator<Item = pyshacl_turbo_engine::Result<GeneralizedQuad>> + 'a>;
 
 pub(crate) struct BorrowedInference<'a, G: GraphRead + ?Sized> {
     source: &'a G,
-    additions: Dataset,
+    delta: InferenceDelta,
     destination: GraphName,
 }
 
@@ -19,7 +22,7 @@ impl<'a, G: GraphRead + ?Sized> BorrowedInference<'a, G> {
     pub(crate) fn new(source: &'a G, destination: GraphName) -> Self {
         Self {
             source,
-            additions: Dataset::new(),
+            delta: InferenceDelta::default(),
             destination,
         }
     }
@@ -32,22 +35,27 @@ impl<'a, G: GraphRead + ?Sized> BorrowedInference<'a, G> {
         super::expand_configured(self, mode, request).map(|(_, outcome)| outcome)
     }
 
-    pub(crate) fn into_additions(self) -> Dataset {
-        self.additions
+    pub(crate) fn into_delta(self) -> InferenceDelta {
+        self.delta
     }
 
     fn physical_matches<'b>(
         &'b self,
-        subject: Option<NamedOrBlankNodeRef<'_>>,
-        predicate: Option<NamedNodeRef<'_>>,
+        subject: Option<TermRef<'_>>,
+        predicate: Option<TermRef<'_>>,
         object: Option<TermRef<'_>>,
         graph: Option<GraphNameRef<'_>>,
     ) -> Matches<'b> {
         Box::new(
             self.source
                 .matching_quads(subject, predicate, object, graph)
+                .filter(|quad| match quad {
+                    Ok(quad) => !self.delta.is_removed(quad.as_ref()),
+                    Err(_) => true,
+                })
                 .chain(
-                    self.additions
+                    self.delta
+                        .additions
                         .matching_quads(subject, predicate, object, graph),
                 ),
         )
@@ -55,8 +63,8 @@ impl<'a, G: GraphRead + ?Sized> BorrowedInference<'a, G> {
 
     fn default_matches<'b>(
         &'b self,
-        subject: Option<NamedOrBlankNodeRef<'_>>,
-        predicate: Option<NamedNodeRef<'_>>,
+        subject: Option<TermRef<'_>>,
+        predicate: Option<TermRef<'_>>,
         object: Option<TermRef<'_>>,
     ) -> Matches<'b> {
         Box::new(
@@ -94,14 +102,15 @@ impl<'a, G: GraphRead + ?Sized> BorrowedInference<'a, G> {
 impl<'source, G: GraphRead + ?Sized> Graph for BorrowedInference<'source, G> {
     fn quads<'a>(
         &'a self,
-        subject: Option<NamedOrBlankNodeRef<'_>>,
-        predicate: Option<NamedNodeRef<'_>>,
+        subject: Option<TermRef<'_>>,
+        predicate: Option<TermRef<'_>>,
         object: Option<TermRef<'_>>,
-    ) -> impl Iterator<Item = Result<Quad>> + use<'a, 'source, G> {
+    ) -> impl Iterator<Item = Result<GeneralizedQuad>> + use<'a, 'source, G> {
         self.default_matches(subject, predicate, object)
-            .map(|quad| quad.map_err(Into::into))
+            .map(|quad| Ok(quad?))
     }
 
+    #[cfg(test)]
     fn query(&self, query: PreparedSparqlQuery) -> Result<QueryResults<'_>> {
         // The query adapter owns a borrow of this stable overlay, not a local view.
         Ok(query
@@ -109,17 +118,46 @@ impl<'source, G: GraphRead + ?Sized> Graph for BorrowedInference<'source, G> {
             .execute()?)
     }
 
-    fn contains(&self, quad: &Quad) -> Result<bool> {
+    fn inference_heads(
+        &self,
+        query: PreparedSparqlQuery,
+    ) -> Result<oxigraph::sparql::QueryTripleIter<'_, GeneralizedTriple>> {
+        Ok(query
+            .on_queryable_dataset(QueryGraph::new(self))
+            .execute_inference_construct()?)
+    }
+
+    fn cleanup_blank_predicates(&mut self) -> Result<()> {
+        // Source rows remain immutable. Retain only actual full-Term removals;
+        // errors abort staging rather than disappearing through the filter.
+        let mut removals: Option<Box<GeneralizedDataset>> = None;
+        for quad in self.source.matching_quads(None, None, None, None) {
+            let quad = quad?;
+            if quad.predicate.is_blank_node() {
+                removals.get_or_insert_with(Default::default).insert(&quad);
+            }
+        }
+        self.delta.retain_removals(removals);
+        let mut transaction = self.delta.additions.transaction();
+        transaction.remove_where(|quad| quad.predicate.is_blank_node());
+        transaction.commit();
+        Ok(())
+    }
+
+    fn contains(&self, quad: GeneralizedQuadRef<'_>) -> Result<bool> {
         // Probe the source first so an overlay hit cannot hide its read error.
         if self
             .source
             .matching_quads(
-                Some(quad.subject.as_ref()),
-                Some(quad.predicate.as_ref()),
-                Some(quad.object.as_ref()),
+                Some(quad.subject),
+                Some(quad.predicate),
+                Some(quad.object),
                 None,
             )
-            .next()
+            .find(|quad| match quad {
+                Ok(quad) => !self.delta.is_removed(quad.as_ref()),
+                Err(_) => true,
+            })
             .transpose()?
             .is_some()
         {
@@ -127,34 +165,37 @@ impl<'source, G: GraphRead + ?Sized> Graph for BorrowedInference<'source, G> {
         }
         // Every overlay insertion uses exactly self.destination. A boolean
         // needs no owned row or representative from the logical union.
-        Ok(self.additions.contains(QuadRef {
+        Ok(self.delta.additions.contains(GeneralizedQuadRef {
             graph_name: self.destination.as_ref(),
-            ..quad.as_ref()
+            ..quad
         }))
     }
 
-    fn contains_destination(&self, quad: &Quad) -> Result<bool> {
+    fn contains_destination(&self, quad: GeneralizedQuadRef<'_>) -> Result<bool> {
         if self
             .source
             .matching_quads(
-                Some(quad.subject.as_ref()),
-                Some(quad.predicate.as_ref()),
-                Some(quad.object.as_ref()),
+                Some(quad.subject),
+                Some(quad.predicate),
+                Some(quad.object),
                 Some(self.destination.as_ref()),
             )
-            .next()
+            .find(|quad| match quad {
+                Ok(quad) => !self.delta.is_removed(quad.as_ref()),
+                Err(_) => true,
+            })
             .transpose()?
             .is_some()
         {
             return Ok(true);
         }
-        Ok(self.additions.contains(QuadRef {
+        Ok(self.delta.additions.contains(GeneralizedQuadRef {
             graph_name: self.destination.as_ref(),
-            ..quad.as_ref()
+            ..quad
         }))
     }
 
-    fn insert(&mut self, mut quad: Quad) -> Result<()> {
+    fn insert(&mut self, mut quad: GeneralizedQuad) -> Result<()> {
         quad.graph_name = self.destination.clone();
         if self
             .source
@@ -164,11 +205,14 @@ impl<'source, G: GraphRead + ?Sized> Graph for BorrowedInference<'source, G> {
                 Some(quad.object.as_ref()),
                 Some(quad.graph_name.as_ref()),
             )
-            .next()
+            .find(|quad| match quad {
+                Ok(quad) => !self.delta.is_removed(quad.as_ref()),
+                Err(_) => true,
+            })
             .transpose()?
             .is_none()
         {
-            self.additions.insert(&quad);
+            self.delta.additions.insert(&quad);
         }
         Ok(())
     }
@@ -177,11 +221,12 @@ impl<'source, G: GraphRead + ?Sized> Graph for BorrowedInference<'source, G> {
 impl<'source, G: GraphRead + ?Sized> GraphRead for BorrowedInference<'source, G> {
     fn matching_quads<'a>(
         &'a self,
-        subject: Option<NamedOrBlankNodeRef<'_>>,
-        predicate: Option<NamedNodeRef<'_>>,
+        subject: Option<TermRef<'_>>,
+        predicate: Option<TermRef<'_>>,
         object: Option<TermRef<'_>>,
         graph: Option<GraphNameRef<'_>>,
-    ) -> impl Iterator<Item = pyshacl_turbo_engine::Result<Quad>> + use<'a, 'source, G> {
+    ) -> impl Iterator<Item = pyshacl_turbo_engine::Result<GeneralizedQuad>> + use<'a, 'source, G>
+    {
         let matches: Matches<'a> = match graph {
             Some(GraphNameRef::DefaultGraph) => self.default_matches(subject, predicate, object),
             Some(_) => self.physical_matches(subject, predicate, object, graph),
@@ -207,7 +252,7 @@ impl<'source, G: GraphRead + ?Sized> GraphRead for BorrowedInference<'source, G>
             GraphName::DefaultGraph => None,
         };
         let extra = graph
-            .filter(|_| !self.additions.is_empty())
+            .filter(|_| !self.delta.additions.is_empty())
             .and_then(|graph| match self.source.contains_named_graph(&graph) {
                 Ok(true) => None,
                 Ok(false) => Some(Ok(graph)),
@@ -219,7 +264,7 @@ impl<'source, G: GraphRead + ?Sized> GraphRead for BorrowedInference<'source, G>
     fn contains_named_graph(&self, graph: &NamedOrBlankNode) -> pyshacl_turbo_engine::Result<bool> {
         Ok(
             (self.destination.as_ref() == GraphNameRef::from(graph.as_ref())
-                && !self.additions.is_empty())
+                && !self.delta.additions.is_empty())
                 || self.source.contains_named_graph(graph)?,
         )
     }

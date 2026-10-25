@@ -8,8 +8,6 @@ use crate::Result;
 use crate::graph::{RDF, iri};
 use crate::inference::OWL;
 use crate::inference::backend::Graph;
-use crate::inference::diagnostic_datatypes::LexicalContext;
-use crate::inference::generalized::Tuples;
 
 #[derive(Clone, Copy)]
 enum Kind {
@@ -19,10 +17,9 @@ enum Kind {
 }
 
 pub(super) fn collect(
-    data: &Tuples<'_, impl Graph>,
+    data: &impl Graph,
     errors: &mut Diagnostics,
     witnesses: &ListWitnesses,
-    context: &LexicalContext,
 ) -> Result<()> {
     // bounded: three built-in declaration types and their two possible list properties.
     for (name, kind) in [
@@ -42,12 +39,7 @@ pub(super) fn collect(
                     continue;
                 }
                 for head in objects(data, &node, &iri(OWL, property)) {
-                    check(
-                        data,
-                        errors,
-                        RdfList::new(data, witnesses, head?, context)?,
-                        kind,
-                    )?;
+                    check(data, errors, RdfList::new(data, witnesses, head?)?, kind)?;
                 }
             }
         }
@@ -56,9 +48,9 @@ pub(super) fn collect(
 }
 
 fn check(
-    data: &Tuples<'_, impl Graph>,
+    data: &impl Graph,
     errors: &mut Diagnostics,
-    list: RdfList<'_, '_, impl Graph>,
+    list: RdfList<'_, impl Graph>,
     kind: Kind,
 ) -> Result<()> {
     let mut outer = list.cursor();
@@ -82,7 +74,8 @@ fn check(
                 Kind::Different => {
                     let same = iri(OWL, "sameAs");
                     if left != right
-                        && (has(data, &left, &same, &right)? || has(data, &right, &same, &left)?)
+                        && (has(data, &left, same.as_ref().into(), &right)?
+                            || has(data, &right, same.as_ref().into(), &left)?)
                     {
                         errors.add(format!("'sameAs' and 'AllDifferent' cannot be used on the same subject-object pair: ({}, {})", text(&left), text(&right)));
                     }
@@ -96,18 +89,15 @@ fn check(
 }
 
 fn properties(
-    data: &Tuples<'_, impl Graph>,
+    data: &impl Graph,
     errors: &mut Diagnostics,
     left: &Term,
     right: &Term,
 ) -> Result<()> {
-    if left.is_literal() || right.is_literal() {
-        return Ok(());
-    }
     for quad in data.quads(None, Some(left.as_ref()), None) {
         let quad = quad?;
         let subject: Term = quad.subject;
-        if has(data, &subject, right, &quad.object)? {
+        if has(data, &subject, right.as_ref(), &quad.object)? {
             errors.add(format!(
                 "Disjoint properties in an 'AllDisjointProperties' are not really disjoint: ({}, {},{}) and ({},{},{})",
                 text(&subject), text(left), text(&quad.object), text(&subject), text(right), text(&quad.object)
@@ -117,16 +107,11 @@ fn properties(
     Ok(())
 }
 
-fn classes(
-    data: &Tuples<'_, impl Graph>,
-    errors: &mut Diagnostics,
-    left: &Term,
-    right: &Term,
-) -> Result<()> {
+fn classes(data: &impl Graph, errors: &mut Diagnostics, left: &Term, right: &Term) -> Result<()> {
     let predicate = iri(RDF, "type");
     for quad in data.quads(None, Some(predicate.as_ref().into()), Some(left.as_ref())) {
         let subject: Term = quad?.subject;
-        if has(data, &subject, &predicate, right)? {
+        if has(data, &subject, predicate.as_ref().into(), right)? {
             errors.add(format!(
                 "Disjoint classes {} and {} have a common individual {}",
                 text(left),

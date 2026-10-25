@@ -3,8 +3,9 @@ use std::sync::{Arc, Mutex};
 
 use oxigraph::model::{GraphName, Literal, NamedNode, Quad};
 use oxigraph::store::Store;
+use pyo3::ffi::c_str;
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyString};
+use pyo3::types::{PyBytes, PyDict, PyString};
 
 use super::operations::{Operation, Reply};
 use super::session::{Control, Session};
@@ -135,4 +136,84 @@ fn nt_uri_rejection_is_plain_python_exception_and_keeps_pending_owner_usable() {
     assert!(store.is_empty().unwrap());
     session.finish(true).unwrap();
     assert_eq!(store.len().unwrap(), 2);
+}
+
+#[test]
+fn generalized_numeric_warning_order_does_not_abort_pending_session() {
+    for warning_first in [false, true] {
+        let store = Store::new().unwrap();
+        let session =
+            Arc::new(Session::start(Arc::new(Mutex::new(Control::new(store.clone())))).unwrap());
+        let uri = |value: &str| ("uri".into(), value.into(), None, None);
+        let weird = (
+            "literal".into(),
+            "bad".into(),
+            Some("http://www.w3.org/2001/XMLSchema#double".into()),
+            None,
+        );
+        let invalid = uri("urn:bad space");
+        let (subject, predicate) = if warning_first {
+            (weird, invalid)
+        } else {
+            (invalid, weird)
+        };
+        session
+            .execute(Operation::InsertTerms(Box::new(QuadInput::new(
+                subject,
+                predicate,
+                uri("urn:o"),
+                None,
+            ))))
+            .unwrap();
+        Python::initialize();
+        Python::attach(|py| {
+            let owner = Py::new(
+                py,
+                NativeTransaction {
+                    session: session.clone(),
+                },
+            )
+            .unwrap();
+            let globals = PyDict::new(py);
+            globals.set_item("owner", owner).unwrap();
+            globals.set_item("warning_first", warning_first).unwrap();
+            py.run(c_str!(r#"
+import warnings
+expected_warning = "Serializing weird numerical rdflib.term.Literal('bad', datatype=rdflib.term.URIRef('http://www.w3.org/2001/XMLSchema#double'))"
+for as_bytes in (False, True):
+    for filter_value in ('always', 'error'):
+        with warnings.catch_warnings(record=True) as observed:
+            warnings.simplefilter(filter_value)
+            try:
+                owner._dump_graph_nt(None, as_bytes)
+            except Exception as error:
+                if warning_first and filter_value == 'error':
+                    assert type(error) is UserWarning
+                    assert str(error) == expected_warning
+                else:
+                    assert type(error) is Exception
+                    assert str(error) == '"urn:bad space" does not look like a valid URI, I cannot serialize this as N3/Turtle. Perhaps you wanted to urlencode it?'
+            else:
+                raise AssertionError('Invalid URI must reject the document')
+            assert [(item.category, str(item.message)) for item in observed] == (
+                [(UserWarning, expected_warning)] if warning_first and filter_value == 'always' else []
+            )
+"#), Some(&globals), None).unwrap();
+        });
+        assert!(matches!(
+            session.execute(Operation::Len).unwrap(),
+            Reply::Count(1)
+        ));
+        session
+            .execute(Operation::InsertTerms(Box::new(QuadInput::new(
+                uri("urn:still"),
+                uri("urn:p"),
+                uri("urn:usable"),
+                None,
+            ))))
+            .unwrap();
+        assert!(store.is_empty().unwrap());
+        session.finish(false).unwrap();
+        assert!(store.is_empty().unwrap());
+    }
 }

@@ -8,6 +8,8 @@ from rdflib import Literal, Namespace, URIRef
 from rdflib.namespace import XSD
 from rdflib_turbo import Dataset
 
+from .inference_observers import physical_keys
+
 PREFIX = "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n"
 SCHEMA = """
 <urn:Class> rdfs:subClassOf <urn:Parent> .
@@ -46,7 +48,7 @@ def test_rdfs_substitutes_equal_string_values_preserving_the_replacement_terms(d
 
 
 def statements(dataset):
-    return set(dataset.serialize().splitlines())
+    return physical_keys(dataset)
 
 
 @pytest.mark.parametrize("delta", [False, True])
@@ -119,25 +121,30 @@ def test_inference_delta_failure_rolls_back_all_changes(destination, named):
         SCHEMA
         + "<urn:keyAlias> rdfs:subPropertyOf <http://www.w3.org/2002/07/owl#hasKey> . "
         + "<urn:Class> <urn:keyAlias> _:broken ."
+        + "_:broken <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <urn:key>; "
+        + "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> _:broken ."
     )
     source = Dataset().parse(
         data=PREFIX + ("<urn:input> { " + statements + " }" if named else statements),
         format="trig" if named else "turtle",
     )
     before = source.serialize()
-    with pytest.raises(ValueError, match="Malformed RDF list"):
+    with pytest.raises(ValueError, match="recursive rdf:rest"):
         source.infer_delta(destination=destination)
     assert source.serialize() == before
 
 
 @pytest.mark.parametrize(
-    "arguments, message",
-    [({"inference": "invalid"}, "Unknown inference mode"), ({"destination": "invalid IRI"}, "IRI")],
+    "arguments, exception, message",
+    [
+        ({"inference": "invalid"}, ValueError, "Unknown inference mode"),
+        ({"destination": object()}, TypeError, "destination"),
+    ],
 )
-def test_inference_delta_rejects_invalid_parameters_without_mutation(arguments, message):
+def test_inference_delta_rejects_invalid_parameters_without_mutation(arguments, exception, message):
     source = Dataset().parse(data=PREFIX + SCHEMA)
     before = source.serialize()
-    with pytest.raises(ValueError, match=message):
+    with pytest.raises(exception, match=message):
         source.infer_delta(**arguments)
     assert source.serialize() == before
 

@@ -54,13 +54,16 @@ at most twice its degree plus one overflow term. A larger component proves that
 the seed cannot have a majority outgoing row; discard that partial component and
 resolve encountered seeds of no greater degree. A completed small component
 classifies every row group it contains, including balanced groups. Retain its
-term identities only if some row is dense, and reuse it for the other seeds.
-Unrelated balanced components are never explored. These components only restrict
-the candidate search space; they never establish equality or make pending
-inverses visible. Do not retain an equality-edge copy or a global connectivity
-index.
+term identities for witnessed candidate search, and reuse it for the other seeds.
+Unrelated balanced components are never explored. A completed bounded component
+is also reused by its unbalanced row groups without a strict-majority gate.
+Balanced sparse rows retain witness enumeration; balanced majority rows in the
+same component retain their candidate-search route. These components only
+restrict the candidate search space; they never establish equality or make
+pending inverses visible. Do not retain an equality-edge copy or a global
+connectivity index.
 
-For a row containing more than half its component's terms, examine only missing
+For a selected row with a completed bounded component, examine only missing
 targets. Establish each addition with an indexed two-edge transitive witness or
 a common predecessor from the original snapshot. Transitive witnesses are shared
 by identical outgoing rows; common-predecessor witnesses remain per subject.
@@ -81,6 +84,19 @@ closed cliques and disjoint closed pairs. Mixed inputs retain only the small
 nearly closed component. A degree-two seed in a large incoming star must stop
 before scanning the full component. These contracts complement the work bounds
 and exact one-round differential tests.
+
+The strict-majority gate discarded already completed searches at half-connected
+rounds. A deterministic 64-node circulant regression required 177,346 indexed
+reads/probes against a fixed 131,072 budget; merely deduplicating co-neighbor
+heads still required 149,762. Reuse those completed candidate domains for
+unbalanced rows and prove each missing pair against the original snapshot.
+The 64- and 128-node regressions retain their fixed `32 * nodes²` work budgets.
+This does not change eager closure, exploration limits or round publication.
+
+The original sparse/balanced enumeration route remains unchanged. Dense/mixed,
+exact one-round, closed-pair/clique allocation and incoming-star regressions
+continue to define the acceptance boundary. This remains an adaptive work-saving
+strategy, not a universal quadratic complexity claim.
 
 Sparse inverse compositions now stream common predecessors per output row.
 The current outgoing term set rejects already-present targets; the same
@@ -119,3 +135,18 @@ composition of disjoint self, pair and clique groups to one representative
 outgoing read per group with zero incoming queries. Active groups load one
 current row for the inverse phase; previous-phase rows and deltas have already
 been dropped. Existing work and allocation budgets remain.
+
+## Full-Term reader extension
+
+ADR 0065's generalized internal inference owner supersedes this decision's earlier
+restriction that literal terms cannot be subjects or outgoing intermediates.
+Row-group members and subject identities now retain full terms, including exact
+literal datatype/language state. Grouping, witnesses and pending publication still
+read one immutable round; no pending inverse becomes visible prematurely.
+
+The former strict CONSTRUCT output remains an ordinary-domain control. For
+mixed-role inputs it cannot serve as a complete oracle because it omits literal
+subjects. Independent naive immutable full-Term algebra supplies the exact
+one-round reference, anchored against an actual synthetic OWL 7.6.2 equality round
+with literal subjects and blank predicates before cleanup. This changes neither
+generic public CONSTRUCT projection nor the separate publication policy.

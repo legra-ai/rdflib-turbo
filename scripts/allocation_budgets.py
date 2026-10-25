@@ -5,7 +5,7 @@ import sys
 
 from .native_coverage import embedded_python_environment, run
 
-# bounded: these eighteen regression budgets each require an isolated test process.
+# bounded: these twenty regression budgets each require an isolated test process.
 TESTS = (
     "allocation_tests::inference_heap_budget",
     "allocation_tests::named_inference_does_not_clone_source_lexical_storage",
@@ -20,6 +20,8 @@ TESTS = (
     "allocation_tests::parse_heap_budget",
     "allocation_tests::failed_parse_releases_staged_terms",
     "store::pattern::count_tests::scoped_count_does_not_allocate_decoded_lexical_payloads",
+    "store::pattern::count_tests::union_count_does_not_allocate_decoded_lexical_payloads",
+    "store::pattern::count_tests::transaction_union_count_does_not_allocate_decoded_lexical_payloads",
     "store::read::tests::leases::scoped_lexical_scan_does_not_copy_stored_payloads",
     "store::read_input_tests::native_read_filter_binding_does_not_copy_large_input_lexical",
     "store::read::tests::exact_membership_allocates_only_one_result_row",

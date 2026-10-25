@@ -5,6 +5,8 @@ edition = "2024"
 rust-version = "1.99.1"
 publish = false
 
+[workspace]
+
 [features]
 default = ["exact"]
 exact = ["oxigraph/exact-term-storage"]

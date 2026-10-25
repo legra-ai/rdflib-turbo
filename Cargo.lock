@@ -223,11 +223,11 @@ checksum = "0e9c71c2167ca323c882b99918929403426e2373ea17242ff5653e0d5e1058be"
 [[package]]
 name = "fancy-regex"
 version = "0.19.2"
-source = "git+https://github.com/legra-ai/pyshacl-turbo?rev=5a5bb294eb0c270c6159e70665f9cf30039e7521#5a5bb294eb0c270c6159e70665f9cf30039e7521"
 dependencies = [
  "bit-set",
  "regex-automata",
  "regex-syntax",
+ "sha2",
 ]
 
 [[package]]
@@ -527,6 +527,7 @@ dependencies = [
  "oxrdfio",
  "oxrocksdb-sys",
  "oxsdatatypes",
+ "parking_lot",
  "rand 0.9.5",
  "rustc-hash",
  "sha2",
@@ -631,6 +632,16 @@ dependencies = [
  "oxiri",
  "oxrdf",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "parking_lot"
+version = "0.12.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93857453250e3077bd71ff98b6a65ea6621a19bb0f559a85248955ac12c45a1a"
+dependencies = [
+ "lock_api",
+ "parking_lot_core",
 ]
 
 [[package]]
@@ -834,18 +845,15 @@ dependencies = [
 
 [[package]]
 name = "pyshacl-turbo-engine"
-version = "0.6.5"
-source = "git+https://github.com/legra-ai/pyshacl-turbo?rev=5a5bb294eb0c270c6159e70665f9cf30039e7521#5a5bb294eb0c270c6159e70665f9cf30039e7521"
+version = "0.7.0"
 dependencies = [
  "bigdecimal",
  "fancy-regex",
- "iri-rfc3987",
  "num-bigint 0.4.8",
  "oxigraph",
  "oxrdf",
  "oxsdatatypes",
  "regex-syntax",
- "rhusky 2.0.1",
  "sha2",
  "shacl-structural-model",
  "spareval",
@@ -854,6 +862,15 @@ dependencies = [
  "thiserror 2.0.21",
  "unicode-ident",
  "unicode_names2",
+]
+
+[[package]]
+name = "pyshacl-turbo-python"
+version = "0.7.0"
+dependencies = [
+ "pyo3",
+ "pyshacl-turbo-engine",
+ "serde_json",
 ]
 
 [[package]]
@@ -982,6 +999,7 @@ dependencies = [
  "pyo3",
  "pyo3-build-config",
  "pyshacl-turbo-engine",
+ "pyshacl-turbo-python",
  "rdf-reasoning",
  "roxmltree",
  "serde",
@@ -1276,18 +1294,18 @@ dependencies = [
 
 [[package]]
 name = "static-automata"
-version = "1.1.0"
+version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee5c486951167e860ee5c58f6ea5eb2539b25462e4f3e93e710f2f9519211477"
+checksum = "258c3bf84c4c532fb3df39050d9bf9b4c66b9d09d8970b699b7d11eda1224530"
 dependencies = [
  "static-automata-macros",
 ]
 
 [[package]]
 name = "static-automata-macros"
-version = "1.1.0"
+version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b7777c1c80c6e706e66043b9475739afef00a8a3cadbe703f8fc4ae3c4e091a"
+checksum = "0da89a2de63623bfa54b140c21c2519d55f21019bdb18884e56408281d751114"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",

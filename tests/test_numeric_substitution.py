@@ -12,6 +12,8 @@ from rdflib import Graph as ReferenceGraph
 from rdflib import Literal, URIRef
 from rdflib_turbo import Dataset, Graph, Store
 
+from .inference_observers import physical_keys, term_key
+
 FIXTURES = Path(__file__).resolve().parents[1] / "src/inference"
 PREDICATE = URIRef("urn:numeric:value")
 
@@ -46,58 +48,51 @@ def test_numeric_closure_matches_reference_with_untrapped_nan(api):
         reference = ReferenceGraph().parse(data=source, format="nt")
         DeductiveClosure(RDFS_Semantics, improved_datatypes=False).expand(reference)
         expected = values(reference)
+        complete = {(*map(term_key, triple), None) for triple in reference}
         if api == "dataset":
             native = Dataset().parse(data=source, format="nt").infer(inference="rdfs")
             assert values(native.to_rdflib()) == expected
+            assert physical_keys(native) == complete
         elif api == "graph":
             graph = Graph(identifier=URIRef("urn:numeric:scope"))
             outside = Graph(store=graph.store, identifier=URIRef("urn:numeric:outside"))
             outside.add((URIRef("urn:outside"), PREDICATE, Literal(1)))
             graph.parse(data=source, format="nt").infer(inference="rdfs")
             assert values(graph) == expected
+            assert {tuple(map(term_key, triple)) for triple in graph} == {
+                row[:3] for row in complete
+            }
             assert len(outside) == 1
         else:
             with Store() as store:
                 if api == "transaction":
                     with store.transaction() as transaction:
                         transaction.parse(data=source, format="nt").infer(inference="rdfs")
-                        assert (
-                            values(
-                                ReferenceGraph().parse(
-                                    data=transaction.serialize(format="ntriples"), format="nt"
-                                )
-                            )
-                            == expected
-                        )
+                        assert physical_keys(transaction) == complete
                 else:
                     store.parse(data=source, format="nt").infer(inference="rdfs")
-                assert (
-                    values(
-                        ReferenceGraph().parse(data=store.serialize(format="ntriples"), format="nt")
-                    )
-                    == expected
-                )
+                assert physical_keys(store) == complete
 
 
 def test_signaling_nan_raises_reference_exception_and_rolls_back():
     source = '<urn:s> <urn:p> "sNaN"^^<http://www.w3.org/2001/XMLSchema#decimal> .\n<urn:s> <urn:q> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .'
     with decimal.localcontext() as context:
         context.traps[decimal.InvalidOperation] = True
-        for graph in [
-            ReferenceGraph().parse(data=source, format="nt"),
-            Dataset().parse(data=source, format="nt"),
+        for api, graph in [
+            ("reference", ReferenceGraph().parse(data=source, format="nt")),
+            ("native", Dataset().parse(data=source, format="nt")),
         ]:
+            before = physical_keys(graph) if api == "native" else None
             context.clear_flags()
             with pytest.raises(decimal.InvalidOperation) as error:
-                if isinstance(graph, ReferenceGraph):
+                if api == "reference":
                     DeductiveClosure(RDFS_Semantics, improved_datatypes=False).expand(graph)
                 else:
-                    before = graph.serialize(format="ntriples")
                     graph.infer(inference="rdfs")
             assert error.value.args == ([decimal.InvalidOperation],)
             assert context.flags[decimal.InvalidOperation]
-            if isinstance(graph, Dataset):
-                assert graph.serialize(format="ntriples") == before
+            if api == "native":
+                assert physical_keys(graph) == before
 
 
 @pytest.mark.parametrize("right", ['"1"', '"NaN"', '"INF"', '"bad"'])

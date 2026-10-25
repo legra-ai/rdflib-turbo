@@ -1,5 +1,5 @@
 //! Materialize RDFLib objects with the GIL after releasing the native scan lock.
-use oxigraph::store::{LexicalTerm, TermText};
+use oxigraph::store::{LexicalGraphName, LexicalQuad, LexicalTerm, LexicalUnionRow, TermText};
 use pyo3::class::gc::{PyTraverseError, PyVisit};
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
@@ -13,6 +13,7 @@ mod pointer_batch;
 use pointer_batch::PositionCache;
 
 type Row = (Option<Py<PyAny>>, Option<Py<PyAny>>, Option<Py<PyAny>>);
+pub(super) type QuadRow = (Py<PyAny>, Py<PyAny>, Py<PyAny>, Option<Py<PyAny>>);
 pub(super) type FirstBatch = (Vec<Row>, Option<NativeReadCursor>);
 const MIN_REUSE_ROWS: usize = 8;
 
@@ -70,6 +71,77 @@ impl NativeTermFactories {
 }
 
 impl NativeTermFactories {
+    pub(super) fn union_rows(
+        &self,
+        py: Python<'_>,
+        rows: Vec<LexicalUnionRow>,
+        factories: &Py<Self>,
+    ) -> PyResult<Vec<super::union_read::Row>> {
+        let reuse = self.reuse_identifiers && rows.len() >= MIN_REUSE_ROWS;
+        let mut caches = std::array::from_fn::<_, 3, _>(|_| PositionCache::default());
+        let mut restore = |term, position| {
+            if reuse {
+                self.cached_term(py, Some(term), &mut caches[position])
+            } else {
+                self.term(py, Some(term))
+            }
+        };
+        rows.into_iter()
+            .map(|row| {
+                let [s, p, o] = row.terms;
+                let statement = (
+                    restore(s, 0)?.expect("full subject"),
+                    restore(p, 1)?.expect("full predicate"),
+                    restore(o, 2)?.expect("full object"),
+                );
+                Ok((
+                    statement,
+                    super::context_read::NativeContextCursor::lazy(
+                        row.contexts,
+                        factories.clone_ref(py),
+                    ),
+                ))
+            })
+            .collect()
+    }
+
+    pub(super) fn graph_rows(
+        &self,
+        py: Python<'_>,
+        rows: Vec<LexicalGraphName>,
+    ) -> PyResult<Vec<Option<Py<PyAny>>>> {
+        rows.into_iter()
+            .map(|graph| self.term(py, graph.into_term()))
+            .collect()
+    }
+
+    pub(super) fn quad_rows(
+        &self,
+        py: Python<'_>,
+        rows: Vec<LexicalQuad>,
+    ) -> PyResult<Vec<QuadRow>> {
+        let reuse = self.reuse_identifiers && rows.len() >= MIN_REUSE_ROWS;
+        // bounded: four positions with four <=256-byte identifiers per input batch.
+        let mut caches = std::array::from_fn::<_, 4, _>(|_| PositionCache::default());
+        let mut restore = |value, position| {
+            if reuse {
+                self.cached_term(py, value, &mut caches[position])
+            } else {
+                self.term(py, value)
+            }
+        };
+        rows.into_iter()
+            .map(|row| {
+                Ok((
+                    restore(Some(row.subject), 0)?.expect("full subject term"),
+                    restore(Some(row.predicate), 1)?.expect("full predicate term"),
+                    restore(Some(row.object), 2)?.expect("full object term"),
+                    restore(row.graph_name.into_term(), 3)?,
+                ))
+            })
+            .collect()
+    }
+
     fn term(&self, py: Python<'_>, source: Option<LexicalTerm>) -> PyResult<Option<Py<PyAny>>> {
         let Some(source) = source else {
             return Ok(None);

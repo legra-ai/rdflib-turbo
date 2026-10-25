@@ -34,7 +34,7 @@ fn sparse_common_predecessors_keep_terminal_terms_and_scoped_visibility() {
                 (iri("b"), Term::from(iri("d"))),
             ];
             for (subject, object) in input {
-                transaction.insert(&Quad::new(
+                transaction.insert_generalized(&GeneralizedQuad::new(
                     subject,
                     predicate.clone(),
                     object,
@@ -46,7 +46,7 @@ fn sparse_common_predecessors_keep_terminal_terms_and_scoped_visibility() {
                 (iri("d"), Term::from(iri("z"))),
                 (iri("b"), Term::from(terminal.clone())),
             ] {
-                transaction.insert(&Quad::new(
+                transaction.insert_generalized(&GeneralizedQuad::new(
                     subject,
                     predicate.clone(),
                     object,
@@ -73,27 +73,32 @@ fn sparse_common_predecessors_keep_terminal_terms_and_scoped_visibility() {
                 };
                 for triple in triples {
                     let triple = triple.unwrap();
-                    let quad = Quad::new(
+                    let quad = GeneralizedQuad::new(
                         triple.subject,
                         triple.predicate,
                         triple.object,
                         GraphName::DefaultGraph,
                     );
-                    if !view.contains(&quad).unwrap() {
+                    if !view.contains((&quad).into()).unwrap() {
                         expected.insert(quad);
                     }
                 }
             }
             let mut actual = Pending::default();
             super::super::same_as::apply(&view, &mut actual).unwrap();
-            assert_eq!(actual.0, expected);
-            assert!(actual.0.contains(&Quad::new(
+            let generalized = super::super::same_as_reference_tests::one_round(&view).unwrap();
+            assert!(
+                expected.is_subset(&generalized),
+                "strict public CONSTRUCT control"
+            );
+            assert_eq!(actual.0, generalized);
+            assert!(actual.0.contains(&GeneralizedQuad::new(
                 terminal.clone(),
                 predicate.clone(),
                 Literal::new_simple_literal("literal"),
                 GraphName::DefaultGraph
             )));
-            assert!(!actual.0.contains(&Quad::new(
+            assert!(!actual.0.contains(&GeneralizedQuad::new(
                 iri("b"),
                 predicate.clone(),
                 iri("z"),

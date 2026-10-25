@@ -14,6 +14,12 @@ CONFLICT = """@prefix owl: <http://www.w3.org/2002/07/owl#> .
 <urn:x> a owl:Nothing ."""
 
 
+def last_outcome(source):
+    # Dataset exposes the facade property; Store/Transaction ABI tests retain
+    # their backend invocation record rather than recreating a legacy wrapper.
+    return source.last_inference if isinstance(source, Dataset) else source._last_inference
+
+
 def ordinary(graph):
     if isinstance(graph, Dataset):
         result = ReferenceGraph()
@@ -27,7 +33,7 @@ def test_outcome_is_immutable_and_prior_history_is_republished_without_reasoning
     graph = Dataset().parse(data=CONFLICT)
     prior = ["earlier", "earlier", "another"]
     graph.infer(prior_error_messages=prior)
-    outcome = graph._last_inference
+    outcome = last_outcome(graph)
     assert outcome.error_messages[:3] == prior
     assert outcome.error_messages[3:] == ["urn:x is defined of type 'Nothing'"]
     outcome.error_messages.clear()
@@ -41,7 +47,7 @@ def test_outcome_is_immutable_and_prior_history_is_republished_without_reasoning
     assert all(set(actual.predicates(node)) == {RDF.type, ERR.error} for node in nodes)
     # A later invocation republishes retained messages even with no contradiction.
     clean = Dataset().infer(inference="rdfs", prior_error_messages=outcome.error_messages)
-    assert clean._last_inference.error_messages == outcome.error_messages
+    assert last_outcome(clean).error_messages == outcome.error_messages
     assert len(set(ordinary(clean).subjects(RDF.type, ERR.ErrorMessage))) == 4
 
 
@@ -49,13 +55,13 @@ def test_delta_contains_diagnostics_and_shares_invocation_record_with_source():
     graph = Dataset().parse(data=CONFLICT)
     before = set(ordinary(graph))
     delta = graph.infer_delta(destination="urn:diagnostics")
-    assert graph._last_inference is delta._last_inference
+    assert last_outcome(graph) is last_outcome(delta)
     actual, added = ordinary(graph), ordinary(delta)
     assert set(actual) == before | set(added)
     assert not before.intersection(added)
     assert len(set(added.subjects(RDF.type, ERR.ErrorMessage))) == 1
-    assert dict(graph.namespaces())["err"] == str(ERR)
-    assert dict(delta.namespaces())["err"] == str(ERR)
+    assert dict(graph.namespaces())["err"] == URIRef(ERR)
+    assert dict(delta.namespaces())["err"] == URIRef(ERR)
     quads = list(delta.to_rdflib().quads())
     assert quads and all(str(quad[3]) == "urn:diagnostics" for quad in quads)
 
@@ -63,12 +69,12 @@ def test_delta_contains_diagnostics_and_shares_invocation_record_with_source():
 @pytest.mark.parametrize("delta", [False, True])
 def test_failed_invocation_clears_only_current_wrapper_record(delta):
     graph = Dataset().parse(data=CONFLICT).infer()
-    historical = graph._last_inference
+    historical = last_outcome(graph)
     before = set(ordinary(graph))
     operation = graph.infer_delta if delta else graph.infer
     with pytest.raises(ValueError):
         operation(inference="invalid")
-    assert graph._last_inference is None
+    assert last_outcome(graph) is None
     assert historical.error_messages == ["urn:x is defined of type 'Nothing'"]
     assert set(ordinary(graph)) == before
 
@@ -95,13 +101,13 @@ def test_converter_failure_preserves_payload_and_rolls_back_inference(
                     transaction.parse(data="<urn:pending> <urn:p> <urn:o> .")
                     with pytest.raises(exception) as failure:
                         transaction.infer(prior_error_messages=prior)
-                    assert transaction._last_inference is None
+                    assert last_outcome(transaction) is None
         else:
             with pytest.raises(exception) as failure:
                 graph.infer(prior_error_messages=prior)
         expected_args = ([signal],) if signal else ("string index out of range",)
         assert failure.value.args == expected_args
-        assert graph._last_inference is None
+        assert last_outcome(graph) is None
         assert prior == ["retained"]
         assert set(ordinary(graph)) == before
     finally:
@@ -114,20 +120,20 @@ def test_provisional_outcome_does_not_publish_into_base_owner_after_rollback():
         with pytest.raises(LookupError):
             with store.transaction() as transaction:
                 transaction.parse(data=CONFLICT).infer()
-                outcome = transaction._last_inference
+                outcome = last_outcome(transaction)
                 assert outcome.error_messages == ["urn:x is defined of type 'Nothing'"]
                 assert len(ordinary(transaction)) > 0
                 raise LookupError("abort caller scope")
         assert len(store) == 0
-        assert store._last_inference is None
+        assert last_outcome(store) is None
         assert outcome.error_messages == ["urn:x is defined of type 'Nothing'"]
 
 
 def test_namespace_collision_preserves_existing_binding():
     graph = Dataset().parse(data="@prefix err: <urn:already-bound:> . " + CONFLICT).infer()
     bindings = dict(graph.namespaces())
-    assert bindings["err"] == "urn:already-bound:"
-    assert bindings["err1"] == str(ERR)
+    assert bindings["err"] == URIRef("urn:already-bound:")
+    assert bindings["err1"] == URIRef(ERR)
 
 
 @pytest.mark.parametrize("fault", ["context", "request"])
@@ -149,7 +155,7 @@ def test_caught_boundary_failure_aborts_transaction_and_releases_writer(monkeypa
                 else:
                     with pytest.raises(TypeError):
                         transaction.infer(prior_error_messages=[object()])
-                assert transaction._last_inference is None
+                assert last_outcome(transaction) is None
         assert len(store) == 0
         monkeypatch.undo()
         with store.transaction() as transaction:
@@ -171,7 +177,7 @@ def test_recursive_diagnostic_list_is_execution_failure_with_no_publication(api)
     try:
         with pytest.raises(ValueError, match="List contains a recursive rdf:rest reference"):
             graph.infer(prior_error_messages=["must not publish"])
-        assert graph._last_inference is None
+        assert last_outcome(graph) is None
         assert set(ordinary(graph)) == before
         if api == "dataset":
             assert "err" not in dict(graph.namespaces())
@@ -198,7 +204,7 @@ def test_signaling_nan_cardinality_preserves_invalid_comparison_exception():
         with pytest.raises(decimal.InvalidOperation) as actual:
             graph.infer()
     assert expected.value.args == actual.value.args == ([decimal.InvalidOperation],)
-    assert graph._last_inference is None
+    assert last_outcome(graph) is None
     assert set(ordinary(graph)) == before
 
 
@@ -208,13 +214,11 @@ def test_repeated_closure_reasons_over_old_nodes_and_appends_fresh_diagnostics()
     graph = Dataset().parse(data=CONFLICT)
     for count in [1, 2]:
         semantics.closure()
-        prior = None if graph._last_inference is None else graph._last_inference.error_messages
+        prior = None if last_outcome(graph) is None else last_outcome(graph).error_messages
         graph.infer(prior_error_messages=prior)
-        assert graph._last_inference.error_messages == semantics.error_messages
-        expected_ordinary = ReferenceGraph()
-        for triple in expected:
-            if not isinstance(triple[0], Literal):
-                expected_ordinary.add(triple)
+        assert last_outcome(graph).error_messages == semantics.error_messages
         actual = ordinary(graph)
-        assert isomorphic(actual, expected_ordinary)
+        assert isomorphic(actual, expected)
+        if count == 2:
+            assert any(isinstance(subject, Literal) for subject in actual.subjects())
         assert len(set(actual.subjects(RDF.type, ERR.ErrorMessage))) == count

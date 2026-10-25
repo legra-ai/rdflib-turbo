@@ -2,10 +2,12 @@
 
 import pytest
 from owlrl import DeductiveClosure, OWLRL_Semantics
-from rdflib import BNode, Graph, Literal, URIRef
+from rdflib import BNode, Graph, URIRef
 from rdflib.compare import isomorphic
 from rdflib_turbo import Dataset, Store
 from rdflib_turbo import Graph as NativeGraph
+
+from .inference_observers import physical_keys, union_graph
 
 PREFIX = "@prefix owl: <http://www.w3.org/2002/07/owl#> . "
 CASES = [
@@ -32,12 +34,11 @@ def test_generalized_equality_matches_reference(document, consequence, api, tmp_
     assert consequence in reference
     expected = Graph()
     for triple in reference:
-        if not isinstance(triple[0], Literal) and isinstance(triple[1], URIRef):
-            expected.add(triple)
+        expected.add(triple)
 
     def check(graph):
         graph.parse(data=PREFIX + document).infer(inference="owlrl")
-        actual = Graph().parse(data=graph.serialize(format="ntriples"), format="nt")
+        actual = union_graph(graph)
         assert consequence in actual
         assert isomorphic(actual, expected)
 
@@ -53,7 +54,7 @@ def test_generalized_equality_matches_reference(document, consequence, api, tmp_
                 check(store)
         if api == "persistent":
             with Store(path) as reopened:
-                actual = Graph().parse(data=reopened.serialize(format="ntriples"), format="nt")
+                actual = union_graph(reopened)
                 assert consequence in actual
                 assert isomorphic(actual, expected)
 
@@ -80,13 +81,13 @@ def test_equality_uses_only_the_selected_source_graph(identifier, inside):
 def test_generalized_equality_rolls_back_and_can_be_retried():
     with Store() as store:
         store.parse(data=PREFIX + CASES[0][0])
-        before = store.serialize(format="ntriples")
+        before = physical_keys(store)
         with pytest.raises(RuntimeError, match="abort"):
             with store.transaction() as transaction:
                 transaction.infer(inference="owlrl")
                 assert transaction.query("ASK { <urn:b> <urn:p> <urn:value> }").askAnswer
                 raise RuntimeError("abort")
-        assert store.serialize(format="ntriples") == before
+        assert physical_keys(store) == before
         store.infer(inference="owlrl")
         assert store.query("ASK { <urn:b> <urn:p> <urn:value> }").askAnswer
 

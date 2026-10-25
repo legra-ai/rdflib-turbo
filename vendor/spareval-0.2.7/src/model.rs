@@ -184,20 +184,20 @@ impl<'a> From<SliceSolutionsParser<'a>> for QuerySolutionIter<'a> {
 /// }
 /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// ```
-pub struct QueryTripleIter<'a> {
-    iter: Box<dyn Iterator<Item = Result<Triple, QueryEvaluationError>> + 'a>,
+pub struct QueryTripleIter<'a, T = Triple> {
+    iter: Box<dyn Iterator<Item = Result<T, QueryEvaluationError>> + 'a>,
 }
 
-impl<'a> QueryTripleIter<'a> {
-    pub fn new(iter: impl Iterator<Item = Result<Triple, QueryEvaluationError>> + 'a) -> Self {
+impl<'a, T> QueryTripleIter<'a, T> {
+    pub fn new(iter: impl Iterator<Item = Result<T, QueryEvaluationError>> + 'a) -> Self {
         Self {
             iter: Box::new(iter),
         }
     }
 }
 
-impl Iterator for QueryTripleIter<'_> {
-    type Item = Result<Triple, QueryEvaluationError>;
+impl<T> Iterator for QueryTripleIter<'_, T> {
+    type Item = Result<T, QueryEvaluationError>;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {

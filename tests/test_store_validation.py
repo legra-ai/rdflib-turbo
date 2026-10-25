@@ -7,6 +7,7 @@ import sys
 import pytest
 from rdflib_turbo import Dataset, Store
 from rdflib_turbo._native import SharedShapes, SharedValidationFailure
+from rdflib_turbo._native import shacl as _native_shacl
 
 
 def test_committed_validation_does_not_wait_for_an_open_writer():
@@ -17,7 +18,8 @@ def test_committed_validation_does_not_wait_for_an_open_writer():
             """
 from rdflib_turbo import Store
 from rdflib_turbo._native import SharedShapes
-program = SharedShapes("", False, [])
+from rdflib_turbo._native import shacl as _native_shacl
+program = SharedShapes("", False, [], _policy=_native_shacl._REGEX_POLICY)
 with Store() as store:
     with store.transaction() as tx:
         tx.parse(data="<urn:s> <urn:p> 1.")
@@ -40,7 +42,7 @@ SOURCE = "<urn:s> <urn:p> 1."
 
 
 def test_validation_reads_pending_writes_and_stages_only_rule_additions():
-    shapes = SharedShapes(SHAPES, True, [])
+    shapes = SharedShapes(SHAPES, True, [], _policy=_native_shacl._REGEX_POLICY)
     with Store() as store:
         with store.transaction() as transaction:
             transaction.parse(data=SOURCE)
@@ -54,7 +56,7 @@ def test_validation_reads_pending_writes_and_stages_only_rule_additions():
 
 @pytest.mark.parametrize("inplace", [False, True])
 def test_store_validation_only_commits_when_requested(inplace):
-    shapes = SharedShapes(SHAPES, True, [])
+    shapes = SharedShapes(SHAPES, True, [], _policy=_native_shacl._REGEX_POLICY)
     with Store() as store:
         store.parse(data=SOURCE)
         assert shapes.validate_store(store._native, "{}", inplace)[0]
@@ -69,6 +71,7 @@ def test_native_validation_failure_dooms_the_whole_transaction_even_when_caught(
         ),
         True,
         [],
+        _policy=_native_shacl._REGEX_POLICY,
     )
     with Store() as store:
         with pytest.raises(RuntimeError, match="closed"):
@@ -81,7 +84,7 @@ def test_native_validation_failure_dooms_the_whole_transaction_even_when_caught(
 
 @pytest.mark.parametrize("settings", ['{"unknown":true}', "[]", '{"max_validation_depth":-1}'])
 def test_invalid_native_validation_settings_abort_pending_writes(settings):
-    shapes = SharedShapes(SHAPES, True, [])
+    shapes = SharedShapes(SHAPES, True, [], _policy=_native_shacl._REGEX_POLICY)
     with Store() as store:
         with pytest.raises(RuntimeError, match="closed"):
             with store.transaction() as transaction:
@@ -95,7 +98,7 @@ class Program:
     """Test the commit gate without depending on the optional facade package."""
 
     def __init__(self):
-        self.native = SharedShapes(SHAPES, True, [])
+        self.native = SharedShapes(SHAPES, True, [], _policy=_native_shacl._REGEX_POLICY)
 
     def validate(self, source, *, inplace, **options):
         with source._validate_shared_shapes(self.native, json.dumps(options), inplace) as result:
@@ -105,7 +108,7 @@ class Program:
 
 @pytest.mark.parametrize("explicit", [False, True])
 def test_report_consumer_failure_aborts_owner(explicit):
-    program = SharedShapes(SHAPES, True, [])
+    program = SharedShapes(SHAPES, True, [], _policy=_native_shacl._REGEX_POLICY)
     with Store() as store:
         if explicit:
             with pytest.raises(RuntimeError, match="closed"), store.transaction() as transaction:
@@ -165,7 +168,7 @@ def test_commit_gate_rejects_options_without_shapes_before_starting_a_writer():
 
 @pytest.mark.parametrize("kind", ["dataset", "store", "transaction"])
 def test_sources_dispatch_validation_to_their_owned_native_backend(kind):
-    program = SharedShapes(SHAPES, True, [])
+    program = SharedShapes(SHAPES, True, [], _policy=_native_shacl._REGEX_POLICY)
     if kind == "dataset":
         source = Dataset().parse(data=SOURCE)
         with source._validate_shared_shapes(program, "{}", False) as result:

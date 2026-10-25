@@ -2,11 +2,12 @@
 use std::convert::Infallible;
 
 use oxigraph::model::*;
+use oxrdf::GeneralizedDataset;
 use spareval::{InternalQuad, QueryableDataset};
 
 use super::StagedDataset;
 
-type QueryTerm<'a> = <&'a Dataset as QueryableDataset<'a>>::InternalTerm;
+type QueryTerm<'a> = <&'a GeneralizedDataset as QueryableDataset<'a>>::InternalTerm;
 type Rows<'a> = Box<dyn Iterator<Item = Result<InternalQuad<QueryTerm<'a>>, Infallible>> + 'a>;
 
 #[cfg(test)]
@@ -24,28 +25,19 @@ impl<'a> QueryableDataset<'a> for StagedDataset<'a> {
         object: Option<&Self::InternalTerm>,
         graph_name: Option<Option<&Self::InternalTerm>>,
     ) -> impl Iterator<Item = Result<InternalQuad<QueryTerm<'a>>, Infallible>> + use<'a> {
-        let subject = match subject.map(TermRef::from) {
-            Some(TermRef::NamedNode(node)) => Some(node.into()),
-            Some(TermRef::BlankNode(node)) => Some(node.into()),
-            Some(_) => return Box::new(std::iter::empty()) as Rows<'a>,
-            None => None,
-        };
-        let predicate = match predicate.map(TermRef::from) {
-            Some(TermRef::NamedNode(node)) => Some(node),
-            Some(_) => return Box::new(std::iter::empty()),
-            None => None,
-        };
+        let subject = subject.map(TermRef::from);
+        let predicate = predicate.map(TermRef::from);
         let graph = match graph_name {
             Some(Some(term)) => match TermRef::from(term) {
                 TermRef::NamedNode(node) => Some(GraphNameRef::from(node)),
                 TermRef::BlankNode(node) => Some(GraphNameRef::from(node)),
-                _ => return Box::new(std::iter::empty()),
+                _ => return Box::new(std::iter::empty()) as Rows<'a>,
             },
             Some(None) => Some(GraphNameRef::DefaultGraph),
             None => None,
         };
         let object = object.map(TermRef::from);
-        let rows: Box<dyn Iterator<Item = QuadRef<'a>> + 'a> = if graph_name.is_none() {
+        let rows: Box<dyn Iterator<Item = GeneralizedQuadRef<'a>> + 'a> = if graph_name.is_none() {
             Box::new(
                 self.source
                     .quads_for_pattern(subject, predicate, object, None)
@@ -56,8 +48,8 @@ impl<'a> QueryableDataset<'a> for StagedDataset<'a> {
         };
         Box::new(rows.map(|quad| {
             Ok(InternalQuad {
-                subject: TermRef::from(quad.subject).into(),
-                predicate: TermRef::from(quad.predicate).into(),
+                subject: quad.subject.into(),
+                predicate: quad.predicate.into(),
                 object: quad.object.into(),
                 graph_name: match quad.graph_name {
                     GraphNameRef::NamedNode(node) => Some(TermRef::from(node).into()),
@@ -69,12 +61,12 @@ impl<'a> QueryableDataset<'a> for StagedDataset<'a> {
     }
 
     fn internalize_term(&self, term: Term) -> Result<QueryTerm<'a>, Infallible> {
-        let source: &'a Dataset = self.source;
+        let source: &'a GeneralizedDataset = self.source;
         source.internalize_term(term)
     }
 
     fn externalize_term(&self, term: QueryTerm<'a>) -> Result<Term, Infallible> {
-        let source: &'a Dataset = self.source;
+        let source: &'a GeneralizedDataset = self.source;
         source.externalize_term(term)
     }
 }

@@ -62,6 +62,11 @@ impl Drop for WriterPermit {
 enum Command {
     Execute(Operation, mpsc::SyncSender<Result<Reply>>),
     Finish(bool, mpsc::SyncSender<Result<Reply>>),
+    FinishChanges(mpsc::SyncSender<Result<Reply>>),
+    PrepareChanges(mpsc::SyncSender<Result<Reply>>),
+    ReadChanges(bool, mpsc::SyncSender<Result<Reply>>),
+    AcceptChanges(mpsc::SyncSender<Result<Reply>>),
+    DiscardRemovals(mpsc::SyncSender<Result<Reply>>),
     AcceptValidation(u64, mpsc::SyncSender<Result<Reply>>),
 }
 
@@ -120,6 +125,38 @@ fn reserve_writer(control: &Arc<Mutex<Control>>) -> Result<(Store, WriterPermit)
 }
 
 impl Session {
+    pub fn prepare_changes(&self) -> Result<()> {
+        lock(&self.0)?.call(Command::PrepareChanges).map(|_| ())
+    }
+
+    pub fn read_changes(&self, added: bool) -> Result<(Vec<oxigraph::store::LexicalQuad>, bool)> {
+        match lock(&self.0)?.call(|reply| Command::ReadChanges(added, reply))? {
+            Reply::ChangeBatch(batch) => Ok(*batch),
+            _ => unreachable!("prepared changed batch reply"),
+        }
+    }
+
+    pub fn discard_removals(&self) -> Result<()> {
+        lock(&self.0)?.call(Command::DiscardRemovals).map(|_| ())
+    }
+
+    pub fn accept_changes(&self) -> Result<()> {
+        let mut connection = lock(&self.0)?;
+        let result = connection.call(Command::AcceptChanges);
+        connection.join()?;
+        result.map(|_| ())
+    }
+
+    pub fn finish_changes(&self) -> Result<oxigraph::store::CommittedChanges> {
+        let mut connection = lock(&self.0)?;
+        let result = connection.call(Command::FinishChanges);
+        connection.join()?;
+        match result? {
+            Reply::CommittedChanges(changes) => Ok(*changes),
+            _ => unreachable!("native committed changes reply type"),
+        }
+    }
+
     pub fn execute_inline(control: Arc<Mutex<Control>>, operation: Operation) -> Result<Reply> {
         // An implicit transaction never outlives this native call. Borrow it on
         // the caller thread; only explicit multi-call sessions require an owner.
@@ -197,14 +234,22 @@ impl Session {
 fn run(mut transaction: Transaction<'_>, receiver: mpsc::Receiver<Command>) {
     let mut revision = 0_u64;
     let mut pending: Option<(u64, super::shacl::ValidationDelta)> = None;
+    let mut changes: Option<super::prepared_changes::StagedRows> = None;
     while let Ok(command) = receiver.recv() {
         match command {
             Command::Execute(operation, reply) => {
                 let result = (|| {
+                    if changes.is_some() {
+                        return Err(Error::Runtime(
+                            "Transaction has prepared inference changes".into(),
+                        ));
+                    }
                     if pending.is_some()
                         && matches!(
                             operation,
-                            Operation::Validate { .. } | Operation::ValidateInferred { .. }
+                            Operation::Validate { .. }
+                                | Operation::ValidateInferred { .. }
+                                | Operation::ExpandRules { .. }
                         )
                     {
                         return Err(Error::Runtime(
@@ -215,6 +260,11 @@ fn run(mut transaction: Transaction<'_>, receiver: mpsc::Receiver<Command>) {
                         revision = next_revision(revision)?;
                     }
                     match operation.execute(&mut transaction)? {
+                        Reply::StagedRules(staged) => {
+                            let (warnings, additions) = *staged;
+                            pending = Some((revision, additions));
+                            Ok(Reply::PreparedRules(Box::new((warnings, revision))))
+                        }
                         Reply::StagedValidation(staged) => {
                             let (report, additions) = *staged;
                             pending = Some((revision, additions));
@@ -227,6 +277,55 @@ fn run(mut transaction: Transaction<'_>, receiver: mpsc::Receiver<Command>) {
                 if reply.send(result).is_err() || abort {
                     return;
                 }
+            }
+            Command::PrepareChanges(reply) => {
+                let result = if changes.is_some() || pending.is_some() {
+                    Err(Error::Runtime(
+                        "Transaction already has prepared output".into(),
+                    ))
+                } else {
+                    super::prepared_changes::StagedRows::prepare(&mut transaction).map(|prepared| {
+                        changes = Some(prepared);
+                        Reply::Done
+                    })
+                };
+                let abort = result.is_err();
+                if reply.send(result).is_err() || abort {
+                    return;
+                }
+            }
+            Command::ReadChanges(added, reply) => {
+                let result = changes
+                    .as_mut()
+                    .ok_or_else(|| Error::Runtime("Transaction has no prepared changes".into()))
+                    .and_then(|changes| changes.batch(&transaction, added))
+                    .map(|batch| Reply::ChangeBatch(Box::new(batch)));
+                let abort = result.is_err();
+                if reply.send(result).is_err() || abort {
+                    return;
+                }
+            }
+            Command::DiscardRemovals(reply) => {
+                let result = changes
+                    .as_mut()
+                    .ok_or_else(|| Error::Runtime("Transaction has no prepared changes".into()))
+                    .map(|changes| {
+                        changes.discard_removals();
+                        Reply::Done
+                    });
+                let abort = result.is_err();
+                if reply.send(result).is_err() || abort {
+                    return;
+                }
+            }
+            Command::AcceptChanges(reply) => {
+                let result = changes
+                    .take()
+                    .ok_or_else(|| Error::Runtime("Transaction has no prepared changes".into()))
+                    .and_then(|changes| changes.accept(transaction))
+                    .map(|()| Reply::Done);
+                let _ = reply.send(result);
+                return;
             }
             Command::AcceptValidation(expected, reply) => {
                 let result = (|| {
@@ -248,7 +347,7 @@ fn run(mut transaction: Transaction<'_>, receiver: mpsc::Receiver<Command>) {
                 }
             }
             Command::Finish(commit, reply) => {
-                let result = if commit && pending.is_some() {
+                let result = if commit && (pending.is_some() || changes.is_some()) {
                     Err(Error::Runtime(
                         "Cannot commit before validation output is accepted".into(),
                     ))
@@ -257,10 +356,25 @@ fn run(mut transaction: Transaction<'_>, receiver: mpsc::Receiver<Command>) {
                         .commit()
                         .map_err(|e| Error::Runtime(e.to_string()))
                 } else {
+                    drop(changes.take());
                     drop(transaction);
                     Ok(())
                 };
                 let _ = reply.send(result.map(|()| Reply::Done));
+                return;
+            }
+            Command::FinishChanges(reply) => {
+                let result = if pending.is_some() || changes.is_some() {
+                    Err(Error::Runtime(
+                        "Cannot capture changes with pending validation".into(),
+                    ))
+                } else {
+                    transaction
+                        .commit_with_changes()
+                        .map(|changes| Reply::CommittedChanges(Box::new(changes)))
+                        .map_err(|error| Error::Runtime(error.to_string()))
+                };
+                let _ = reply.send(result);
                 return;
             }
         }

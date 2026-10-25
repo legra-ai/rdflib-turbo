@@ -1,4 +1,4 @@
-"""Standalone Cargo tests must use the same immutable Git patches as the runtime."""
+"""Standalone Cargo tests must retain their declared native dependency graphs."""
 
 import tomllib
 from pathlib import Path
@@ -24,3 +24,37 @@ def test_standalone_lockfile_git_patches_match_the_runtime(relative):
         expected = f"git+{patch['git']}?rev={patch['rev']}#{patch['rev']}"
         sources = [entry["source"] for entry in entries if entry["name"] == package]
         assert sources == [expected], f"{relative}: stale Git source for {package}"
+
+
+@pytest.mark.parametrize("relative", ("tests/store-contract", "tests/build-metadata"))
+def test_nested_contract_locks_include_every_required_local_crate_edge(relative):
+    directory = ROOT / relative
+    manifest = tomllib.loads((directory / "Cargo.toml").read_text())
+    lock = tomllib.loads((directory / "Cargo.lock").read_text())
+    local = {directory / "Cargo.toml"}
+    for declarations in (
+        manifest.get("dependencies", {}),
+        manifest.get("patch", {}).get("crates-io", {}),
+    ):
+        for definition in declarations.values():
+            if isinstance(definition, dict) and "path" in definition:
+                local.add((directory / definition["path"] / "Cargo.toml").resolve())
+    for path in sorted(local):
+        crate = tomllib.loads(path.read_text())
+        name = crate["package"]["name"]
+        entries = [
+            entry for entry in lock["package"] if entry["name"] == name and "source" not in entry
+        ]
+        # Unused patches are not part of this contract's resolved dependency graph.
+        if not entries and path != directory / "Cargo.toml":
+            continue
+        assert len(entries) == 1, f"{relative}: expected one local package {name}"
+        locked = {dependency.split(" ", 1)[0] for dependency in entries[0].get("dependencies", [])}
+        for section in ("dependencies", "build-dependencies"):
+            for alias, definition in crate.get(section, {}).items():
+                if isinstance(definition, dict) and definition.get("optional", False):
+                    continue
+                required = (
+                    definition.get("package", alias) if isinstance(definition, dict) else alias
+                )
+                assert required in locked, f"{relative}: {name} is missing required {required}"
