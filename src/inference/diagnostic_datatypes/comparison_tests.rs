@@ -18,33 +18,51 @@ fn force_factory_construction(py: Python<'_>) -> PyResult<()> {
     super::Host::new(py).map(|_| ())
 }
 
+const COMPARISON_CHILD: &str = "RDFLIB_TURBO_COMPARISON_TEST_CHILD";
+
+fn completion_marker(case: &str) -> String {
+    format!("RDFLIB_TURBO_COMPARISON_COMPLETED:{case}")
+}
+
+fn run_isolated_case(case: &str) -> Result<(), String> {
+    // These fixtures replace process-global warnings and dis spies while native
+    // validation releases the GIL. Isolate them from every embedded Rust test.
+    // LLVM_PROFILE_FILE is inherited, retaining its per-process %p expansion.
+    // bounded: output contains one exact test case's diagnostics.
+    let output = Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", case, "--nocapture"])
+        .env(COMPARISON_CHILD, case)
+        .output()
+        .unwrap();
+    if !output.status.success() {
+        return Err(format!(
+            "Isolated comparison case {case} failed: {}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    let marker = completion_marker(case);
+    if !String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .any(|line| line == marker)
+    {
+        return Err(format!("Child did not complete comparison fixture {case}"));
+    }
+    Ok(())
+}
+
 fn execute(source: &str) {
-    const CHILD: &str = "RDFLIB_TURBO_COMPARISON_TEST_CHILD";
     let current = thread::current();
     let case = current
         .name()
         .expect("Rust test harness supplies the case name");
-    if let Some(selected) = std::env::var_os(CHILD) {
+    if let Some(selected) = std::env::var_os(COMPARISON_CHILD) {
         assert_eq!(
             selected, case,
             "Comparison child must run its exact named case"
         );
     } else {
-        // These fixtures replace process-global warnings and dis spies while native
-        // validation releases the GIL. Isolate them from every embedded Rust test.
-        // LLVM_PROFILE_FILE is inherited, retaining its per-process %p expansion.
-        // bounded: output contains one exact test case's diagnostics.
-        let output = Command::new(std::env::current_exe().unwrap())
-            .args(["--exact", case, "--nocapture"])
-            .env(CHILD, case)
-            .output()
-            .unwrap();
-        assert!(
-            output.status.success(),
-            "Isolated comparison case {case} failed: {}\n{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
+        run_isolated_case(case).unwrap();
         return;
     }
     Python::initialize();
@@ -68,7 +86,16 @@ fn execute(source: &str) {
         let source = CString::new(source).unwrap();
         py.run(&source, Some(&globals), None).unwrap();
     });
+    println!("{}", completion_marker(case));
 }
+#[test]
+fn isolated_case_rejects_zero_test_child_success() {
+    assert!(
+        run_isolated_case("comparison_fixture_that_does_not_exist").is_err(),
+        "A successful child with no executed fixture must not be accepted"
+    );
+}
+
 #[test]
 fn source_fixture_does_not_share_parent_interpreter_globals() {
     let child = std::env::var_os("RDFLIB_TURBO_COMPARISON_TEST_CHILD").is_some();
