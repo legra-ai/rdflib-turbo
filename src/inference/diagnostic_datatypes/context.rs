@@ -38,6 +38,7 @@ pub(super) const CLAMPED: usize = 6;
 #[derive(Debug, Clone)]
 pub(crate) struct LexicalContext {
     pub integer_digit_limit: usize,
+    pub(super) float_operation_trap: bool,
     pub(super) decimal: DecimalContext,
     pub(super) hour_leading_space: bool,
 }
@@ -46,6 +47,7 @@ impl Default for LexicalContext {
     fn default() -> Self {
         Self {
             integer_digit_limit: 4300,
+            float_operation_trap: false,
             decimal: DecimalContext {
                 precision: 28,
                 rounding: Rounding::HalfEven,
@@ -125,6 +127,9 @@ impl LexicalContext {
         let strptime = py.import("_strptime")?.getattr("_TimeRE_cache")?;
         let hour: String = strptime.get_item("H")?.extract()?;
         Ok(Self {
+            float_operation_trap: traps
+                .get_item(decimal.getattr("FloatOperation")?)?
+                .extract()?,
             integer_digit_limit: py
                 .import("sys")?
                 .call_method0("get_int_max_str_digits")?

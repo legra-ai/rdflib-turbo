@@ -9,7 +9,12 @@ fn execute(source: &CStr) {
     Python::initialize();
     Python::attach(|py| {
         let module = PyModule::new(py, "typed_shapes_tests").unwrap();
-        crate::register(&module, crate::provider_tests::test_regex_policy()).unwrap();
+        crate::register(
+            &module,
+            crate::provider_tests::test_regex_policy(),
+            crate::provider_tests::test_comparison_host(),
+        )
+        .unwrap();
         py.run(source, Some(&module.dict()), None).unwrap();
     });
 }
@@ -19,7 +24,12 @@ fn actual_lru_compares_complete_inputs_despite_forced_hash_collision() {
     Python::initialize();
     Python::attach(|py| {
         let module = PyModule::new(py, "shape_collision_tests").unwrap();
-        crate::register(&module, crate::provider_tests::test_regex_policy()).unwrap();
+        crate::register(
+            &module,
+            crate::provider_tests::test_regex_policy(),
+            crate::provider_tests::test_comparison_host(),
+        )
+        .unwrap();
         for (name, value) in [
             ("first", "urn:a"),
             ("different", "urn:b"),

@@ -271,7 +271,12 @@ mod tests {
         Python::initialize();
         Python::attach(|py| {
             let module = PyModule::new(py, "host_failure_test").unwrap();
-            crate::register(&module, crate::provider_tests::test_regex_policy()).unwrap();
+            crate::register(
+                &module,
+                crate::provider_tests::test_regex_policy(),
+                crate::provider_tests::test_comparison_host(),
+            )
+            .unwrap();
             let authority = || module.getattr("_REGEX_POLICY").unwrap().extract().unwrap();
             let policy = compilation_policy(py, authority()).unwrap();
             let original = PyValueError::new_err("original host failure");

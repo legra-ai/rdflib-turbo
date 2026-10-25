@@ -6,7 +6,7 @@ use oxigraph::io::RdfFormat;
 use oxigraph::model::{Dataset, GraphNameRef, TermRef};
 use pyo3::exceptions::{PyNotImplementedError, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyshacl_turbo_engine::{CompiledShapes, Error, ValidationReport};
+use pyshacl_turbo_engine::{CompiledShapes, Error};
 
 use crate::NativeDataset;
 use crate::store::{NativeStore, NativeTransaction};
@@ -31,6 +31,9 @@ pyo3::create_exception!(_native, SharedValidationFailure, PyValueError);
 
 pub(crate) fn error(error: Error) -> PyErr {
     match error {
+        Error::Comparison(failure) => {
+            Python::attach(|py| shacl_bindings::comparison_error(py, failure))
+        }
         Error::ValidationFailure(_) => SharedValidationFailure::new_err(error.to_string()),
         Error::ShapeLoad { message, link } => {
             shacl_bindings::ShapeLoadFailure::new_err((message, link))
@@ -96,12 +99,6 @@ impl<'a> ReportTerms<'a> {
         self.indices.insert(term, index);
         index
     }
-}
-
-fn output(report: ValidationReport) -> PyResult<Output> {
-    Report::try_new(report)
-        .map(Report::into_output)
-        .map_err(crate::error)
 }
 
 #[pyclass(frozen)]
@@ -222,9 +219,19 @@ impl SharedShapes {
             )
             .map(Report::into_output);
         }
-        py.detach(|| store.validate_shapes(self.inner.clone(), options, inplace, graph))
-            .map(Report::into_output)
-            .map_err(crate::error)
+        if inplace {
+            let result = py.detach(|| store.prepare_validation(self.inner.clone(), options, graph));
+            let mut prepared = settings::Captured::complete(publisher, py, result)?;
+            let output = prepared.output()?;
+            prepared.accept(py)?;
+            return Ok(output);
+        }
+        settings::Captured::complete(
+            publisher,
+            py,
+            py.detach(|| store.validate_shapes(self.inner.clone(), options, false, graph)),
+        )
+        .map(Report::into_output)
     }
 
     #[pyo3(signature = (transaction, settings, graph=None))]
@@ -235,14 +242,14 @@ impl SharedShapes {
         settings: &str,
         graph: Option<&str>,
     ) -> PyResult<crate::store::PreparedRules> {
-        let parsed = Settings::parse(settings).and_then(|options| {
+        let parsed = Settings::capture_rules(py, settings).and_then(|(options, publisher)| {
             graph
                 .map(crate::store::parse_graph_scope)
                 .transpose()
-                .map(|graph| (options, graph))
+                .map(|graph| (options, graph, publisher))
                 .map_err(crate::error)
         });
-        let (options, graph) = match parsed {
+        let (options, graph, publisher) = match parsed {
             Ok(parsed) => parsed,
             Err(error) => {
                 py.detach(|| transaction.abort_validation())
@@ -250,8 +257,11 @@ impl SharedShapes {
                 return Err(error);
             }
         };
-        py.detach(|| transaction.prepare_rules(self.inner.clone(), options, graph))
-            .map_err(crate::error)
+        settings::Captured::complete(
+            publisher,
+            py,
+            py.detach(|| transaction.prepare_rules(self.inner.clone(), options, graph)),
+        )
     }
 
     #[pyo3(signature = (transaction, settings, inplace, graph=None))]

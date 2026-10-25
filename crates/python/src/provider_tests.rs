@@ -22,7 +22,7 @@ fn host_ffi_compilers_require_an_explicit_typed_module_authority() {
     Python::initialize();
     Python::attach(|py| {
         let module = PyModule::new(py, "explicit_compiler_policy_test").unwrap();
-        register(&module, test_regex_policy()).unwrap();
+        register(&module, test_regex_policy(), test_comparison_host()).unwrap();
         let kwargs = PyDict::new(py);
         kwargs
             .set_item("_policy", module.getattr("_REGEX_POLICY").unwrap())
@@ -85,12 +85,12 @@ fn registered_compiler_shares_its_actual_program() {
     Python::attach(|py| {
         let module = PyModule::new(py, "dataset_shacl").unwrap();
         let policy = test_regex_policy();
-        register(&module, policy.clone()).unwrap();
+        register(&module, policy.clone(), test_comparison_host()).unwrap();
         assert!(Arc::ptr_eq(
             &policy,
             &super::registered_regex_policy(&module).unwrap()
         ));
-        assert!(register(&module, policy).is_err());
+        assert!(register(&module, policy, test_comparison_host()).is_err());
         assert!(
             module
                 .getattr("_REGEX_POLICY")
@@ -233,4 +233,38 @@ fn numeric_load_signals_preserve_type_and_leave_other_invalid_errors_unchanged()
             "int(None)"
         );
     });
+}
+
+pub(crate) fn test_comparison_host() -> Arc<dyn crate::ComparisonHost> {
+    #[derive(Debug)]
+    struct Policy;
+    impl pyshacl_turbo_engine::ValueComparisonPolicy for Policy {
+        fn compare_numeric(
+            &self,
+            _role: pyshacl_turbo_engine::ComparisonRole,
+            _operator: pyshacl_turbo_engine::ComparisonOperator,
+            _left: &pyshacl_turbo_engine::oxigraph::model::Literal,
+            _right: &pyshacl_turbo_engine::oxigraph::model::Literal,
+        ) -> Result<bool, pyshacl_turbo_engine::ComparisonFailure> {
+            panic!(
+                "Registration fixture does not admit numeric evaluation; provider tests own that policy"
+            )
+        }
+    }
+    struct Publisher;
+    impl crate::ComparisonPublisher for Publisher {
+        fn publish(&self, _py: Python<'_>) -> PyResult<()> {
+            Ok(())
+        }
+    }
+    struct Host;
+    impl crate::ComparisonHost for Host {
+        fn capture(&self, _py: Python<'_>) -> PyResult<crate::ComparisonInvocation> {
+            Ok(crate::ComparisonInvocation {
+                policy: Arc::new(Policy),
+                publisher: Box::new(Publisher),
+            })
+        }
+    }
+    Arc::new(Host)
 }
