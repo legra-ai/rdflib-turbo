@@ -18,5 +18,49 @@
   "oxigraph-0.5.11": {
     "source_revision": "df37a5c98e2497135cdd4cfce01a049b78ca6740",
     "crate_sha256": "7f6632dd080bd07676f06e70254ff5862c9943e9483d700fa7258df73a3f9a6a"
+  },
+  "oxrdf-0.3.5": {
+    "source_revision": "14813bfd1d41926af97875692ca46c3f97ed6d80",
+    "crate_sha256": "08037a3c3cf580d065caec6a864cf97f51be219862d95c691a48c7543406d675"
+  },
+  "oxsdatatypes-0.2.4": {
+    "source_revision": "14813bfd1d41926af97875692ca46c3f97ed6d80",
+    "crate_sha256": "034779b2d182d5069cd28b1f921ba334cad708ab1340db9776312464b6874b78"
+  },
+  "spargebra-0.4.8": {
+    "source_revision": "14813bfd1d41926af97875692ca46c3f97ed6d80",
+    "crate_sha256": "43d5fd4ba16eea5586aa54227ca2c0a394794a0f82e39c6c98a57cc6877f0230"
+  },
+  "sparopt-0.3.9": {
+    "source_revision": "2837810c8993da671d496eabf7677d7573c5c522",
+    "crate_sha256": "8c1d1327a49bef5f6f294a2ddcf01635c5449a0654e9a35d3f50d7a45e4ecc78"
+  },
+  "spareval-0.2.9": {
+    "source_revision": "2837810c8993da671d496eabf7677d7573c5c522",
+    "crate_sha256": "072b1b44c9003e54a7b0817b65ce156d94ab46250dcefe0f24a9b3cc4020c1c6"
+  },
+  "oxigraph-0.5.13": {
+    "source_revision": "2837810c8993da671d496eabf7677d7573c5c522",
+    "crate_sha256": "9b993c12c391a7733c93171f9d07fbd80e4b99060ce3e4c76e0875cb3e63d0a8"
+  },
+  "oxrocksdb-sys-0.5.13": {
+    "source_revision": "2837810c8993da671d496eabf7677d7573c5c522",
+    "crate_sha256": "b3ab00e254d81066a73af8f26dcfd1acb76c9b4cc51d7d239e3ab37c3065fb4f"
+  },
+  "fancy-regex-0.20.0": {
+    "source_revision": "031e5e569ab9f142abb466dfd51a5230c398bf9d",
+    "crate_sha256": "20ed7f62ce0ae0da1a8b93c3c7104ab7e0760a74491e097c701fff966e945390"
+  },
+  "oxrdf-0.3.4": {
+    "source_revision": "0e81a29d27575ab69e7f85ea9c7f1058b277fcd0",
+    "crate_sha256": "4be15186205eb60ddbdc2fb47cb25df472c7f399bbe119b68c0972b6b6dd46ea"
+  },
+  "spargebra-0.4.7": {
+    "source_revision": "0e81a29d27575ab69e7f85ea9c7f1058b277fcd0",
+    "crate_sha256": "bef3c186ffb9bf2dde7c5edd5528583f309fcb819b5773cf0e313194a990304f"
+  },
+  "oxrocksdb-sys-0.5.11": {
+    "source_revision": "df37a5c98e2497135cdd4cfce01a049b78ca6740",
+    "crate_sha256": "01fcf5ae1e1295a612bef72fc64cd81e1ac3d1bd3243ef84d330f2962a8335e1"
   }
 }

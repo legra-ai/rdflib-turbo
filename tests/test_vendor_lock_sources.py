@@ -7,9 +7,9 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 LOCKFILES = (
-    "vendor/oxigraph-0.5.11/Cargo.lock",
-    "vendor/oxrdf-0.3.4/Cargo.lock",
-    "vendor/spareval-0.2.7/Cargo.lock",
+    "vendor/oxigraph-0.5.13/Cargo.lock",
+    "vendor/oxrdf-0.3.5/Cargo.lock",
+    "vendor/spareval-0.2.9/Cargo.lock",
 )
 
 

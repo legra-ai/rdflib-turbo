@@ -25,20 +25,20 @@ persistence = ["oxigraph/rocksdb"]
 
 [dependencies]
 shacl-bindings = { package = "pyshacl-turbo-python", path = "crates/python" }
-datalog-structural-model = "=2.0.0"
-rdf-reasoning = "=1.0.0"
+datalog-structural-model = "=3.0.0"
+rdf-reasoning = "=2.0.0"
 pyshacl-turbo-engine = { path = "crates/engine" }
 serde = { version = "1", features = ["derive"] }
-oxigraph = { version = "=0.5.11", default-features = false, features = ["exact-term-storage"] }
-oxrdf = { version = "=0.3.4", features = ["rdf-10-string-identity"] }
+oxigraph = { version = "=0.5.13", default-features = false, features = ["exact-term-storage"] }
+oxrdf = { version = "=0.3.5", features = ["rdf-10-string-identity"] }
 pyo3 = { version = "=0.30.1" }
 serde_json = "1"
 oxilangtag = "=0.1.6"
-spargebra = "=0.4.7"
-sparopt = "=0.3.7"
-spareval = { version = "=0.2.7", features = ["exact-custom-function-terms", "exact-term-builtins", "rdf-set-union"] }
+spargebra = "=0.4.8"
+sparopt = "=0.3.9"
+spareval = { version = "=0.2.9", features = ["exact-custom-function-terms", "exact-term-builtins", "rdf-set-union"] }
 thiserror = "2"
-roxmltree = "=0.21.1"
+roxmltree = "=0.21.2"
 
 [build-dependencies]
 pyo3-build-config = { version = "=0.30.1", features = ["resolve-config"] }
@@ -50,14 +50,14 @@ lto = "thin"
 codegen-units = 1
 
 [patch.crates-io]
-oxrocksdb-sys = { path = "vendor/oxrocksdb-sys-0.5.11" }
-oxigraph = { path = "vendor/oxigraph-0.5.11" }
-fancy-regex = { path = "vendor/fancy-regex-0.19.2" }
-oxrdf = { path = "vendor/oxrdf-0.3.4" }
-sparopt = { path = "vendor/sparopt-0.3.7" }
-spareval = { path = "vendor/spareval-0.2.7" }
-spargebra = { path = "vendor/spargebra-0.4.7" }
-oxsdatatypes = { path = "vendor/oxsdatatypes-0.2.3" }
+oxrocksdb-sys = { path = "vendor/oxrocksdb-sys-0.5.13" }
+oxigraph = { path = "vendor/oxigraph-0.5.13" }
+fancy-regex = { path = "vendor/fancy-regex-0.20.0" }
+oxrdf = { path = "vendor/oxrdf-0.3.5" }
+sparopt = { path = "vendor/sparopt-0.3.9" }
+spareval = { path = "vendor/spareval-0.2.9" }
+spargebra = { path = "vendor/spargebra-0.4.8" }
+oxsdatatypes = { path = "vendor/oxsdatatypes-0.2.4" }
 
 [workspace]
 members = [".", "crates/engine", "crates/python"]
@@ -74,6 +74,6 @@ authors = ["DataRoad Inc, Delaware, USA, trading as Legra"]
 repository = "https://github.com/legra-ai/rdflib-turbo"
 
 [workspace.dependencies]
-oxigraph = { version = "=0.5.11", default-features = false, features = ["exact-term-storage"] }
+oxigraph = { version = "=0.5.13", default-features = false, features = ["exact-term-storage"] }
 thiserror = "2"
 pyo3 = { version = "=0.30.1" }

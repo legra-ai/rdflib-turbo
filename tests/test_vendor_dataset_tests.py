@@ -31,7 +31,7 @@ def test_runs_real_patched_dataset_units_and_doctests_in_both_modes(runner, monk
         assert options["cwd"] == tmp_path and options["check"] is True
         assert "--locked" in arguments and "--lib" not in arguments
         assert arguments[arguments.index("--manifest-path") + 1] == str(
-            tmp_path / "vendor/oxrdf-0.3.4/Cargo.toml"
+            tmp_path / "vendor/oxrdf-0.3.5/Cargo.toml"
         )
         assert any(str(tmp_path / "vendor/oxrdf") in value for value in arguments)
     assert calls[1][0][-1] == "rdfc-10,rdf-10-string-identity"

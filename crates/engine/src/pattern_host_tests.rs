@@ -151,3 +151,40 @@ fn compiled_shape_constraints_receive_the_required_host_policy() {
         );
     }
 }
+
+#[test]
+fn dependency_upgrade_preserves_python_capture_and_lookbehind_rejections() {
+    let lexical = Lexical { new_unicode: false };
+    for pattern in [
+        r"(?P<a>x)(?P<a>y)",
+        r"(?<=a|bc)x",
+        r"(?<!a|bc)x",
+        r"(?<=(a+)\1)x",
+        r"(?P<a>x)(?P=unknown)",
+    ] {
+        assert!(
+            Pattern::compile_host(pattern, "", policy(false), &lexical).is_err(),
+            "Python-incompatible syntax accepted: {pattern}"
+        );
+    }
+    for (pattern, text, expected) in [
+        (r"(?P<a>x){0}", "", true),
+        (r"(?=x)+x", "x", true),
+        (r"(?<=a)x", "ax", true),
+        (r"(?<=a|b)x", "bx", true),
+        (r"(?<=^a)x", "ax", true),
+        (r"(a)(?<=\1)x", "ax", true),
+        (r"(?i)^(.)\1$", "iİ", true),
+        (r"(?i)^(.)\1$", "iı", false),
+        (r"(?i)^(.)\1$", "sſ", false),
+        (r"(?ai)^(.)\1$", "iİ", false),
+        (r"(?ai)^(?P<a>.)(?P=a)$", "Ιι", false),
+    ] {
+        let compiled = Pattern::compile_host(pattern, "", policy(false), &lexical).unwrap();
+        assert_eq!(
+            compiled.is_match(text).unwrap(),
+            expected,
+            "{pattern} {text}"
+        );
+    }
+}

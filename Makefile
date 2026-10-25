@@ -33,7 +33,7 @@ test-memory-storage:
 	uv run --no-project python scripts/vendor_memory_tests.py
 
 test-store-contract: test-memory-storage
-	uv run --no-project python vendor/oxrocksdb-sys-0.5.11/patch-tests/thread_table_identity.py
+	uv run --no-project python vendor/oxrocksdb-sys-0.5.13/patch-tests/thread_table_identity.py
 	cargo test --locked --lib store_tests
 	cargo test --locked --manifest-path tests/store-contract/Cargo.toml --no-default-features
 	cargo test --locked --manifest-path tests/store-contract/Cargo.toml --features rdf-12,persistence

@@ -69,7 +69,7 @@ def run(root):
             "test",
             "--locked",
             "--manifest-path",
-            str(root / "vendor/spareval-0.2.7/Cargo.toml"),
+            str(root / "vendor/spareval-0.2.9/Cargo.toml"),
             "--no-default-features",
             "--lib",
         ]

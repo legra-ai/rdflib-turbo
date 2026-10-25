@@ -72,7 +72,7 @@ def test_core_inventory_is_complete_and_both_profiles_execute(tmp_path, monkeypa
         assert "--skip" not in execution and "--lib" not in execution
         assert "--locked" in execution
         assert execution[execution.index("--manifest-path") + 1] == str(
-            tmp_path / "vendor/oxrdf-0.3.4/Cargo.toml"
+            tmp_path / "vendor/oxrdf-0.3.5/Cargo.toml"
         )
         assert 'build.warnings="deny"' in execution
         assert all(kwargs["cwd"] == tmp_path and kwargs["check"] for _, kwargs in calls)

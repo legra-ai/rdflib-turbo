@@ -16,7 +16,7 @@ def runner(monkeypatch):
 
 def test_standalone_matcher_manifest_is_explicitly_outside_owner_workspace():
     root = Path(__file__).resolve().parents[1]
-    matcher = root / "vendor/fancy-regex-0.19.2"
+    matcher = root / "vendor/fancy-regex-0.20.0"
     result = subprocess.run(
         [
             "cargo",
@@ -58,14 +58,15 @@ def test_regex_owner_runs_all_three_profiles_and_pinned_formatter(tmp_path, monk
     assert "--no-default-features" not in tests[0]
     assert "--lib" not in tests[0]
     assert tests[1][-1] == "std,perf,unicode"
-    assert tests[2][-2:] == ["std,perf,unicode,python-re", "python_re_tests"]
+    assert tests[2][-1] == "std,perf,unicode,python-re"
+    assert "python_re_tests" not in tests[2]
     assert all("--no-default-features" in call and "--lib" in call for call in tests[1:])
     assert calls[-1] == [
         "cargo",
         "+nightly-2026-10-16",
         "fmt",
         "--manifest-path",
-        str(tmp_path / "vendor/fancy-regex-0.19.2/Cargo.toml"),
+        str(tmp_path / "vendor/fancy-regex-0.20.0/Cargo.toml"),
         "--",
         "--check",
     ]

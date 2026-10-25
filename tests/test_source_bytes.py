@@ -33,18 +33,18 @@ def test_native_source_identity_survives_crlf_checkouts(tmp_path):
         "crates/engine/src/lib.rs",
         "crates/python/src/lib.rs",
         "scripts/ci_facade.py",
-        "vendor/fancy-regex-0.19.2/src/lib.rs",
+        "vendor/fancy-regex-0.20.0/src/lib.rs",
         "LICENSE-APACHE",
-        "vendor/oxigraph-0.5.11/LICENSE-MIT",
-        "vendor/oxrocksdb-sys-0.5.11-notices/LICENSE-APACHE",
-        "vendor/oxrocksdb-sys-0.5.11-notices/LICENSE-LEVELDB",
-        "vendor/oxrocksdb-sys-0.5.11-notices/LICENSE-LZ4",
-        "vendor/oxrocksdb-sys-0.5.11/rocksdb/LICENSE.Apache",
-        "vendor/oxrocksdb-sys-0.5.11/rocksdb/COPYING",
-        "vendor/oxrocksdb-sys-0.5.11/rocksdb/LICENSE.leveldb",
-        "vendor/oxrocksdb-sys-0.5.11/lz4/LICENSE",
-        "vendor/oxrocksdb-sys-0.5.11/rocksdb/util/thread_operation.h",
-        "vendor/oxrocksdb-sys-0.5.11/rocksdb/cmake/modules/CxxFlags.cmake",
+        "vendor/oxigraph-0.5.13/LICENSE-MIT",
+        "vendor/oxrocksdb-sys-0.5.13-notices/LICENSE-APACHE",
+        "vendor/oxrocksdb-sys-0.5.13-notices/LICENSE-LEVELDB",
+        "vendor/oxrocksdb-sys-0.5.13-notices/LICENSE-LZ4",
+        "vendor/oxrocksdb-sys-0.5.13/rocksdb/LICENSE.Apache",
+        "vendor/oxrocksdb-sys-0.5.13/rocksdb/COPYING",
+        "vendor/oxrocksdb-sys-0.5.13/rocksdb/LICENSE.leveldb",
+        "vendor/oxrocksdb-sys-0.5.13/lz4/LICENSE",
+        "vendor/oxrocksdb-sys-0.5.13/rocksdb/util/thread_operation.h",
+        "vendor/oxrocksdb-sys-0.5.13/rocksdb/cmake/modules/CxxFlags.cmake",
     ]
     attributes = ROOT / ".gitattributes"
     if attributes.exists():
@@ -62,12 +62,12 @@ def test_native_source_identity_survives_crlf_checkouts(tmp_path):
 
 
 def test_vendored_native_source_matches_published_archive_manifest():
-    vendor = ROOT / "vendor/oxrocksdb-sys-0.5.11"
+    vendor = ROOT / "vendor/oxrocksdb-sys-0.5.13"
     manifest = json.loads((vendor / ".cargo-checksum.json").read_text())
     assert manifest["package"] == (
-        "01fcf5ae1e1295a612bef72fc64cd81e1ac3d1bd3243ef84d330f2962a8335e1"
+        "b3ab00e254d81066a73af8f26dcfd1acb76c9b4cc51d7d239e3ab37c3065fb4f"
     )
-    # bounded: the fixed files of the published 0.5.11 crate plus its local patch.
+    # bounded: the fixed files of the published 0.5.13 crate plus its local patch.
     for relative, expected in manifest["files"].items():
         with (vendor / relative).open("rb") as source:
             actual = hashlib.file_digest(source, "sha256").hexdigest()
@@ -80,10 +80,10 @@ def test_standalone_persistence_contract_uses_vendored_backend():
     patches = configuration["patch"]["crates-io"]
     assert "oxrocksdb-sys" in patches, "Persistence contract must exercise the patched backend"
     backend = (contract / patches["oxrocksdb-sys"]["path"]).resolve()
-    assert backend == (ROOT / "vendor/oxrocksdb-sys-0.5.11").resolve()
+    assert backend == (ROOT / "vendor/oxrocksdb-sys-0.5.13").resolve()
     packages = tomllib.loads((contract / "Cargo.lock").read_text())["package"]
     package = next(package for package in packages if package["name"] == "oxrocksdb-sys")
-    assert package["version"] == "0.5.11"
+    assert package["version"] == "0.5.13"
     assert "source" not in package, "Contract lockfile still selects the registry backend"
 
 
@@ -104,11 +104,11 @@ def test_nested_vendor_attributes_preserve_staged_and_checked_out_bytes(tmp_path
     git("config", "core.autocrlf", autocrlf)
     git("config", "core.eol", "crlf")
     # bounded: the real two-level attribute hierarchy and one representative CRLF file.
-    for relative in [".gitattributes", "vendor/oxrocksdb-sys-0.5.11/lz4/.gitattributes"]:
+    for relative in [".gitattributes", "vendor/oxrocksdb-sys-0.5.13/lz4/.gitattributes"]:
         target = repository / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes((ROOT / relative).read_bytes())
-    relative = "vendor/oxrocksdb-sys-0.5.11/lz4/build/VS2022/_build.bat"
+    relative = "vendor/oxrocksdb-sys-0.5.13/lz4/build/VS2022/_build.bat"
     target = repository / relative
     target.parent.mkdir(parents=True)
     original = b"@echo off\r\necho preserve published bytes\r\n"

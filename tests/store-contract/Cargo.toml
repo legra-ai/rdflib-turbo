@@ -14,15 +14,15 @@ persistence = ["oxigraph/rocksdb"]
 rdf-12 = ["oxigraph/rdf-12"]
 
 [dependencies]
-oxigraph = { path = "../../vendor/oxigraph-0.5.11", default-features = false }
+oxigraph = { path = "../../vendor/oxigraph-0.5.13", default-features = false }
 
 [dev-dependencies]
 tempfile = "3"
 
 [patch.crates-io]
-oxrocksdb-sys = { path = "../../vendor/oxrocksdb-sys-0.5.11" }
-spareval = { path = "../../vendor/spareval-0.2.7" }
-oxrdf = { path = "../../vendor/oxrdf-0.3.4" }
-spargebra = { path = "../../vendor/spargebra-0.4.7" }
-sparopt = { path = "../../vendor/sparopt-0.3.7" }
-oxsdatatypes = { path = "../../vendor/oxsdatatypes-0.2.3" }
+oxrocksdb-sys = { path = "../../vendor/oxrocksdb-sys-0.5.13" }
+spareval = { path = "../../vendor/spareval-0.2.9" }
+oxrdf = { path = "../../vendor/oxrdf-0.3.5" }
+spargebra = { path = "../../vendor/spargebra-0.4.8" }
+sparopt = { path = "../../vendor/sparopt-0.3.9" }
+oxsdatatypes = { path = "../../vendor/oxsdatatypes-0.2.4" }

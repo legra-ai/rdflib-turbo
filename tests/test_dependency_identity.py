@@ -78,7 +78,7 @@ def test_only_audited_persistence_capabilities_are_separate(tmp_path):
 
 
 def test_actual_backend_feature_graph_does_not_leak_implicit_semantic_features(tmp_path):
-    features = tomllib.loads((ROOT / "vendor/oxigraph-0.5.11/Cargo.toml").read_text())["features"]
+    features = tomllib.loads((ROOT / "vendor/oxigraph-0.5.13/Cargo.toml").read_text())["features"]
     crate = tmp_path / "source"
     dependency = tmp_path / "backend"
     (crate / "src").mkdir(parents=True)

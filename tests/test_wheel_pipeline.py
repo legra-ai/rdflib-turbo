@@ -111,7 +111,7 @@ def test_every_wheel_requires_all_bundled_native_licenses(tmp_path, monkeypatch,
     with ZipFile(wheel, "w") as archive:
         for name in ("LICENSE-APACHE", "LICENSE-LEVELDB", "LICENSE-LZ4"):
             if name != missing:
-                relative = f"vendor/oxrocksdb-sys-0.5.11-notices/{name}"
+                relative = f"vendor/oxrocksdb-sys-0.5.13-notices/{name}"
                 archive.writestr(
                     f"example.dist-info/licenses/{relative}", (ROOT / relative).read_bytes()
                 )

@@ -158,7 +158,7 @@ def preflight(output):
         "clang": ["clang", "--version"],
     }.items():
         versions[name] = subprocess.check_output(args, text=True).strip()
-    if not versions["uv"].startswith("uv 0.13.1 ") or not versions["rustc"].startswith(
+    if not versions["uv"].startswith("uv 0.13.5 ") or not versions["rustc"].startswith(
         "rustc 1.99.1 "
     ):
         raise ValueError("Comparison toolchain differs from the pinned CI contract")

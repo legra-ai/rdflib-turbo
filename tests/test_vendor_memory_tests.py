@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 
-@pytest.mark.parametrize("crate", ["oxrdf-0.3.4", "oxigraph-0.5.11", "spareval-0.2.7"])
+@pytest.mark.parametrize("crate", ["oxrdf-0.3.5", "oxigraph-0.5.13", "spareval-0.2.9"])
 def test_vendor_lockfiles_resolve_current_local_patches(crate, vendor_memory_tests):
     root = Path(__file__).resolve().parents[1]
     patches = tomllib.loads((root / "Cargo.toml").read_text())["patch"]["crates-io"]
@@ -33,7 +33,7 @@ def test_vendor_lockfiles_resolve_current_local_patches(crate, vendor_memory_tes
         "--format-version=1",
         "--no-default-features",
     ]
-    if crate == "oxigraph-0.5.11":
+    if crate == "oxigraph-0.5.13":
         arguments.extend(["--features", "exact-term-storage,rocksdb"])
     metadata = json.loads(
         subprocess.run(arguments, cwd=root, check=True, capture_output=True).stdout
@@ -47,7 +47,7 @@ def test_vendor_lockfiles_resolve_current_local_patches(crate, vendor_memory_tes
                 Path(selected[0]["manifest_path"])
                 == (root / patch["path"] / "Cargo.toml").resolve()
             )
-    if crate == "oxigraph-0.5.11":
+    if crate == "oxigraph-0.5.13":
         required = {"oxrdf", "oxsdatatypes", "spargebra", "sparopt", "spareval", "oxrocksdb-sys"}
         assert required <= {item["name"] for item in metadata["packages"]}
 
@@ -95,7 +95,7 @@ def test_vendor_memory_runner_applies_current_root_patches_and_locked_native_tes
     assert arguments[arguments.index("--features") + 1] == "exact-term-storage,rocksdb"
     assert calls[7][0][calls[7][0].index("--features") + 1] == "rocksdb"
     assert arguments[arguments.index("--manifest-path") + 1] == str(
-        root / "vendor/oxigraph-0.5.11/Cargo.toml"
+        root / "vendor/oxigraph-0.5.13/Cargo.toml"
     )
     config = [arguments[i + 1] for i, argument in enumerate(arguments) if argument == "--config"]
     assert f"patch.crates-io.oxrdf.path={json.dumps(str(root / 'vendor/custom-rdf'))}" in config
