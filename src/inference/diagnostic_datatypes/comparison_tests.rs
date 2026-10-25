@@ -4,6 +4,15 @@ use std::ffi::CString;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyModule};
 
+#[pyfunction]
+fn legacy_revision(owner: PyRef<'_, crate::NativeDataset>) -> PyResult<u64> {
+    owner
+        .inner
+        .read()
+        .map(|state| state.revision)
+        .map_err(|_| pyo3::exceptions::PyRuntimeError::new_err("Dataset lock poisoned"))
+}
+
 fn execute(source: &str) {
     Python::initialize();
     Python::attach(|py| {
@@ -11,6 +20,12 @@ fn execute(source: &str) {
         crate::_native(&module).unwrap();
         let globals = PyDict::new(py);
         globals.set_item("native", module).unwrap();
+        globals
+            .set_item(
+                "legacy_revision",
+                wrap_pyfunction!(legacy_revision, py).unwrap(),
+            )
+            .unwrap();
         let source = CString::new(source).unwrap();
         py.run(&source, Some(&globals), None).unwrap();
     });
@@ -84,6 +99,70 @@ for legacy in [False, True]:
         assert context.flags[decimal.FloatOperation]
         assert not captured
     assert owner.dump('nquads') == before
+    if not legacy: owner.close()
+"#,
+    );
+}
+
+#[test]
+fn late_python_warning_failure_cannot_publish_staged_rules_or_mutate_owner_metadata() {
+    execute(
+        r#"
+import decimal
+import warnings
+import sys
+source = '@prefix kept:<urn:kept:>. @prefix xsd:<http://www.w3.org/2001/XMLSchema#>. <urn:s> <urn:p> "1.0"^^xsd:double; <urn:q> "0.9"^^xsd:decimal.'
+shapes = '@prefix sh:<http://www.w3.org/ns/shacl#>. <urn:S> sh:targetNode <urn:s>;sh:rule [a sh:TripleRule;sh:subject sh:this;sh:predicate <urn:derived>;sh:object <urn:marker>;sh:condition <urn:C>]. <urn:C> sh:property [sh:path <urn:p>;sh:lessThanOrEquals <urn:q>].'
+compiled = native.shacl.CompiledShapes(shapes, 'turtle', None, True, True, [], _policy=native.shacl._REGEX_POLICY)
+shared = native.SharedShapes.from_compiled(compiled)
+for legacy in [False, True]:
+    owner = native.NativeDataset() if legacy else native.NativeStore()
+    owner.load(source, 'turtle', None, True) if legacy else owner.load(source, 'turtle')
+    before = owner.dump('nquads')
+    namespaces = owner.namespaces() if legacy else None
+    revision = legacy_revision(owner) if legacy else None
+    sentinel = RuntimeError('late Core numeric warning publisher sentinel')
+    observed = []
+    def fail_after_native_work(*args, **kwargs):
+        observed.append(args)
+        # This read also proves no native owner mutex is held across the callback.
+        assert owner.dump('nquads') == before
+        raise sentinel
+    with decimal.localcontext() as context, warnings.catch_warnings():
+        context.clear_flags()
+        context.traps[decimal.FloatOperation] = True
+        warnings.filterwarnings('always', message='NotImplemented should not be used in a boolean context', category=DeprecationWarning)
+        warnings.showwarning = fail_after_native_work
+        try:
+            shared.validate(owner, '{}', True) if legacy else shared.validate_store(owner, '{}', True)
+        except RuntimeError as error:
+            assert sys.version_info < (3,14)
+            assert error is sentinel
+            assert len(observed) == 1
+        except TypeError as error:
+            assert sys.version_info >= (3,14)
+            assert str(error) == 'NotImplemented should not be used in a boolean context'
+            assert not observed
+        else:
+            raise AssertionError('Late diagnostic failure was accepted')
+        assert context.flags[decimal.FloatOperation]
+    assert owner.dump('nquads') == before
+    if legacy:
+        assert owner.namespaces() == namespaces
+        assert legacy_revision(owner) == revision
+    else:
+        # The failed pending writer and its private changeset must be gone.
+        transaction = owner.transaction()
+        transaction.rollback()
+    if sys.version_info < (3,14):
+        with decimal.localcontext() as context, warnings.catch_warnings(record=True) as emitted:
+            context.traps[decimal.FloatOperation] = True
+            warnings.filterwarnings('always', message='NotImplemented should not be used in a boolean context', category=DeprecationWarning)
+            result = shared.validate(owner, '{}', True) if legacy else shared.validate_store(owner, '{}', True)
+            assert result[0]
+            assert len(emitted) == 1
+        # The identical successful worker really derives the rule marker.
+        assert '<urn:s> <urn:derived> <urn:marker>' in owner.dump('nquads')
     if not legacy: owner.close()
 "#,
     );
