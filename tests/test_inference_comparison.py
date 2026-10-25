@@ -42,7 +42,7 @@ class ComparisonTests(unittest.TestCase):
                 __import__("json").loads((output / "request.json").read_text())["base"], "a" * 40
             )
 
-    def test_path_engine_source_has_a_clear_unsupported_error(self):
+    def test_nonowned_engine_source_has_a_clear_unsupported_error(self):
         metadata = {
             "resolve": {"nodes": []},
             "packages": [
@@ -53,7 +53,7 @@ class ComparisonTests(unittest.TestCase):
                 }
             ],
         }
-        with self.assertRaisesRegex(ValueError, "immutable Git"):
+        with self.assertRaisesRegex(ValueError, "archive-owned local SHACL engine"):
             identity.derive(Path("/unused"), metadata)
 
     def test_requires_distinct_full_public_commits(self):

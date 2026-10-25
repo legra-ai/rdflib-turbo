@@ -17,6 +17,7 @@ def attest(receipt):
         if find_spec(name) is not None:
             raise ValueError(f"Unexpected optional/reference runtime: {name}")
     proof = {}
+    native_library = None
     for name, key in [("rdflib_turbo", "wheel"), ("owlrl_turbo", "owlrl_wheel")]:
         wheel = Path(receipt[key])
 
@@ -46,14 +47,26 @@ def attest(receipt):
         if len(libraries) != (1 if name == "rdflib_turbo" else 0):
             raise ValueError("Unexpected native payload")
         proof[name] = actual
+        if name == "rdflib_turbo":
+            native_library = root.parent / libraries[0]
+    source_path = Path(__file__).with_name("comparison_identity.py")
+    spec = importlib.util.spec_from_file_location("attested_comparison_source", source_path)
+    source = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(source)
+    derived = source.verify_receipt(receipt)
     native = importlib.import_module("rdflib_turbo._native")
-    expected = receipt["expected_identity"]
+    if Path(native.__file__).resolve() != native_library:
+        raise ValueError("Loaded native library differs from the verified original wheel location")
+    expected_library = proof["rdflib_turbo"]["rdflib_turbo/" + native_library.name]
+    if hashlib.sha256(native_library.read_bytes()).hexdigest() != expected_library:
+        raise ValueError("Loaded native library changed after its original payload check")
     if (
-        native.SHACL_ENGINE_REVISION != expected["engine_revision"]
-        or native.SHACL_ENGINE_FINGERPRINT != expected["engine_fingerprint"]
+        native.SHACL_ENGINE_SOURCE != derived["engine"]["engine_source"]
+        or native.SHACL_ENGINE_FINGERPRINT != derived["engine"]["engine_fingerprint"]
+        or native.shacl.SHACL_ENGINE_FINGERPRINT != derived["engine"]["engine_fingerprint"]
     ):
         raise ValueError("Compiled source identity differs from independently derived inputs")
-    proof["engine"] = expected
+    proof.update(derived)
     return proof
 
 
