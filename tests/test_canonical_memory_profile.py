@@ -128,3 +128,19 @@ def test_export_context_has_independent_declaration_authority(profiler, monkeypa
     )
     with pytest.raises(ValueError, match="independent declaration"):
         profiler.source_inputs(tmp_path / "sources")
+
+
+def test_public_source_layout_comes_from_declared_build_inputs(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    spec = importlib.util.spec_from_file_location(
+        "memory_fixture_layout", root / "scripts/canonical_memory_fixture.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    (tmp_path / "src/owlrl_turbo").mkdir(parents=True)
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname="owlrl-turbo"\n[tool.hatch.build.targets.wheel]\npackages=["src/owlrl_turbo"]\n'
+    )
+    assert module.source_package_root(tmp_path, "owlrl-turbo") == tmp_path / "src"
+    finder = module.SourceFinder({"owlrl-turbo": "0.1.0a3"})
+    assert list(finder.find_distributions()) == []

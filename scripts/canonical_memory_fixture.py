@@ -46,7 +46,7 @@ class SourceFinder(importlib.metadata.DistributionFinder):
         return iter(
             SourceDistribution(name, version)
             for name, version in self.projects.items()
-            if normalized in (None, name)
+            if normalized == name
         )
 
 
@@ -88,6 +88,22 @@ def facts(data):
     }
 
 
+def source_package_root(source, name):
+    manifest = tomllib.loads((source / "pyproject.toml").read_text())
+    tool = manifest["tool"]
+    package = name.replace("-", "_")
+    if name == "rdflib-turbo":
+        root = source / tool["maturin"]["python-source"]
+    else:
+        declared = tool["hatch"]["build"]["targets"]["wheel"]["packages"]
+        if len(declared) != 1 or Path(declared[0]).name != package:
+            raise RuntimeError("Source package differs from its declared wheel layout")
+        root = source / Path(declared[0]).parent
+    if not (root / package).resolve(strict=True).is_relative_to(source.resolve()):
+        raise RuntimeError("Declared source package escapes its source authority")
+    return root
+
+
 def execute(native, phase, inputs, data_path, shapes_path, mode):
     """Run once in an isolated exact Rust test child, keeping only owner IDs."""
     if any(name.split(".")[0] in {p.replace("-", "_") for p in PROJECTS} for name in sys.modules):
@@ -99,7 +115,7 @@ def execute(native, phase, inputs, data_path, shapes_path, mode):
     sources = {name: Path(inputs[name]["source"]) for name in PROJECTS}
     old_path = list(sys.path)
     with source_metadata(sources) as metadata:
-        sys.path[:0] = [str(source / "python") for source in sources.values()]
+        sys.path[:0] = [str(source_package_root(source, name)) for name, source in sources.items()]
         sys.modules["rdflib_turbo._native"] = native
         try:
             result = pipeline(native, phase, data_path, shapes_path, mode, sources)
@@ -128,7 +144,11 @@ def pipeline(native, phase, data_path, shapes_path, mode, sources):
     assert pyshacl_turbo._native._bindings is native.shacl
     for module in (rdflib_turbo, owlrl_turbo, pyshacl_turbo):
         project = module.__name__.replace("_", "-")
-        assert Path(module.__file__).resolve().is_relative_to(sources[project] / "python")
+        assert (
+            Path(module.__file__)
+            .resolve()
+            .is_relative_to(source_package_root(sources[project], project))
+        )
     text, shape_text = Path(data_path).read_text(), Path(shapes_path).read_text()
     rdflib.NORMALIZE_LITERALS = False
     shape_graph = rdflib.Graph().parse(data=shape_text, format="turtle")
@@ -158,7 +178,7 @@ def pipeline(native, phase, data_path, shapes_path, mode, sources):
         "report": report,
         "flags": flags,
     }
-    validate_observation(data, observation, text, shape_text, mode)
+    comparison = validate_observation(data, observation, text, shape_text, mode)
 
     class RejectedProfileTransaction(Exception):
         pass
@@ -185,6 +205,7 @@ def pipeline(native, phase, data_path, shapes_path, mode, sources):
         "native_origin": "compiled-source-test-binary",
         "physical_quad_count": len(observation["physical"]),
         "semantic_guards": "complete-facts-report-text-flags",
+        "observation": comparison,
         "phases_exclude_semantic_audit": True,
     }
 
@@ -223,3 +244,19 @@ def validate_observation(data, observation, text, shape_text, mode):
     assert actual[0] == expected[0] and actual[2] == expected[2]
     assert isomorphic(actual[1], expected[1])
     assert {str(g.identifier) for g in original.contexts()} == observation["contexts"]
+    return {
+        "physical_quads": sorted(observation["physical"], key=repr),
+        "input_physical_quads": sorted(before, key=repr),
+        "contexts": sorted(observation["contexts"]),
+        "flags": flags,
+        "conforms": actual[0],
+        "report_text": actual[2],
+        "report_triples": sorted(
+            (tuple((type(term).__name__, str(term)) for term in triple) for triple in actual[1]),
+            key=repr,
+        ),
+        "original_report_triples": sorted(
+            (tuple((type(term).__name__, str(term)) for term in triple) for triple in expected[1]),
+            key=repr,
+        ),
+    }
