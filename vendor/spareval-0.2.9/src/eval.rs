@@ -212,6 +212,18 @@ impl<'a, D: QueryableDataset<'a>> EvalDataset<'a, D> {
             } else {
                 // The default graph has not been set, it is the union of all graphs, we query all graphs
                 #[cfg(feature = "rdf-set-union")]
+                if let Some(unique) = self
+                    .dataset
+                    .internal_unique_default_union_quads_for_pattern(
+                        subject,
+                        predicate,
+                        object,
+                        &self.cancellation_token,
+                    )
+                {
+                    return unique;
+                }
+                #[cfg(feature = "rdf-set-union")]
                 let mut seen = FxHashSet::default();
                 Box::new(
                     self.underlying_internal_quads_for_pattern(subject, predicate, object, None)

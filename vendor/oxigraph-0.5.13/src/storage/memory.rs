@@ -237,6 +237,15 @@ impl<'a> MemoryStorageReader<'a> {
         }
     }
 
+    pub(super) fn union_candidates(
+        &self,
+        subject: Option<&EncodedTerm>,
+        predicate: Option<&EncodedTerm>,
+        object: Option<&EncodedTerm>,
+    ) -> MemoryUnionCandidates<'a> {
+        MemoryUnionCandidates::new(self.quads_for_pattern(subject, predicate, object, None))
+    }
+
     #[expect(unsafe_code)]
     pub fn named_graphs(&self) -> MemoryDecodingGraphIterator<'a> {
         MemoryDecodingGraphIterator {
@@ -825,10 +834,8 @@ enum QuadIteratorKind {
     GraphName,
 }
 
-impl Iterator for QuadIterator<'_> {
-    type Item = EncodedQuad;
-
-    fn next(&mut self) -> Option<EncodedQuad> {
+impl QuadIterator<'_> {
+    fn next_node(&mut self) -> Option<Arc<QuadListNode>> {
         loop {
             let current = self.current.take()?.upgrade()?;
             self.current = match self.kind {
@@ -861,10 +868,22 @@ impl Iterator for QuadIterator<'_> {
                     continue;
                 }
             }
-            return Some(current.quad.clone());
+            return Some(current);
         }
     }
 }
+
+impl Iterator for QuadIterator<'_> {
+    type Item = EncodedQuad;
+
+    fn next(&mut self) -> Option<EncodedQuad> {
+        self.next_node().map(|node| node.quad.clone())
+    }
+}
+
+#[path = "memory_union.rs"]
+mod union;
+pub(super) use union::MemoryUnionCandidates;
 
 #[must_use]
 pub struct MemoryDecodingGraphIterator<'a> {
