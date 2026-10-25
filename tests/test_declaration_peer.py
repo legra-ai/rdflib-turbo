@@ -3,6 +3,7 @@
 import hashlib
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import tarfile
@@ -32,6 +33,7 @@ def original(tmp_path):
     source.mkdir()
     git(source, "init")
     git(source, "config", "core.autocrlf", "false")
+    git(source, "config", "core.filemode", "false")
     git(source, "config", "user.email", "fixture@example.invalid")
     git(source, "config", "user.name", "Fixture")
     (source / "pyproject.toml").write_text(
@@ -41,6 +43,7 @@ def original(tmp_path):
     (source / "tool.sh").write_text("#!/bin/sh\nexit 0\n")
     (source / "tool.sh").chmod(0o755)
     git(source, "add", ".")
+    git(source, "update-index", "--chmod=+x", "tool.sh")
     git(source, "commit", "-m", "fixture")
     revision = git(source, "rev-parse", "HEAD")
     owner = tmp_path / "owner"
@@ -177,7 +180,19 @@ def test_uv_sdist_command_disables_source_overrides(tmp_path, monkeypatch):
     ]
 
 
-@pytest.mark.parametrize("mutation", ["bytes", "mode", "extra"])
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "bytes",
+        pytest.param(
+            "mode",
+            marks=pytest.mark.skipif(
+                os.name == "nt", reason="Windows does not expose POSIX executable mode bits"
+            ),
+        ),
+        "extra",
+    ],
+)
 def test_retained_raw_build_source_remains_frozen(original, tmp_path, monkeypatch, mutation):
     module, _ = arrange(monkeypatch, original)
     owner, _, _ = original
