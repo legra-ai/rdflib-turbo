@@ -19,7 +19,40 @@ DERIVED = (URIRef("urn:s"), URIRef("urn:derived"), Literal(True))
 
 
 def program():
-    return SharedShapes(SHAPES, True, [], _policy=native_shacl._REGEX_POLICY)
+    return SharedShapes(
+        SHAPES,
+        True,
+        [],
+        _policy=native_shacl._REGEX_POLICY,
+        _comparison_policy=native_shacl._VALUE_COMPARISON_POLICY,
+    )
+
+
+@pytest.mark.parametrize("from_compiled", [False, True])
+def test_shared_shape_factories_require_the_sealed_comparison_authority(from_compiled):
+    if from_compiled:
+        compiled = native_shacl.CompiledShapes(
+            SHAPES, "turtle", None, True, True, [], _policy=native_shacl._REGEX_POLICY
+        )
+
+        def construct(**options):
+            return SharedShapes.from_compiled(compiled, **options)
+
+    else:
+
+        def construct(**options):
+            return SharedShapes(SHAPES, True, [], _policy=native_shacl._REGEX_POLICY, **options)
+
+    with pytest.raises(TypeError, match="_comparison_policy"):
+        construct()
+    with pytest.raises(TypeError, match="_ValueComparisonPolicy"):
+        construct(_comparison_policy=object())
+    token = native_shacl._VALUE_COMPARISON_POLICY
+    with pytest.raises(TypeError):
+        type(token)()
+    with pytest.raises(AttributeError):
+        token.context = object()
+    assert construct(_comparison_policy=token) is not None
 
 
 @pytest.mark.parametrize("dataset", [False, True])
@@ -94,7 +127,9 @@ def test_shapes_compile_from_native_scopes_and_validate_another_owner(dataset):
     source.bind("ex", "urn:")
     source.parse(data=SHAPES, format="turtle")
     native, namespaces = source._compile_shared_shapes(True)
-    compiled = SharedShapes.from_compiled(native)
+    compiled = SharedShapes.from_compiled(
+        native, _comparison_policy=native_shacl._VALUE_COMPARISON_POLICY
+    )
     assert ("ex", "urn:") in namespaces
     data = Graph().parse(data=SOURCE, format="nt")
     with data._validate_shared_shapes(compiled, "{}", False) as result:

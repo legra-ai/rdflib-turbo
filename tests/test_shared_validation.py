@@ -65,7 +65,11 @@ def test_shared_validation_reports_without_serializing_or_copying_dataset(monkey
     data = native_dataset("@prefix ex: <urn:example:> . ex:s ex:q 1.")
     identity = data
     program = SharedShapes(
-        SHAPES, False, [("ex", "urn:example:")], _policy=_native_shacl._REGEX_POLICY
+        SHAPES,
+        False,
+        [("ex", "urn:example:")],
+        _policy=_native_shacl._REGEX_POLICY,
+        _comparison_policy=_native_shacl._VALUE_COMPARISON_POLICY,
     )
 
     def forbidden(*args, **kwargs):
@@ -86,7 +90,13 @@ def test_shared_validation_reports_without_serializing_or_copying_dataset(monkey
 
 def test_invalid_options_fail_and_subsequent_mutations_are_visible():
     data = native_dataset("<urn:example:s> <urn:example:q> 1.")
-    program = SharedShapes(SHAPES, False, [], _policy=_native_shacl._REGEX_POLICY)
+    program = SharedShapes(
+        SHAPES,
+        False,
+        [],
+        _policy=_native_shacl._REGEX_POLICY,
+        _comparison_policy=_native_shacl._VALUE_COMPARISON_POLICY,
+    )
     with pytest.raises(ValueError):
         program.validate(data, '{"unknown":true}', False)
     assert not program.validate(data, "{}", False)[0]
@@ -99,7 +109,13 @@ def test_rules_stage_and_commit_only_when_requested():
     <urn:S> sh:targetNode <urn:s>; sh:rule [a sh:TripleRule;
     sh:subject sh:this; sh:predicate <urn:p>; sh:object 2]."""
     data = native_dataset("<urn:s> <urn:q> 1.")
-    program = SharedShapes(source, True, [], _policy=_native_shacl._REGEX_POLICY)
+    program = SharedShapes(
+        source,
+        True,
+        [],
+        _policy=_native_shacl._REGEX_POLICY,
+        _comparison_policy=_native_shacl._VALUE_COMPARISON_POLICY,
+    )
     program.validate(data, "{}", False)
     assert len(data) == 1
     program.validate(data, "{}", True)
@@ -113,21 +129,35 @@ def test_failed_rule_validation_never_commits():
     data = native_dataset("<urn:s> <urn:q> 1.")
     before = data.dump("nquads")
     with pytest.raises(ValueError, match="positive"):
-        SharedShapes(source, True, [], _policy=_native_shacl._REGEX_POLICY).validate(
-            data, '{"max_rule_iterations":0}', True
-        )
+        SharedShapes(
+            source,
+            True,
+            [],
+            _policy=_native_shacl._REGEX_POLICY,
+            _comparison_policy=_native_shacl._VALUE_COMPARISON_POLICY,
+        ).validate(data, '{"max_rule_iterations":0}', True)
     assert data.dump("nquads") == before
     with pytest.raises(RuntimeError, match="iteration limit"):
-        SharedShapes(source, True, [], _policy=_native_shacl._REGEX_POLICY).validate(
-            data, '{"iterate_rules":true,"max_rule_iterations":1}', True
-        )
+        SharedShapes(
+            source,
+            True,
+            [],
+            _policy=_native_shacl._REGEX_POLICY,
+            _comparison_policy=_native_shacl._VALUE_COMPARISON_POLICY,
+        ).validate(data, '{"iterate_rules":true,"max_rule_iterations":1}', True)
     assert data.dump("nquads") == before
 
 
 def test_shared_program_is_reusable_across_concurrent_dataset_owners():
     from concurrent.futures import ThreadPoolExecutor
 
-    program = SharedShapes(SHAPES, False, [], _policy=_native_shacl._REGEX_POLICY)
+    program = SharedShapes(
+        SHAPES,
+        False,
+        [],
+        _policy=_native_shacl._REGEX_POLICY,
+        _comparison_policy=_native_shacl._VALUE_COMPARISON_POLICY,
+    )
     valid = native_dataset("<urn:example:s> <urn:example:p> 1.")
     invalid = native_dataset("<urn:example:s> <urn:example:q> 1.")
     with ThreadPoolExecutor(max_workers=4) as pool:
@@ -142,7 +172,13 @@ def test_shared_program_is_reusable_across_concurrent_dataset_owners():
 
 def test_unknown_settings_and_invalid_focus_iris_are_hard_errors():
     data = NativeDataset()
-    program = SharedShapes(SHAPES, False, [], _policy=_native_shacl._REGEX_POLICY)
+    program = SharedShapes(
+        SHAPES,
+        False,
+        [],
+        _policy=_native_shacl._REGEX_POLICY,
+        _comparison_policy=_native_shacl._VALUE_COMPARISON_POLICY,
+    )
     for settings in ('{"focus_nodes":["not an IRI"]}', '{"max_rule_iterations":-1}', "[]"):
         with pytest.raises(ValueError):
             program.validate(data, settings, False)
