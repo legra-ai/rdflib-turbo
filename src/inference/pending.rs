@@ -50,6 +50,14 @@ impl Pending {
         }
     }
 
+    #[cfg(all(test, feature = "allocation-profiling"))]
+    pub(super) fn holder_sizes() -> (usize, usize) {
+        (
+            std::mem::size_of::<NativeKey>(),
+            std::mem::size_of::<Head>(),
+        )
+    }
+
     #[cfg(test)]
     pub(super) fn heads(&self) -> impl Iterator<Item = GeneralizedQuadRef<'_>> {
         self.0

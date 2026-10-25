@@ -240,6 +240,9 @@ struct Attribution {
     generalized_quad_bytes: usize,
     term_bytes: usize,
     pending_container_bytes: usize,
+    native_head_holder_bytes: usize,
+    native_pending_key_bytes: usize,
+    transfer_head_bytes: usize,
     semantic_replay: SemanticProof,
 }
 
@@ -271,7 +274,7 @@ fn canonical_encoded_construct_drop_versus_pending_attribution() {
         let mut pending = Pending::default();
         let mut count = 0;
         for row in graph.projected_inference_heads(query.clone()).unwrap() {
-            // Both arms must materialize the same decoded head even when its
+            // Both arms must produce the same actual leased head even when its
             // consumer immediately drops it; do not measure dead-code elision.
             let row = std::hint::black_box(row.unwrap());
             count += 1;
@@ -314,6 +317,9 @@ fn canonical_encoded_construct_drop_versus_pending_attribution() {
         generalized_quad_bytes: size_of::<GeneralizedQuad>(),
         term_bytes: size_of::<Term>(),
         pending_container_bytes: size_of::<Pending>(),
+        native_head_holder_bytes: size_of::<oxigraph::sparql::LeasedInferenceTriple>(),
+        native_pending_key_bytes: Pending::holder_sizes().0,
+        transfer_head_bytes: Pending::holder_sizes().1,
         semantic_replay: proof,
     };
     println!(
