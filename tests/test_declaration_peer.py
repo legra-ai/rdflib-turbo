@@ -191,3 +191,49 @@ def test_retained_raw_build_source_remains_frozen(original, tmp_path, monkeypatc
         (raw / "unrecorded").write_text("changed")
     with pytest.raises(ValueError, match="raw source"):
         module.verify(owner, record, initial=False)
+
+
+@pytest.mark.parametrize("marker", [b"*", b"changed"])
+def test_original_uv_output_marker_is_checked_without_relaxing_source_inventory(
+    tmp_path, monkeypatch, marker
+):
+    module = helper()
+    source, output = tmp_path / "raw", tmp_path / "artifacts"
+    source.mkdir()
+
+    def launch(command, **kwargs):
+        (output / "original.tar.gz").write_bytes(b"archive")
+        (output / ".gitignore").write_bytes(marker)
+
+    monkeypatch.setattr(module.subprocess, "run", launch)
+    if marker == b"*":
+        assert module.build(source, output, "3.13") == output / "original.tar.gz"
+    else:
+        with pytest.raises(ValueError, match="output"):
+            module.build(source, output, "3.13")
+
+
+def test_actual_uv_original_sdist_output_accepts_only_its_generated_marker(original, tmp_path):
+    module = helper()
+    _, source, _ = original
+    output = tmp_path / "actual-uv-originals"
+    archive = module.build(source, output, "3.13")
+    assert archive.is_file()
+    assert archive.name == "pyshacl_turbo-0.7.0.tar.gz"
+    assert {path.name for path in output.iterdir()} == {archive.name, ".gitignore"}
+    assert (output / ".gitignore").read_bytes() == b"*"
+
+
+def test_uv_output_does_not_allow_an_unexpected_extra_file(tmp_path, monkeypatch):
+    module = helper()
+    source, output = tmp_path / "raw", tmp_path / "artifacts"
+    source.mkdir()
+
+    def launch(command, **kwargs):
+        (output / "original.tar.gz").write_bytes(b"archive")
+        (output / ".gitignore").write_bytes(b"*")
+        (output / "unexpected.whl").write_bytes(b"unapproved")
+
+    monkeypatch.setattr(module.subprocess, "run", launch)
+    with pytest.raises(ValueError, match="unexpected output"):
+        module.build(source, output, "3.13")

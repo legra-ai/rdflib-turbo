@@ -102,9 +102,20 @@ def build_command(source, output, python):
 def build(source, output, python):
     output.mkdir()
     subprocess.run(build_command(source, output, python), check=True)
-    archives = list(output.iterdir())
-    if len(archives) != 1 or not archives[0].name.endswith(".tar.gz"):
-        raise ValueError("Declaration build must produce one original source archive")
+    archives = list(output.glob("*.tar.gz"))
+    for path in output.iterdir():
+        if path in archives and path.is_file() and not path.is_symlink():
+            continue
+        if (
+            path.name == ".gitignore"
+            and path.is_file()
+            and not path.is_symlink()
+            and path.read_bytes() == b"*"
+        ):
+            continue
+        raise ValueError("Declaration build has unexpected output")
+    if len(archives) != 1:
+        raise ValueError("Declaration build output requires one original source archive")
     return archives[0]
 
 
