@@ -10,10 +10,22 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_actual_matcher_identity_changes_for_vendor_only_mutation(tmp_path):
     original = ROOT / "vendor/fancy-regex-0.19.2"
     fork = tmp_path / "vendor/fancy-regex-0.19.2"
-    shutil.copytree(original, fork, ignore=shutil.ignore_patterns("target", ".git"))
+    shutil.copytree(
+        original,
+        fork,
+        ignore=shutil.ignore_patterns("target", ".git"),
+        copy_function=shutil.copyfile,
+    )
+    for path in original.rglob("*"):
+        relative = path.relative_to(original)
+        if path.is_file() and not {"target", ".git"}.intersection(relative.parts):
+            assert (fork / relative).read_bytes() == path.read_bytes()
     shutil.copyfile(
         ROOT / "vendor/turbo-source-identity.rs", fork.parent / "turbo-source-identity.rs"
     )
+    assert (fork.parent / "turbo-source-identity.rs").read_bytes() == (
+        ROOT / "vendor/turbo-source-identity.rs"
+    ).read_bytes()
     project = tmp_path / "probe"
     (project / "src").mkdir(parents=True)
     (project / "Cargo.toml").write_text(
