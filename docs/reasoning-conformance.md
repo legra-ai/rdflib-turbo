@@ -20,7 +20,9 @@ checks omissions/duplicates; it does not test semantic completeness.
 ## OWL-RL rules
 
 `RuleId` and `ListRuleId` name portable definitions, not independently rewritten
-backend rules. Local entries identify execution/compatibility ownership that
+backend rules. Availability in the portable column does not imply consumer
+selection: equality currently executes local kernels and reference algebra.
+Local entries identify execution/compatibility ownership that
 still needs extraction or standard-domain evidence. Diagnostic messages stand
 in for the consumer's inconsistency policy, not a portable Datalog false head.
 
@@ -58,12 +60,12 @@ in for the consumer's inconsistency policy, not a portable Datalog false head.
 | `eq-diff1` | Not a portable clause | [local binding](../src/inference/diagnostics/relations.rs); same/different messages; standard coverage unverified |
 | `eq-diff2` | Not a portable clause | [local binding](../src/inference/diagnostics/lists.rs); reference excludes final member; standard coverage unverified |
 | `eq-diff3` | Not a portable clause | [local binding](../src/inference/diagnostics/lists.rs); reference excludes final member; standard coverage unverified |
-| `eq-ref` | `RuleId::EqRefSubject + EqRefPredicate + EqRefObject` | [equality kernel](../src/inference/same_as.rs); indexed native execution; shared definition is semantic source |
-| `eq-rep-o` | `RuleId::EqRepO` | [equality kernel](../src/inference/same_as.rs); indexed native execution; shared definition is semantic source |
-| `eq-rep-p` | `RuleId::EqRepP` | [equality kernel](../src/inference/same_as.rs); indexed native execution; shared definition is semantic source |
-| `eq-rep-s` | `RuleId::EqRepS` | [equality kernel](../src/inference/same_as.rs); indexed native execution; shared definition is semantic source |
-| `eq-sym` | `RuleId::EqSym` | [equality kernel](../src/inference/same_as.rs); indexed native execution; shared definition is semantic source |
-| `eq-trans` | `RuleId::EqTrans` | [equality kernel](../src/inference/same_as.rs); indexed native execution; shared definition is semantic source |
+| `eq-ref` | `RuleId::EqRefSubject + EqRefPredicate + EqRefObject` | [equality kernel](../src/inference/same_as.rs); local kernel/queries with independent parity algebra; not catalogue execution; literal-predicate exclusion remains |
+| `eq-rep-o` | `RuleId::EqRepO` | [equality kernel](../src/inference/same_as.rs); local kernel/queries with independent parity algebra; not catalogue execution; literal-predicate exclusion remains |
+| `eq-rep-p` | `RuleId::EqRepP` | [equality kernel](../src/inference/same_as.rs); local kernel/queries with independent parity algebra; not catalogue execution; literal-predicate exclusion remains |
+| `eq-rep-s` | `RuleId::EqRepS` | [equality kernel](../src/inference/same_as.rs); local kernel/queries with independent parity algebra; not catalogue execution; literal-predicate exclusion remains |
+| `eq-sym` | `RuleId::EqSym` | [equality kernel](../src/inference/same_as.rs); local kernel/queries with independent parity algebra; not catalogue execution; literal-predicate exclusion remains |
+| `eq-trans` | `RuleId::EqTrans` | [equality kernel](../src/inference/same_as.rs); local kernel/queries with independent parity algebra; not catalogue execution; literal-predicate exclusion remains |
 | `prp-adp` | Not a portable clause | [local binding](../src/inference/diagnostics/lists.rs); reference excludes final member; standard coverage unverified |
 | `prp-ap` | Not a portable clause | [local binding](../src/inference/axioms.rs); fixed annotation vocabulary; standard coverage unverified |
 | `prp-asyp` | Not a portable clause | [local binding](../src/inference/diagnostics/relations.rs); named/blank property diagnostics; standard coverage unverified |
