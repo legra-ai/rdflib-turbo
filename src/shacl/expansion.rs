@@ -2,11 +2,11 @@
 
 use std::sync::RwLock;
 
-use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 
 use super::commit::Prepared;
-use super::{Settings, SharedShapes, error};
+use super::settings::Captured;
+use super::{Settings, SharedShapes};
 use crate::{DatasetState, NativeDataset};
 
 pub(super) type Output = (Option<NativeDataset>, Vec<String>);
@@ -19,44 +19,33 @@ impl SharedShapes {
         settings: &str,
         inplace: bool,
     ) -> PyResult<Output> {
-        let mut options = Settings::parse(settings)?;
-        let prepared = py.detach(|| -> PyResult<Prepared<Output>> {
+        let (mut options, publisher) =
+            Settings::capture_rules(py, settings, self.comparison_host.as_ref())?;
+        let result = py.detach(|| -> crate::Result<Prepared<Output>> {
             if inplace {
-                let mut current = dataset
+                let current = dataset
                     .inner
                     .write()
-                    .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
-                let revision = current.next_revision().map_err(crate::error)?;
+                    .map_err(|_| crate::Error::Runtime("Dataset lock poisoned".into()))?;
+                current.next_revision()?;
                 let expected_revision = current.revision;
                 options.namespaces = current.namespaces.clone();
-                let expansion = self
-                    .inner
-                    .expand_staged(&current.data, options)
-                    .map_err(error)?;
+                let expansion = self.inner.expand_staged(&current.data, options)?;
                 let warnings = expansion.recursion_warnings;
-                if warnings.is_empty() {
-                    current.extend(expansion.graph.iter());
-                    current.revision = revision;
-                    Ok(Prepared::ready((None, Vec::new()), warnings))
-                } else {
-                    Ok(Prepared::staged(
-                        (None, Vec::new()),
-                        expansion.graph,
-                        expected_revision,
-                        warnings,
-                    ))
-                }
+                Ok(Prepared::staged(
+                    (None, Vec::new()),
+                    expansion.graph,
+                    expected_revision,
+                    warnings,
+                ))
             } else {
                 let mut working = dataset
                     .inner
                     .read()
-                    .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?
+                    .map_err(|_| crate::Error::Runtime("Dataset lock poisoned".into()))?
                     .copy_owner();
                 options.namespaces = working.namespaces.clone();
-                let expansion = self
-                    .inner
-                    .expand_staged(&working.data, options)
-                    .map_err(error)?;
+                let expansion = self.inner.expand_staged(&working.data, options)?;
                 working.extend(expansion.graph.iter());
                 let warnings = expansion.recursion_warnings;
                 let result = NativeDataset {
@@ -64,7 +53,8 @@ impl SharedShapes {
                 };
                 Ok(Prepared::ready((Some(result), Vec::new()), warnings))
             }
-        })?;
+        });
+        let prepared = Captured::complete(publisher, py, result)?;
         prepared.finish(py, dataset, 2)
     }
 }
@@ -96,6 +86,7 @@ mod tests {
                 vec![],
                 true,
                 crate::native_tests::host_regex_policy(py),
+                crate::native_tests::host_comparison_policy(py),
             )
             .unwrap();
             let (result, warnings) = shapes.expand(py, &data, "{}", false).unwrap();
@@ -131,6 +122,7 @@ mod tests {
                 vec![],
                 true,
                 crate::native_tests::host_regex_policy(py),
+                crate::native_tests::host_comparison_policy(py),
             )
             .unwrap();
             let failure = shapes

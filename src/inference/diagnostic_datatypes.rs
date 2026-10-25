@@ -3,6 +3,9 @@
 use oxigraph::model::Literal;
 
 mod cardinality;
+mod comparison;
+mod comparison_warning;
+pub(crate) use comparison::Host as ComparisonHost;
 mod context;
 mod decimal;
 mod duration_truthiness;

@@ -44,6 +44,20 @@ impl Reply {
 }
 
 impl NativeStore {
+    pub(crate) fn prepare_validation(
+        &self,
+        shapes: Arc<CompiledShapes>,
+        options: Options,
+        graph: Option<GraphName>,
+    ) -> Result<PreparedValidation> {
+        let transaction = NativeTransaction {
+            session: Arc::new(Session::start(self.control.clone())?),
+        };
+        let mut prepared = transaction.prepare_validation(shapes, options, true, graph)?;
+        prepared.commit_on_accept = true;
+        Ok(prepared)
+    }
+
     pub(crate) fn validate_inferred_readonly(
         &self,
         shapes: &CompiledShapes,

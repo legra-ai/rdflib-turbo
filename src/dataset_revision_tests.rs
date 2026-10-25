@@ -21,6 +21,7 @@ fn every_mutator_rejects_exhausted_revision_before_changes() {
             vec![],
             true,
             crate::native_tests::host_regex_policy(py),
+            crate::native_tests::host_comparison_policy(py),
         )
         .unwrap();
         let failures = [
@@ -78,6 +79,7 @@ fn successful_noop_writes_advance_once_and_copies_are_independent() {
             vec![],
             true,
             crate::native_tests::host_regex_policy(py),
+            crate::native_tests::host_comparison_policy(py),
         )
         .unwrap();
         shapes.validate(py, &native, "{}", true).unwrap();

@@ -11,7 +11,7 @@ mod cleanup;
 #[cfg(test)]
 mod cleanup_failure_tests;
 pub(crate) use borrowed::BorrowedInference;
-pub(crate) use diagnostic_datatypes::SignalPublisher;
+pub(crate) use diagnostic_datatypes::{ComparisonHost, SignalPublisher};
 pub(crate) use outcome::bind_error_namespace;
 mod delta;
 mod diagnostic_datatypes;

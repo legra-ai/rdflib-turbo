@@ -8,13 +8,13 @@ Python allocations. Full pipeline benchmarks provide the separate RSS evidence.
 import argparse
 import hashlib
 import json
-import os
 import platform
 import sys
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
-from native_coverage import embedded_python_environment, run
+from native_coverage import locked_python_environment, run
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -25,34 +25,37 @@ def main():
     parser.add_argument("--shapes", type=Path, required=True)
     parser.add_argument("--inference", choices=("rdfs", "owlrl", "both"), default="owlrl")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--yaml-authority", type=Path, required=True)
     args = parser.parse_args()
-    environment = embedded_python_environment(sys.executable, dict(os.environ))
-    environment.update(
-        PYO3_PYTHON=sys.executable,
-        MEMORY_DATA=str(args.data.resolve(strict=True)),
-        MEMORY_SHAPES=str(args.shapes.resolve(strict=True)),
-        MEMORY_INFERENCE=args.inference,
-    )
-    log = run(
-        [
-            "cargo",
-            "test",
-            "--manifest-path",
-            ROOT / "Cargo.toml",
-            "--locked",
-            "--release",
-            "--features",
-            "allocation-profiling",
-            "allocation_tests::profile_pipeline_allocations",
-            "--",
-            "--ignored",
-            "--exact",
-            "--nocapture",
-            "--test-threads=1",
-        ],
-        environment,
-        capture=True,
-    )
+    runtime_output = args.output.parent / (args.output.stem + "-runtime-" + uuid.uuid4().hex)
+    with locked_python_environment(
+        ROOT, runtime_output, sys.executable, args.yaml_authority
+    ) as environment:
+        environment.update(
+            MEMORY_DATA=str(args.data.resolve(strict=True)),
+            MEMORY_SHAPES=str(args.shapes.resolve(strict=True)),
+            MEMORY_INFERENCE=args.inference,
+        )
+        log = run(
+            [
+                "cargo",
+                "test",
+                "--manifest-path",
+                ROOT / "Cargo.toml",
+                "--locked",
+                "--release",
+                "--features",
+                "allocation-profiling",
+                "allocation_tests::profile_pipeline_allocations",
+                "--",
+                "--ignored",
+                "--exact",
+                "--nocapture",
+                "--test-threads=1",
+            ],
+            environment,
+            capture=True,
+        )
     phases = [
         json.loads(line.split("MEMORY_PHASE ", 1)[1])
         for line in log.splitlines()

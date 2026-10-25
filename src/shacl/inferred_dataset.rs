@@ -20,7 +20,7 @@ impl SharedShapes {
             mut options,
             inference,
             publisher,
-        } = Settings::capture(py, settings)?;
+        } = Settings::capture(py, settings, self.comparison_host.as_ref())?;
         let Some(inference) = inference else {
             return Ok(None);
         };

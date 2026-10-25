@@ -1,3 +1,5 @@
+pub(crate) mod comparison;
+
 use num_bigint::BigInt;
 use oxigraph::model::*;
 use oxigraph::sparql::{PreparedSparqlQuery, QueryResults};
@@ -126,4 +128,26 @@ pub(crate) fn datatype(value: &Term, datatype: &NamedNode) -> bool {
         }
         _ => true,
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn compare(
+    policy: &crate::CoreComparisonPolicy,
+    role: crate::ComparisonRole,
+    operator: crate::ComparisonOperator,
+    query: &PreparedSparqlQuery,
+    data: &(impl crate::GraphRead + ?Sized),
+    value: &Term,
+    other: &Term,
+) -> Result<bool> {
+    if let (crate::CoreComparisonPolicy::Host(policy), Term::Literal(left), Term::Literal(right)) =
+        (policy, value, other)
+        && crate::numeric_kind(left).is_some()
+        && crate::numeric_kind(right).is_some()
+    {
+        return policy
+            .compare_numeric(role, operator, left, right)
+            .map_err(Error::Comparison);
+    }
+    expression(query, data, value, Some(other))
 }

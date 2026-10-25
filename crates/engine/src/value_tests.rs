@@ -166,3 +166,6 @@ fn comparison_expression_distinguishes_false_unbound_and_invalid_result_shapes()
         );
     }
 }
+
+#[path = "value_comparison_tests.rs"]
+mod comparison_regressions;

@@ -106,12 +106,17 @@ impl SignalPublisher {
 
     /// The caller must finish/join all native producers before entering here.
     pub(crate) fn complete<T>(self, py: Python<'_>, result: crate::Result<T>) -> PyResult<T> {
+        self.publish(py)?;
+        result.map_err(crate::error)
+    }
+
+    pub(crate) fn publish(&self, py: Python<'_>) -> PyResult<()> {
         let bits = self.signals.snapshot();
         for (signal, class) in Signal::ALL.into_iter().zip(&self.classes) {
             if bits & signal.bit() != 0 {
                 self.flags.bind(py).set_item(class, true)?;
             }
         }
-        result.map_err(crate::error)
+        Ok(())
     }
 }

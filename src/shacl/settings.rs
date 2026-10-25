@@ -36,19 +36,25 @@ pub(crate) struct InferenceStage {
 pub(super) struct Captured {
     pub options: Options,
     pub inference: Option<InferenceStage>,
-    pub publisher: Option<SignalPublisher>,
+    pub publisher: Publisher,
+}
+
+pub(super) struct Publisher {
+    inference: Option<SignalPublisher>,
+    comparison: shacl_bindings::ComparisonInvocation,
 }
 
 impl Captured {
     pub(super) fn complete<T>(
-        publisher: Option<SignalPublisher>,
+        publisher: Publisher,
         py: Python<'_>,
         result: crate::Result<T>,
     ) -> PyResult<T> {
-        match publisher {
-            Some(publisher) => publisher.complete(py, result),
-            None => result.map_err(crate::error),
+        if let Some(inference) = publisher.inference {
+            inference.publish(py)?;
         }
+        publisher.comparison.publisher.publish(py)?;
+        result.map_err(crate::error)
     }
 }
 
@@ -107,6 +113,7 @@ impl Settings {
             focus_nodes: nodes(self.focus_nodes)?,
             use_shapes: nodes(self.use_shapes)?,
             namespaces: self.data_namespaces,
+            comparison: pyshacl_turbo_engine::CoreComparisonPolicy::NativeSparql,
         })
     }
 }
@@ -149,12 +156,35 @@ impl Settings {
         settings.options()
     }
 
-    pub(super) fn capture(py: Python<'_>, source: &str) -> PyResult<Captured> {
+    pub(super) fn capture_rules(
+        py: Python<'_>,
+        source: &str,
+        host: &dyn shacl_bindings::ComparisonHost,
+    ) -> PyResult<(Options, Publisher)> {
+        let mut options = Self::parse(source)?;
+        let comparison = host.capture(py)?;
+        options.comparison = comparison.authority();
+        Ok((
+            options,
+            Publisher {
+                inference: None,
+                comparison,
+            },
+        ))
+    }
+
+    pub(super) fn capture(
+        py: Python<'_>,
+        source: &str,
+        host: &dyn shacl_bindings::ComparisonHost,
+    ) -> PyResult<Captured> {
         let settings = Self::decode(source)?;
         let mode = settings
             .inference
             .filter(|mode| !matches!(mode, Mode::None));
-        let options = settings.options()?;
+        let mut options = settings.options()?;
+        let comparison = host.capture(py)?;
+        options.comparison = comparison.authority();
         let (inference, publisher) = match mode {
             Some(mode) => {
                 let (request, publisher) =
@@ -166,7 +196,10 @@ impl Settings {
         Ok(Captured {
             options,
             inference,
-            publisher,
+            publisher: Publisher {
+                inference: publisher,
+                comparison,
+            },
         })
     }
 }

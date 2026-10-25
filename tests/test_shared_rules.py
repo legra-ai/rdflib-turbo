@@ -33,7 +33,13 @@ SOURCE = "@prefix ex:<urn:>. ex:a ex:p ex:b."
 
 
 def program(source=SHAPES):
-    return SharedShapes(source, True, [("ex", "urn:")], _policy=_native_shacl._REGEX_POLICY)
+    return SharedShapes(
+        source,
+        True,
+        [("ex", "urn:")],
+        _policy=_native_shacl._REGEX_POLICY,
+        _comparison_policy=_native_shacl._VALUE_COMPARISON_POLICY,
+    )
 
 
 def ask(data, query):

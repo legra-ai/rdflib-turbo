@@ -6,6 +6,76 @@ fn rules() -> CompiledShapes {
 }
 
 #[test]
+fn numeric_role_reports_retain_the_exact_operator_bound_and_pair_predicate() {
+    let mut data = parse(
+        "@prefix xsd:<http://www.w3.org/2001/XMLSchema#>. <urn:s> <urn:p> \"1.0\"^^xsd:double; <urn:q> \"0.9\"^^xsd:decimal.",
+        RdfFormat::Turtle,
+        None,
+    )
+    .unwrap();
+    for (operator, parameter, expected) in [
+        (
+            "minExclusive",
+            "\"1.1\"^^xsd:decimal",
+            "Value is not > Literal(\"1.1\", datatype=xsd:decimal)",
+        ),
+        (
+            "minInclusive",
+            "\"1.1\"^^xsd:decimal",
+            "Value is not >= Literal(\"1.1\", datatype=xsd:decimal)",
+        ),
+        (
+            "maxExclusive",
+            "\"0.9\"^^xsd:decimal",
+            "Value is not < Literal(\"0.9\", datatype=xsd:decimal)",
+        ),
+        (
+            "maxInclusive",
+            "\"0.9\"^^xsd:decimal",
+            "Value is not <= Literal(\"0.9\", datatype=xsd:decimal)",
+        ),
+        (
+            "lessThan",
+            "<urn:q>",
+            "Value of <urn:s>-><urn:q> <= Literal(\"1.0\", datatype=xsd:double)",
+        ),
+        (
+            "lessThanOrEquals",
+            "<urn:q>",
+            "Value of <urn:s>-><urn:q> < Literal(\"1.0\", datatype=xsd:double)",
+        ),
+    ] {
+        let shapes = crate::IndexedShapesSource::parse_graph(
+            &format!("@prefix sh:<http://www.w3.org/ns/shacl#>. @prefix xsd:<http://www.w3.org/2001/XMLSchema#>. <urn:S> sh:targetNode <urn:s>; sh:path <urn:p>; sh:{operator} {parameter}."),
+            RdfFormat::Turtle,
+            None,
+        )
+        .unwrap();
+        let report = CompiledShapes::compile(shapes, false)
+            .unwrap()
+            .validate(&mut data, Options::default())
+            .unwrap();
+        assert!(!report.conforms, "{operator}");
+        let messages: Vec<_> = report
+            .graph
+            .iter()
+            .filter(|q| q.predicate == iri(SH, "resultMessage").as_ref())
+            .map(|q| q.object.to_string())
+            .collect();
+        assert_eq!(
+            messages,
+            vec![Literal::new_simple_literal(expected).to_string()],
+            "{operator}"
+        );
+        assert!(
+            report.text.contains(&format!("Message: {expected}\n")),
+            "{operator}: {}",
+            report.text
+        );
+    }
+}
+
+#[test]
 fn rust_store_validation_and_rule_apis_commit_only_when_requested() {
     let program = rules();
     for inplace in [false, true] {

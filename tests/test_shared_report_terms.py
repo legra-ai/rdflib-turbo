@@ -49,7 +49,13 @@ def source_dataset():
 
 def test_report_batch_preserves_exact_literals_and_blank_node_identities(monkeypatch):
     data = source_dataset()
-    program = SharedShapes(SHAPES, False, [("ex", "urn:")], _policy=_native_shacl._REGEX_POLICY)
+    program = SharedShapes(
+        SHAPES,
+        False,
+        [("ex", "urn:")],
+        _policy=_native_shacl._REGEX_POLICY,
+        _comparison_policy=_native_shacl._VALUE_COMPARISON_POLICY,
+    )
     before = data.dump("nquads")
 
     def forbidden(*args, **kwargs):
@@ -96,8 +102,12 @@ def test_report_batch_preserves_exact_literals_and_blank_node_identities(monkeyp
 )
 def test_report_batch_preserves_validation_options(settings, conforms):
     data = source_dataset()
-    result = SharedShapes(SHAPES, False, [], _policy=_native_shacl._REGEX_POLICY).validate(
-        data, json.dumps(settings), False
-    )
+    result = SharedShapes(
+        SHAPES,
+        False,
+        [],
+        _policy=_native_shacl._REGEX_POLICY,
+        _comparison_policy=_native_shacl._VALUE_COMPARISON_POLICY,
+    ).validate(data, json.dumps(settings), False)
     assert result[0] is conforms
     assert isinstance(result[1], tuple)

@@ -35,6 +35,7 @@ impl CompiledShapes {
     ) -> Result<ValidationReport> {
         let mut evaluation = Evaluation::new(options.max_validation_depth);
         evaluation.warnings = warnings;
+        evaluation.comparison = options.comparison.clone();
         let display_data = data;
         let union = UnionGraph::new(data);
         let data = &union;

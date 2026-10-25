@@ -4,8 +4,30 @@ use super::*;
 
 pub(crate) fn host_regex_policy(py: Python<'_>) -> Py<shacl_bindings::NativeRegexPolicy> {
     let module = pyo3::types::PyModule::new(py, "native_host_policy_fixture").unwrap();
-    shacl_bindings::register(&module, crate::regex_policy::build(py).unwrap()).unwrap();
+    shacl_bindings::register(
+        &module,
+        crate::regex_policy::build(py).unwrap(),
+        std::sync::Arc::new(crate::inference::ComparisonHost::new(py).unwrap()),
+    )
+    .unwrap();
     module.getattr("_REGEX_POLICY").unwrap().extract().unwrap()
+}
+
+pub(crate) fn host_comparison_policy(
+    py: Python<'_>,
+) -> Py<shacl_bindings::NativeValueComparisonPolicy> {
+    let module = pyo3::types::PyModule::new(py, "native_comparison_policy_fixture").unwrap();
+    shacl_bindings::register(
+        &module,
+        crate::regex_policy::build(py).unwrap(),
+        std::sync::Arc::new(crate::inference::ComparisonHost::new(py).unwrap()),
+    )
+    .unwrap();
+    module
+        .getattr("_VALUE_COMPARISON_POLICY")
+        .unwrap()
+        .extract()
+        .unwrap()
 }
 
 #[test]

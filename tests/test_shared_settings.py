@@ -40,9 +40,13 @@ def test_duplicate_known_settings_fail_without_mutating_receiver(field, value):
     before = data.dump("nquads"), tuple(data.namespaces())
     settings = f'{{"{field}":{value},"{field}":{value}}}'
     with pytest.raises(ValueError, match="duplicate field"):
-        SharedShapes(SHAPES, False, [], _policy=_native_shacl._REGEX_POLICY).validate(
-            data, settings, True
-        )
+        SharedShapes(
+            SHAPES,
+            False,
+            [],
+            _policy=_native_shacl._REGEX_POLICY,
+            _comparison_policy=_native_shacl._VALUE_COMPARISON_POLICY,
+        ).validate(data, settings, True)
     assert (data.dump("nquads"), tuple(data.namespaces())) == before
 
 
@@ -69,14 +73,24 @@ def test_duplicate_known_settings_fail_without_mutating_receiver(field, value):
 )
 def test_nonobjects_malformed_unknown_and_wrong_typed_settings_fail(settings):
     with pytest.raises(ValueError):
-        SharedShapes(SHAPES, False, [], _policy=_native_shacl._REGEX_POLICY).validate(
-            NativeDataset(), settings, False
-        )
+        SharedShapes(
+            SHAPES,
+            False,
+            [],
+            _policy=_native_shacl._REGEX_POLICY,
+            _comparison_policy=_native_shacl._VALUE_COMPARISON_POLICY,
+        ).validate(NativeDataset(), settings, False)
 
 
 def test_all_valid_settings_and_default_settings_have_same_report():
     data = native_dataset("@prefix custom:<urn:>. custom:a custom:p custom:b.")
-    program = SharedShapes(SHAPES, False, [], _policy=_native_shacl._REGEX_POLICY)
+    program = SharedShapes(
+        SHAPES,
+        False,
+        [],
+        _policy=_native_shacl._REGEX_POLICY,
+        _comparison_policy=_native_shacl._VALUE_COMPARISON_POLICY,
+    )
     complete = """{"iterate_rules":false,"max_rule_iterations":10,
     "max_validation_depth":15,"allow_infos":false,"allow_warnings":false,
     "abort_on_first":false,"focus_nodes":[],"use_shapes":[]}"""

@@ -125,8 +125,16 @@ fn profile_pipeline_allocations() {
         phase("parse", data.__len__().unwrap());
         data.infer(py, &mode, None, false, false, None).unwrap();
         phase("inference", data.__len__().unwrap());
-        let program =
-            shacl::SharedShapes::new(py, &shapes, false, Vec::new(), false, policy).unwrap();
+        let program = shacl::SharedShapes::new(
+            py,
+            &shapes,
+            false,
+            Vec::new(),
+            false,
+            policy,
+            crate::native_tests::host_comparison_policy(py),
+        )
+        .unwrap();
         phase("compile_shapes", data.__len__().unwrap());
         let report = program.validate(py, &data, "{}", false).unwrap();
         std::hint::black_box(&report);

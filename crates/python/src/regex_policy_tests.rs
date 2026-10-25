@@ -7,7 +7,12 @@ fn lexical_policy_matches_actual_host_and_survives_module_owner_removal_off_thre
     Python::initialize();
     Python::attach(|py| {
         let module = PyModule::new(py, "host_lexical_policy_tests").unwrap();
-        crate::register(&module, crate::provider_tests::test_regex_policy()).unwrap();
+        crate::register(
+            &module,
+            crate::provider_tests::test_regex_policy(),
+            crate::provider_tests::test_comparison_host(),
+        )
+        .unwrap();
         let policy = crate::compilation_policy(
             py,
             module.getattr("_REGEX_POLICY").unwrap().extract().unwrap(),

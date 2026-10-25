@@ -23,7 +23,13 @@ def test_validation_is_scoped_and_rule_output_returns_to_selected_graph(identifi
     graph = dataset.default_graph if identifier is None else dataset.graph(identifier)
     unrelated = dataset.graph(URIRef("urn:unrelated"))
     unrelated.add((S, P, Literal(1)))
-    program = SharedShapes(SHAPES, True, [], _policy=_native_shacl._REGEX_POLICY)
+    program = SharedShapes(
+        SHAPES,
+        True,
+        [],
+        _policy=_native_shacl._REGEX_POLICY,
+        _comparison_policy=_native_shacl._VALUE_COMPARISON_POLICY,
+    )
     with graph._validate_shared_shapes(program, "{}", inplace) as result:
         assert not result[0], "unrelated context must not satisfy the selected Graph"
     assert (DERIVED in graph) is inplace
@@ -39,7 +45,15 @@ def test_dataset_validation_reads_union_and_writes_only_default_graph(default_un
     named = dataset.graph(URIRef("urn:data"))
     named.add((S, P, Literal(1)))
     with dataset._validate_shared_shapes(
-        SharedShapes(SHAPES, True, [], _policy=_native_shacl._REGEX_POLICY), "{}", True
+        SharedShapes(
+            SHAPES,
+            True,
+            [],
+            _policy=_native_shacl._REGEX_POLICY,
+            _comparison_policy=_native_shacl._VALUE_COMPARISON_POLICY,
+        ),
+        "{}",
+        True,
     ) as result:
         assert result[0]
     assert DERIVED in dataset.default_graph
@@ -48,7 +62,13 @@ def test_dataset_validation_reads_union_and_writes_only_default_graph(default_un
 
 def test_pending_graph_validation_acceptance_and_report_errors_are_atomic():
     graph = Graph(identifier=URIRef("urn:selected"))
-    program = SharedShapes(SHAPES, True, [], _policy=_native_shacl._REGEX_POLICY)
+    program = SharedShapes(
+        SHAPES,
+        True,
+        [],
+        _policy=_native_shacl._REGEX_POLICY,
+        _comparison_policy=_native_shacl._VALUE_COMPARISON_POLICY,
+    )
     with pytest.raises(ValueError, match="report decoding"):
         with graph.transaction() as transaction:
             transaction.add((S, P, Literal(1)))
@@ -71,7 +91,15 @@ def test_namespace_mutation_while_accepting_report_aborts_pending_writes():
         with graph.transaction() as transaction:
             transaction.add((S, P, Literal(1)))
             with transaction._validate_shared_shapes(
-                SharedShapes(SHAPES, True, [], _policy=_native_shacl._REGEX_POLICY), "{}", True
+                SharedShapes(
+                    SHAPES,
+                    True,
+                    [],
+                    _policy=_native_shacl._REGEX_POLICY,
+                    _comparison_policy=_native_shacl._VALUE_COMPARISON_POLICY,
+                ),
+                "{}",
+                True,
             ):
                 transaction.bind("changed", URIRef("urn:changed:"))
     assert len(graph) == 0
@@ -82,7 +110,15 @@ def test_original_graph_namespace_mutation_aborts_implicit_validation():
     graph.add((S, P, Literal(1)))
     with pytest.raises(RuntimeError, match="namespace"):
         with graph._validate_shared_shapes(
-            SharedShapes(SHAPES, True, [], _policy=_native_shacl._REGEX_POLICY), "{}", True
+            SharedShapes(
+                SHAPES,
+                True,
+                [],
+                _policy=_native_shacl._REGEX_POLICY,
+                _comparison_policy=_native_shacl._VALUE_COMPARISON_POLICY,
+            ),
+            "{}",
+            True,
         ):
             graph.bind("changed", URIRef("urn:changed:"))
     assert DERIVED not in graph
@@ -96,7 +132,15 @@ def test_invalid_settings_abort_pending_graph_changes_even_when_caught():
             transaction.add((S, P, Literal(1)))
             with pytest.raises(ValueError):
                 with transaction._validate_shared_shapes(
-                    SharedShapes(SHAPES, True, [], _policy=_native_shacl._REGEX_POLICY), "[]", True
+                    SharedShapes(
+                        SHAPES,
+                        True,
+                        [],
+                        _policy=_native_shacl._REGEX_POLICY,
+                        _comparison_policy=_native_shacl._VALUE_COMPARISON_POLICY,
+                    ),
+                    "[]",
+                    True,
                 ):
                     pytest.fail("invalid settings must fail before report handling")
     assert len(graph) == 0
@@ -108,7 +152,15 @@ def test_rdf_mutation_during_graph_report_handling_aborts():
         with graph.transaction() as transaction:
             transaction.add((S, P, Literal(1)))
             with transaction._validate_shared_shapes(
-                SharedShapes(SHAPES, True, [], _policy=_native_shacl._REGEX_POLICY), "{}", True
+                SharedShapes(
+                    SHAPES,
+                    True,
+                    [],
+                    _policy=_native_shacl._REGEX_POLICY,
+                    _comparison_policy=_native_shacl._VALUE_COMPARISON_POLICY,
+                ),
+                "{}",
+                True,
             ):
                 transaction.add((S, P, Literal(1)))
     assert len(graph) == 0
@@ -120,11 +172,27 @@ def test_committed_scoped_validation_reads_snapshot_while_writer_is_open():
     with graph.transaction() as transaction:
         transaction.remove((S, P, None))
         with graph._validate_shared_shapes(
-            SharedShapes(SHAPES, True, [], _policy=_native_shacl._REGEX_POLICY), "{}", False
+            SharedShapes(
+                SHAPES,
+                True,
+                [],
+                _policy=_native_shacl._REGEX_POLICY,
+                _comparison_policy=_native_shacl._VALUE_COMPARISON_POLICY,
+            ),
+            "{}",
+            False,
         ) as result:
             assert result[0]
         with transaction._validate_shared_shapes(
-            SharedShapes(SHAPES, True, [], _policy=_native_shacl._REGEX_POLICY), "{}", False
+            SharedShapes(
+                SHAPES,
+                True,
+                [],
+                _policy=_native_shacl._REGEX_POLICY,
+                _comparison_policy=_native_shacl._VALUE_COMPARISON_POLICY,
+            ),
+            "{}",
+            False,
         ) as result:
             assert not result[0]
 

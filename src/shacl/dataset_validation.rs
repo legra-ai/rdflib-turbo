@@ -5,7 +5,8 @@ use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 
 use super::commit::{Pending, Prepared};
-use super::{Output, Settings, SharedShapes, error, output};
+use super::settings::Captured;
+use super::{Output, Report, Settings, SharedShapes};
 use crate::NativeDataset;
 
 impl SharedShapes {
@@ -19,45 +20,37 @@ impl SharedShapes {
         if let Some(prepared) = self.infer_dataset(py, dataset, settings, inplace)? {
             return prepared.finish(py, dataset, 4);
         }
-        let mut options = Settings::parse(settings)?;
-        let prepared = py.detach(|| -> PyResult<Prepared<Output>> {
+        let (mut options, publisher) =
+            Settings::capture_rules(py, settings, self.comparison_host.as_ref())?;
+        let result = py.detach(|| -> crate::Result<Prepared<Output>> {
             if !inplace || !self.inner.has_active_rules(&options) {
                 let data = dataset
                     .inner
                     .read()
-                    .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
+                    .map_err(|_| crate::Error::Runtime("Dataset lock poisoned".into()))?;
                 options.namespaces = data.namespaces.clone();
-                return Ok(Prepared::report(output(
-                    self.inner
-                        .validate_staged(&data.data, options)
-                        .map_err(error)?,
-                )?));
+                return Ok(Prepared::report(
+                    Report::try_new(self.inner.validate_staged(&data.data, options)?)?
+                        .into_output(),
+                ));
             }
-            let mut data = dataset
+            let data = dataset
                 .inner
                 .write()
-                .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
+                .map_err(|_| crate::Error::Runtime("Dataset lock poisoned".into()))?;
             options.namespaces = data.namespaces.clone();
-            let revision = data.next_revision().map_err(crate::error)?;
-            let outcome = self
-                .inner
-                .validate_delta(&data.data, options)
-                .map_err(error)?;
-            let mut result = output(outcome.report)?;
-            if result.3.is_empty() {
-                data.extend(outcome.additions.iter());
-                data.revision = revision;
-                Ok(Prepared::report(result))
-            } else {
-                let warnings = std::mem::take(&mut result.3);
-                Ok(Prepared::staged(
-                    result,
-                    outcome.additions,
-                    data.revision,
-                    warnings,
-                ))
-            }
-        })?;
+            data.next_revision()?;
+            let outcome = self.inner.validate_delta(&data.data, options)?;
+            let mut output = Report::try_new(outcome.report)?.into_output();
+            let warnings = std::mem::take(&mut output.3);
+            Ok(Prepared::staged(
+                output,
+                outcome.additions,
+                data.revision,
+                warnings,
+            ))
+        });
+        let prepared = Captured::complete(publisher, py, result)?;
         // The source adapter adds a generator and contextlib frame.
         prepared.finish(py, dataset, 4)
     }
@@ -75,33 +68,29 @@ impl SharedShapes {
         {
             return Ok(PreparedDatasetValidation::new(owner, report, pending));
         }
-        let mut options = Settings::parse(settings)?;
-        let (report, pending) = py.detach(|| {
+        let (mut options, publisher) =
+            Settings::capture_rules(py, settings, self.comparison_host.as_ref())?;
+        let result = py.detach(|| -> crate::Result<_> {
             let data = dataset
                 .inner
                 .read()
-                .map_err(|_| PyRuntimeError::new_err("Dataset lock poisoned"))?;
+                .map_err(|_| crate::Error::Runtime("Dataset lock poisoned".into()))?;
             options.namespaces = data.namespaces.clone();
             if !inplace || !self.inner.has_active_rules(&options) {
-                let report = output(
-                    self.inner
-                        .validate_staged(&data.data, options)
-                        .map_err(error)?,
-                )?;
+                let report = Report::try_new(self.inner.validate_staged(&data.data, options)?)?
+                    .into_output();
                 let pending = inplace.then(|| Pending::readonly(data.revision));
-                return Ok::<_, PyErr>((report, pending));
+                return Ok((report, pending));
             }
             // Reject exhausted mutation counters before executing a write-capable validation.
-            data.next_revision().map_err(crate::error)?;
-            let outcome = self
-                .inner
-                .validate_delta(&data.data, options)
-                .map_err(error)?;
+            data.next_revision()?;
+            let outcome = self.inner.validate_delta(&data.data, options)?;
             Ok((
-                output(outcome.report)?,
+                Report::try_new(outcome.report)?.into_output(),
                 Some(Pending::new(outcome.additions, data.revision)),
             ))
-        })?;
+        });
+        let (report, pending) = Captured::complete(publisher, py, result)?;
         Ok(PreparedDatasetValidation::new(owner, report, pending))
     }
 }
@@ -190,6 +179,7 @@ mod tests {
                 vec![],
                 true,
                 crate::native_tests::host_regex_policy(py),
+                crate::native_tests::host_comparison_policy(py),
             )
             .unwrap();
             let prepared = program
@@ -242,6 +232,7 @@ mod tests {
                 vec![],
                 true,
                 crate::native_tests::host_regex_policy(py),
+                crate::native_tests::host_comparison_policy(py),
             )
             .unwrap();
             for consumed in [false, true] {

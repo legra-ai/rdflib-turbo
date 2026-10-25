@@ -1,3 +1,8 @@
+mod comparison;
+pub use comparison::{
+    ComparisonHost, ComparisonInvocation, ComparisonPublisher, NativeValueComparisonPolicy,
+    capture_comparison, comparison_error, comparison_host,
+};
 mod canonical;
 #[cfg(test)]
 mod provider_tests;
@@ -41,6 +46,7 @@ pyo3::create_exception!(_native, ConstraintLoadFailure, PyValueError);
 
 fn error(error: Error) -> PyErr {
     match error {
+        Error::Comparison(failure) => Python::attach(|py| comparison_error(py, failure)),
         Error::ValidationFailure(_) => ValidationFailure::new_err(error.to_string()),
         Error::ShapeLoad { message, link } => ShapeLoadFailure::new_err((message, link)),
         Error::ConstraintLoad { message, link } => ConstraintLoadFailure::new_err((message, link)),
@@ -442,6 +448,7 @@ impl PyCompiledShapes {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (source, rdf_format, base, iterate_rules, max_rule_iterations, max_validation_depth, include_data, allow_infos, allow_warnings, abort_on_first, focus_nodes, use_shapes, namespaces, *, _comparison_policy))]
     fn validate(
         &self,
         py: Python<'_>,
@@ -458,47 +465,50 @@ impl PyCompiledShapes {
         focus_nodes: Vec<String>,
         use_shapes: Vec<String>,
         namespaces: Vec<(String, String)>,
+        _comparison_policy: Py<NativeValueComparisonPolicy>,
     ) -> PyResult<ReportOutput> {
         let direct = rdf_format == "terms";
         let input = terms::Input::read(source, rdf_format, base)?;
-        let (conforms, report, text, expanded, warnings) = py
-            .detach(|| {
-                let mut data = input.parse()?;
-                let report = self.inner.validate(
-                    &mut data,
-                    Options {
-                        iterate_rules,
-                        max_rule_iterations,
-                        max_validation_depth,
-                        allow_infos,
-                        allow_warnings,
-                        abort_on_first,
-                        namespaces,
-                        focus_nodes: focus_nodes
-                            .into_iter()
-                            .map(|s| NamedNode::new(s).map(Term::from))
-                            .collect::<std::result::Result<_, _>>()
-                            .map_err(|e| Error::Invalid(e.to_string()))?,
-                        use_shapes: use_shapes
-                            .into_iter()
-                            .map(|s| NamedNode::new(s).map(Term::from))
-                            .collect::<std::result::Result<_, _>>()
-                            .map_err(|e| Error::Invalid(e.to_string()))?,
-                    },
-                )?;
-                Ok((
-                    report.conforms,
-                    terms::Output::graph(&report.graph, direct)?,
-                    report.text,
-                    if include_data {
-                        Some(terms::Output::graph(&data, direct)?)
-                    } else {
-                        None
-                    },
-                    report.recursion_warnings,
-                ))
-            })
-            .map_err(error)?;
+        let comparison = capture_comparison(py, _comparison_policy)?;
+        let authority = comparison.authority();
+        let result = py.detach(|| {
+            let mut data = input.parse()?;
+            let report = self.inner.validate(
+                &mut data,
+                Options {
+                    iterate_rules,
+                    max_rule_iterations,
+                    max_validation_depth,
+                    allow_infos,
+                    allow_warnings,
+                    abort_on_first,
+                    namespaces,
+                    comparison: authority,
+                    focus_nodes: focus_nodes
+                        .into_iter()
+                        .map(|s| NamedNode::new(s).map(Term::from))
+                        .collect::<std::result::Result<_, _>>()
+                        .map_err(|e| Error::Invalid(e.to_string()))?,
+                    use_shapes: use_shapes
+                        .into_iter()
+                        .map(|s| NamedNode::new(s).map(Term::from))
+                        .collect::<std::result::Result<_, _>>()
+                        .map_err(|e| Error::Invalid(e.to_string()))?,
+                },
+            )?;
+            Ok((
+                report.conforms,
+                terms::Output::graph(&report.graph, direct)?,
+                report.text,
+                if include_data {
+                    Some(terms::Output::graph(&data, direct)?)
+                } else {
+                    None
+                },
+                report.recursion_warnings,
+            ))
+        });
+        let (conforms, report, text, expanded, warnings) = comparison.finish(py, result)?;
         Ok((
             conforms,
             report.into_python(py)?,
@@ -509,6 +519,7 @@ impl PyCompiledShapes {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (source, rdf_format, base, iterate_rules, max_rule_iterations, max_validation_depth, focus_nodes, use_shapes, additions_only, *, _comparison_policy))]
     fn expand(
         &self,
         py: Python<'_>,
@@ -521,40 +532,43 @@ impl PyCompiledShapes {
         focus_nodes: Vec<String>,
         use_shapes: Vec<String>,
         additions_only: bool,
+        _comparison_policy: Py<NativeValueComparisonPolicy>,
     ) -> PyResult<(Py<PyAny>, Vec<String>)> {
         let direct = rdf_format == "terms";
         let input = terms::Input::read(source, rdf_format, base)?;
-        let (output, warnings) = py
-            .detach(|| {
-                let mut data = input.parse()?;
-                let options = Options {
-                    iterate_rules,
-                    max_rule_iterations,
-                    max_validation_depth,
-                    focus_nodes: focus_nodes
-                        .into_iter()
-                        .map(|s| NamedNode::new(s).map(Term::from))
-                        .collect::<std::result::Result<_, _>>()
-                        .map_err(|e| Error::Invalid(e.to_string()))?,
-                    use_shapes: use_shapes
-                        .into_iter()
-                        .map(|s| NamedNode::new(s).map(Term::from))
-                        .collect::<std::result::Result<_, _>>()
-                        .map_err(|e| Error::Invalid(e.to_string()))?,
-                    ..Options::default()
-                };
-                if additions_only {
-                    let delta = self.inner.expand_rules_delta(&mut data, options)?;
-                    Ok((
-                        terms::Output::graph(&delta.graph, direct)?,
-                        delta.recursion_warnings,
-                    ))
-                } else {
-                    let warnings = self.inner.expand_rules(&mut data, options)?;
-                    Ok((terms::Output::graph(&data, direct)?, warnings))
-                }
-            })
-            .map_err(error)?;
+        let comparison = capture_comparison(py, _comparison_policy)?;
+        let authority = comparison.authority();
+        let result = py.detach(|| {
+            let mut data = input.parse()?;
+            let options = Options {
+                comparison: authority,
+                iterate_rules,
+                max_rule_iterations,
+                max_validation_depth,
+                focus_nodes: focus_nodes
+                    .into_iter()
+                    .map(|s| NamedNode::new(s).map(Term::from))
+                    .collect::<std::result::Result<_, _>>()
+                    .map_err(|e| Error::Invalid(e.to_string()))?,
+                use_shapes: use_shapes
+                    .into_iter()
+                    .map(|s| NamedNode::new(s).map(Term::from))
+                    .collect::<std::result::Result<_, _>>()
+                    .map_err(|e| Error::Invalid(e.to_string()))?,
+                ..Options::default()
+            };
+            if additions_only {
+                let delta = self.inner.expand_rules_delta(&mut data, options)?;
+                Ok((
+                    terms::Output::graph(&delta.graph, direct)?,
+                    delta.recursion_warnings,
+                ))
+            } else {
+                let warnings = self.inner.expand_rules(&mut data, options)?;
+                Ok((terms::Output::graph(&data, direct)?, warnings))
+            }
+        });
+        let (output, warnings) = comparison.finish(py, result)?;
         Ok((output.into_python(py)?, warnings))
     }
 }
@@ -563,13 +577,18 @@ impl PyCompiledShapes {
 ///
 /// Both binding surfaces borrow the provider's engine. Rust allocations never
 /// cross independently loaded extensions.
-pub fn register(module: &Bound<'_, PyModule>, regex_policy: Arc<RegexPolicy>) -> PyResult<()> {
+pub fn register(
+    module: &Bound<'_, PyModule>,
+    regex_policy: Arc<RegexPolicy>,
+    comparison_host: Arc<dyn ComparisonHost>,
+) -> PyResult<()> {
     if module.hasattr("_REGEX_POLICY")? {
         return Err(PyRuntimeError::new_err(
             "SHACL module is already registered",
         ));
     }
     regex_policy::install(module, regex_policy)?;
+    comparison::install(module, comparison_host)?;
     module.add("SHAPES_BATCH_SIZE", canonical::BATCH_SIZE)?;
     module.add(
         "SHACL_ENGINE_FINGERPRINT",

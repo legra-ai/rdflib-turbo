@@ -97,3 +97,95 @@ def test_inference_boolean_allocation_budgets_are_required(budgets, name):
 )
 def test_union_count_allocation_budgets_are_required(budgets, name):
     assert name in budgets.TESTS
+
+
+def test_bare_allocation_entrypoint_uses_verified_locked_runtime(budgets, monkeypatch, tmp_path):
+    from contextlib import contextmanager
+
+    authority = tmp_path / "yaml-inputs.json"
+    authority.write_text("authority")
+    selected = {"PYO3_PYTHON": "/isolated/project/.venv/bin/python"}
+    calls = []
+
+    @contextmanager
+    def locked(root, output, python, yaml_authority):
+        assert root == Path(budgets.__file__).resolve().parents[1]
+        assert yaml_authority == authority
+        calls.append("enter")
+        yield selected
+        calls.append("verify-after")
+
+    def bare_forbidden(*args, **kwargs):
+        raise AssertionError("Bare allocation interpreter cannot supply embedded dependencies")
+
+    monkeypatch.setattr(budgets, "locked_python_environment", locked, raising=False)
+    monkeypatch.setattr(budgets, "embedded_python_environment", bare_forbidden, raising=False)
+    monkeypatch.setattr(budgets, "run_budgets", lambda environment: calls.append(environment))
+    monkeypatch.setattr(
+        budgets.sys, "argv", ["allocation_budgets", "--yaml-authority", str(authority)]
+    )
+    budgets.main()
+    assert calls == ["enter", selected, "verify-after"]
+
+
+def test_memory_profile_entrypoint_uses_same_verified_locked_runtime(monkeypatch, tmp_path):
+    import importlib.util
+    import json
+    from contextlib import contextmanager
+
+    root = Path(__file__).resolve().parents[1]
+    monkeypatch.syspath_prepend(str(root / "scripts"))
+    spec = importlib.util.spec_from_file_location(
+        "profile_memory_driver", root / "scripts/profile_memory.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    data, shapes, authority = (tmp_path / name for name in ("data.ttl", "shapes.ttl", "yaml.json"))
+    for path in (data, shapes, authority):
+        path.write_text("frozen")
+    selected = {"PYO3_PYTHON": "/isolated/project/.venv/bin/python"}
+    calls = []
+
+    @contextmanager
+    def locked(owner, output, python, yaml_authority):
+        assert owner == root and yaml_authority == authority
+        calls.append("enter")
+        yield selected
+        calls.append("verify-after")
+
+    def run(arguments, environment=None, *, capture=False):
+        if arguments[0] != "cargo":
+            return "revision\n" if "rev-parse" in arguments else ""
+        assert environment["PYO3_PYTHON"] == selected["PYO3_PYTHON"]
+        calls.append("profile")
+        return "\n".join(
+            "MEMORY_PHASE " + json.dumps({"phase": phase})
+            for phase in (
+                "setup",
+                "parse",
+                "inference",
+                "compile_shapes",
+                "validation_native_report",
+                "released",
+            )
+        )
+
+    monkeypatch.setattr(module, "locked_python_environment", locked, raising=False)
+    monkeypatch.setattr(module, "run", run)
+    monkeypatch.setattr(
+        module.sys,
+        "argv",
+        [
+            "profile_memory",
+            "--data",
+            str(data),
+            "--shapes",
+            str(shapes),
+            "--output",
+            str(tmp_path / "report.json"),
+            "--yaml-authority",
+            str(authority),
+        ],
+    )
+    module.main()
+    assert calls == ["enter", "profile", "verify-after"]

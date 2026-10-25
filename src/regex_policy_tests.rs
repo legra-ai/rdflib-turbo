@@ -22,6 +22,16 @@ fn host_ffi_store_and_shared_compilers_require_the_module_authority() {
                     .unwrap(),
             )
             .unwrap();
+        kwargs
+            .set_item(
+                "_comparison_policy",
+                module
+                    .getattr("shacl")
+                    .unwrap()
+                    .getattr("_VALUE_COMPARISON_POLICY")
+                    .unwrap(),
+            )
+            .unwrap();
         let shapes = module.getattr("SharedShapes").unwrap();
         shapes
             .call(("", false, Vec::<(String, String)>::new()), Some(&kwargs))
@@ -32,6 +42,14 @@ fn host_ffi_store_and_shared_compilers_require_the_module_authority() {
                 .unwrap_err()
                 .to_string()
                 .contains("_policy")
+        );
+        kwargs.del_item("_comparison_policy").unwrap();
+        assert!(
+            shapes
+                .call(("", false, Vec::<(String, String)>::new()), Some(&kwargs))
+                .unwrap_err()
+                .to_string()
+                .contains("_comparison_policy")
         );
         let store = module.getattr("NativeStore").unwrap().call0().unwrap();
         let compiler = store.getattr("compile_shapes").unwrap();
