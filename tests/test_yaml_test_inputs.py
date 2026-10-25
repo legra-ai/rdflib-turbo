@@ -235,8 +235,9 @@ def test_verify_rejects_wheel_mutations_even_with_updated_digest(prepared, mutat
         helper.verify(owner, output / "yaml-inputs.json")
 
 
+@pytest.mark.parametrize("preloaded", [False, True], ids=["cold", "preloaded-family"])
 def test_loaded_checks_full_payload_without_importing_optional_c_modules(
-    prepared, tmp_path, monkeypatch
+    prepared, tmp_path, monkeypatch, preloaded
 ):
     helper, _, output, record, _ = prepared
     venv = tmp_path / "venv"
@@ -246,7 +247,11 @@ def test_loaded_checks_full_payload_without_importing_optional_c_modules(
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
     module = SimpleNamespace(__file__=str(site / "yaml/__init__.py"), __version__="6.0.3")
-    monkeypatch.setitem(sys.modules, "yaml", module)
+    if preloaded:
+        for name in ("yaml.reader", "_yaml", "_yaml.preexisting"):
+            monkeypatch.setitem(
+                sys.modules, name, SimpleNamespace(__file__=str(tmp_path / "external" / name))
+            )
     imported = []
 
     def import_module(name):
@@ -254,13 +259,29 @@ def test_loaded_checks_full_payload_without_importing_optional_c_modules(
         assert name == "yaml", "Optional C modules must not be imported for a pure wheel"
         return module
 
-    monkeypatch.setattr(helper.importlib, "import_module", import_module)
-    proof = helper.verify_loaded(output / record["wheel"], venv)
-    assert proof["payload"] == record["package_payload"]
-    assert imported == ["yaml"]
-    (site / "_yaml/extra.py").write_text("extra")
-    with pytest.raises(ValueError):
-        helper.verify_loaded(output / record["wheel"], venv)
+    before = {
+        name: loaded
+        for name, loaded in sys.modules.items()
+        if name in ("yaml", "_yaml") or name.startswith(("yaml.", "_yaml."))
+    }
+    with monkeypatch.context() as isolated:
+        for name in before:
+            isolated.delitem(sys.modules, name)
+        isolated.setitem(sys.modules, "yaml", module)
+        isolated.setattr(helper.importlib, "import_module", import_module)
+        proof = helper.verify_loaded(output / record["wheel"], venv)
+        assert proof["payload"] == record["package_payload"]
+        assert imported == ["yaml"]
+        (site / "_yaml/extra.py").write_text("extra")
+        with pytest.raises(ValueError):
+            helper.verify_loaded(output / record["wheel"], venv)
+    after = {
+        name: loaded
+        for name, loaded in sys.modules.items()
+        if name in ("yaml", "_yaml") or name.startswith(("yaml.", "_yaml."))
+    }
+    assert after.keys() == before.keys()
+    assert all(after[name] is loaded for name, loaded in before.items())
 
 
 def test_loaded_rejects_source_import_origin(prepared, tmp_path, monkeypatch):

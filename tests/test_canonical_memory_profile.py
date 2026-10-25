@@ -146,7 +146,10 @@ def test_public_source_layout_comes_from_declared_build_inputs(tmp_path):
     assert list(finder.find_distributions()) == []
 
 
-def test_semantic_audit_runs_after_measured_release_with_actual_package_init(tmp_path, monkeypatch):
+@pytest.mark.parametrize("preloaded", [False, True], ids=["cold", "preloaded-family"])
+def test_semantic_audit_runs_after_measured_release_with_actual_package_init(
+    tmp_path, monkeypatch, preloaded
+):
     import sys
     from types import SimpleNamespace
 
@@ -156,6 +159,11 @@ def test_semantic_audit_runs_after_measured_release_with_actual_package_init(tmp
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    if preloaded:
+        for project in module.PROJECTS:
+            name = project.replace("-", "_")
+            for loaded in (name, name + ".preexisting"):
+                monkeypatch.setitem(sys.modules, loaded, SimpleNamespace(loaded=loaded))
     inputs = {}
     for name in module.PROJECTS:
         source = tmp_path / name
@@ -185,11 +193,21 @@ def test_semantic_audit_runs_after_measured_release_with_actual_package_init(tmp
         return {"native_origin": "compiled-source-test-binary"}
 
     monkeypatch.setattr(module, "pipeline", pipeline)
-    module.execute(
-        native, lambda name, count: events.append(name), inputs, "data", "shapes", "rdfs"
-    )
-    assert events == ["measurement", "validation_public_report", "released", "semantic"]
-    assert "rdflib_turbo" not in sys.modules
+    families = {project.replace("-", "_") for project in module.PROJECTS}
+    before = {
+        name: loaded for name, loaded in sys.modules.items() if name.split(".")[0] in families
+    }
+    with monkeypatch.context() as isolated:
+        for name in before:
+            isolated.delitem(sys.modules, name)
+        module.execute(
+            native, lambda name, count: events.append(name), inputs, "data", "shapes", "rdfs"
+        )
+        assert events == ["measurement", "validation_public_report", "released", "semantic"]
+        assert "rdflib_turbo" not in sys.modules
+    after = {name: loaded for name, loaded in sys.modules.items() if name.split(".")[0] in families}
+    assert after.keys() == before.keys()
+    assert all(after[name] is loaded for name, loaded in before.items())
 
 
 def test_opt_in_allocator_fixture_is_not_a_production_coverage_source(profiler):
