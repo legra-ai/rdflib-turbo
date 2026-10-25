@@ -163,6 +163,8 @@ def _reference(source):
             raise ValueError("Reference source contains a symlink")
         if path.is_file():
             result[path.relative_to(source).as_posix()] = digest(path)
+        elif not path.is_dir():
+            raise ValueError("Reference source contains a nonregular entry")
     return result
 
 

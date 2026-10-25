@@ -4,6 +4,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 import shutil
 import sys
 import tarfile
@@ -181,6 +182,14 @@ def test_verify_rejects_altered_authority_inputs(prepared, mutation):
         record["provenance"]["python_command"] = ["python", "unverified.py"]
     (output / "yaml-inputs.json").write_text(json.dumps(record))
     with pytest.raises((ValueError, FileNotFoundError)):
+        helper.verify(owner, output / "yaml-inputs.json")
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="Unix nonregular source entry")
+def test_verify_rejects_nonregular_reference_source_entry(prepared):
+    helper, owner, output, record, _ = prepared
+    os.mkfifo(output / record["source"] / "extra-fifo")
+    with pytest.raises(ValueError, match="regular"):
         helper.verify(owner, output / "yaml-inputs.json")
 
 
