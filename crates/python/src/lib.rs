@@ -1,7 +1,7 @@
 mod comparison;
 pub use comparison::{
     ComparisonHost, ComparisonInvocation, ComparisonPublisher, NativeValueComparisonPolicy,
-    capture_comparison, comparison_error,
+    capture_comparison, comparison_error, comparison_host,
 };
 mod canonical;
 #[cfg(test)]

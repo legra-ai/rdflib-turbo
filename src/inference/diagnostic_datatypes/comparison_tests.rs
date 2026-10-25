@@ -40,7 +40,7 @@ from rdflib import Graph
 source = '<urn:s> <urn:p> "1.0"^^<http://www.w3.org/2001/XMLSchema#double>.'
 shapes = '@prefix sh:<http://www.w3.org/ns/shacl#>. @prefix xsd:<http://www.w3.org/2001/XMLSchema#>. <urn:S> sh:targetNode <urn:s>; sh:property [sh:path <urn:p>;sh:minInclusive "0.9"^^xsd:decimal].'
 compiled = native.shacl.CompiledShapes(shapes, 'turtle', None, False, True, [], _policy=native.shacl._REGEX_POLICY)
-shared = native.SharedShapes.from_compiled(compiled)
+shared = native.SharedShapes.from_compiled(compiled, _comparison_policy=native.shacl._VALUE_COMPARISON_POLICY)
 store = native.NativeStore()
 store.load(source, 'turtle')
 legacy = native.NativeDataset()
@@ -80,7 +80,7 @@ import sys
 source = '@prefix xsd:<http://www.w3.org/2001/XMLSchema#>. <urn:s> <urn:p> "1.0"^^xsd:double; <urn:q> "0.9"^^xsd:decimal.'
 shapes = '@prefix sh:<http://www.w3.org/ns/shacl#>. <urn:S> sh:targetNode <urn:s>;sh:rule [a sh:TripleRule;sh:subject sh:this;sh:predicate <urn:derived>;sh:object <urn:marker>;sh:condition <urn:C>]. <urn:C> sh:property [sh:path <urn:p>;sh:lessThanOrEquals <urn:q>].'
 compiled = native.shacl.CompiledShapes(shapes, 'turtle', None, True, True, [], _policy=native.shacl._REGEX_POLICY)
-shared = native.SharedShapes.from_compiled(compiled)
+shared = native.SharedShapes.from_compiled(compiled, _comparison_policy=native.shacl._VALUE_COMPARISON_POLICY)
 for legacy in [False, True]:
     owner = native.NativeDataset() if legacy else native.NativeStore()
     owner.load(source, 'turtle', None, True) if legacy else owner.load(source, 'turtle')
@@ -114,7 +114,7 @@ import sys
 source = '@prefix kept:<urn:kept:>. @prefix xsd:<http://www.w3.org/2001/XMLSchema#>. <urn:s> <urn:p> "1.0"^^xsd:double; <urn:q> "0.9"^^xsd:decimal.'
 shapes = '@prefix sh:<http://www.w3.org/ns/shacl#>. <urn:S> sh:targetNode <urn:s>;sh:rule [a sh:TripleRule;sh:subject sh:this;sh:predicate <urn:derived>;sh:object <urn:marker>;sh:condition <urn:C>]. <urn:C> sh:property [sh:path <urn:p>;sh:lessThanOrEquals <urn:q>].'
 compiled = native.shacl.CompiledShapes(shapes, 'turtle', None, True, True, [], _policy=native.shacl._REGEX_POLICY)
-shared = native.SharedShapes.from_compiled(compiled)
+shared = native.SharedShapes.from_compiled(compiled, _comparison_policy=native.shacl._VALUE_COMPARISON_POLICY)
 for legacy in [False, True]:
     owner = native.NativeDataset() if legacy else native.NativeStore()
     owner.load(source, 'turtle', None, True) if legacy else owner.load(source, 'turtle')

@@ -156,9 +156,13 @@ impl Settings {
         settings.options()
     }
 
-    pub(super) fn capture_rules(py: Python<'_>, source: &str) -> PyResult<(Options, Publisher)> {
+    pub(super) fn capture_rules(
+        py: Python<'_>,
+        source: &str,
+        host: &dyn shacl_bindings::ComparisonHost,
+    ) -> PyResult<(Options, Publisher)> {
         let mut options = Self::parse(source)?;
-        let comparison = crate::inference::ComparisonHost::capture_current(py)?;
+        let comparison = host.capture(py)?;
         options.comparison = comparison.authority();
         Ok((
             options,
@@ -169,13 +173,17 @@ impl Settings {
         ))
     }
 
-    pub(super) fn capture(py: Python<'_>, source: &str) -> PyResult<Captured> {
+    pub(super) fn capture(
+        py: Python<'_>,
+        source: &str,
+        host: &dyn shacl_bindings::ComparisonHost,
+    ) -> PyResult<Captured> {
         let settings = Self::decode(source)?;
         let mode = settings
             .inference
             .filter(|mode| !matches!(mode, Mode::None));
         let mut options = settings.options()?;
-        let comparison = crate::inference::ComparisonHost::capture_current(py)?;
+        let comparison = host.capture(py)?;
         options.comparison = comparison.authority();
         let (inference, publisher) = match mode {
             Some(mode) => {

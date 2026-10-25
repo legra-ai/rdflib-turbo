@@ -13,6 +13,23 @@ pub(crate) fn host_regex_policy(py: Python<'_>) -> Py<shacl_bindings::NativeRege
     module.getattr("_REGEX_POLICY").unwrap().extract().unwrap()
 }
 
+pub(crate) fn host_comparison_policy(
+    py: Python<'_>,
+) -> Py<shacl_bindings::NativeValueComparisonPolicy> {
+    let module = pyo3::types::PyModule::new(py, "native_comparison_policy_fixture").unwrap();
+    shacl_bindings::register(
+        &module,
+        crate::regex_policy::build(py).unwrap(),
+        std::sync::Arc::new(crate::inference::ComparisonHost::new(py).unwrap()),
+    )
+    .unwrap();
+    module
+        .getattr("_VALUE_COMPARISON_POLICY")
+        .unwrap()
+        .extract()
+        .unwrap()
+}
+
 #[test]
 fn failure_after_an_inference_round_rolls_back_all_axioms_and_derived_facts() {
     Python::initialize();

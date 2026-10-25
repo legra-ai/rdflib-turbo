@@ -20,7 +20,8 @@ impl SharedShapes {
         if let Some(prepared) = self.infer_dataset(py, dataset, settings, inplace)? {
             return prepared.finish(py, dataset, 4);
         }
-        let (mut options, publisher) = Settings::capture_rules(py, settings)?;
+        let (mut options, publisher) =
+            Settings::capture_rules(py, settings, self.comparison_host.as_ref())?;
         let result = py.detach(|| -> crate::Result<Prepared<Output>> {
             if !inplace || !self.inner.has_active_rules(&options) {
                 let data = dataset
@@ -67,7 +68,8 @@ impl SharedShapes {
         {
             return Ok(PreparedDatasetValidation::new(owner, report, pending));
         }
-        let (mut options, publisher) = Settings::capture_rules(py, settings)?;
+        let (mut options, publisher) =
+            Settings::capture_rules(py, settings, self.comparison_host.as_ref())?;
         let result = py.detach(|| -> crate::Result<_> {
             let data = dataset
                 .inner
@@ -177,6 +179,7 @@ mod tests {
                 vec![],
                 true,
                 crate::native_tests::host_regex_policy(py),
+                crate::native_tests::host_comparison_policy(py),
             )
             .unwrap();
             let prepared = program
@@ -229,6 +232,7 @@ mod tests {
                 vec![],
                 true,
                 crate::native_tests::host_regex_policy(py),
+                crate::native_tests::host_comparison_policy(py),
             )
             .unwrap();
             for consumed in [false, true] {

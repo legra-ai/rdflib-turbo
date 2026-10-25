@@ -19,7 +19,8 @@ impl SharedShapes {
         settings: &str,
         inplace: bool,
     ) -> PyResult<Output> {
-        let (mut options, publisher) = Settings::capture_rules(py, settings)?;
+        let (mut options, publisher) =
+            Settings::capture_rules(py, settings, self.comparison_host.as_ref())?;
         let result = py.detach(|| -> crate::Result<Prepared<Output>> {
             if inplace {
                 let current = dataset
@@ -85,6 +86,7 @@ mod tests {
                 vec![],
                 true,
                 crate::native_tests::host_regex_policy(py),
+                crate::native_tests::host_comparison_policy(py),
             )
             .unwrap();
             let (result, warnings) = shapes.expand(py, &data, "{}", false).unwrap();
@@ -120,6 +122,7 @@ mod tests {
                 vec![],
                 true,
                 crate::native_tests::host_regex_policy(py),
+                crate::native_tests::host_comparison_policy(py),
             )
             .unwrap();
             let failure = shapes

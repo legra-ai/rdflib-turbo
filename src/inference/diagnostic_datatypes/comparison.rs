@@ -25,9 +25,6 @@ impl Host {
             site: comparison_warning::Site::read(py)?,
         })
     }
-    pub(crate) fn capture_current(py: Python<'_>) -> PyResult<ComparisonInvocation> {
-        Self::new(py)?.capture(py)
-    }
 }
 impl ComparisonHost for Host {
     fn capture(&self, py: Python<'_>) -> PyResult<ComparisonInvocation> {

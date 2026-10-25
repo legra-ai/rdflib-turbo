@@ -54,14 +54,22 @@ pub fn capture_comparison(
     py: Python<'_>,
     policy: Py<NativeValueComparisonPolicy>,
 ) -> PyResult<ComparisonInvocation> {
+    comparison_host(py, policy)?.capture(py)
+}
+/// Share the immutable factory descriptor without capturing any caller context.
+pub fn comparison_host(
+    py: Python<'_>,
+    policy: Py<NativeValueComparisonPolicy>,
+) -> PyResult<Arc<dyn ComparisonHost>> {
     let policy = policy.bind(py).get();
     if interpreter(py)? != policy.interpreter {
         return Err(PyRuntimeError::new_err(
             "Core comparison policy belongs to another interpreter",
         ));
     }
-    policy.host.capture(py)
+    Ok(Arc::clone(&policy.host))
 }
+
 pub(super) fn install(module: &Bound<'_, PyModule>, host: Arc<dyn ComparisonHost>) -> PyResult<()> {
     let py = module.py();
     module.add(

@@ -51,7 +51,14 @@ fn shared_validation_reuses_the_registered_standalone_program() {
         let second = second
             .extract::<PyRef<'_, shacl_bindings::PyCompiledShapes>>()
             .unwrap();
-        let shared = SharedShapes::from_compiled(&first);
+        let token = module
+            .getattr("shacl")
+            .unwrap()
+            .getattr("_VALUE_COMPARISON_POLICY")
+            .unwrap()
+            .extract()
+            .unwrap();
+        let shared = SharedShapes::from_compiled(py, &first, token).unwrap();
         assert!(shared.shares_program(&first));
         assert!(!shared.shares_program(&second));
     });
