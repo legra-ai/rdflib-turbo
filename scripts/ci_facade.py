@@ -25,10 +25,11 @@ def policy(path=None):
     document = json.loads((path or Path(__file__).with_name("ci-facade.json")).read_text())
     repositories = {
         "facade": "https://github.com/legra-ai/pyshacl-turbo",
+        "declaration": "https://github.com/legra-ai/pyshacl-turbo",
         "owlrl": "https://github.com/legra-ai/owlrl-turbo",
     }
     if set(document) != set(repositories):
-        raise ValueError("CI requires explicit facade and OWL source authorities")
+        raise ValueError("CI requires explicit facade, declaration and OWL source authorities")
     for name, repository in repositories.items():
         selected = document[name]
         if (
@@ -103,8 +104,13 @@ def prepare(output):
     owner = owner_input()
     facade = output.with_name(output.name + "-source")
     owlrl = output.with_name(output.name + "-owlrl-source")
+    declaration = output.with_name(output.name + "-declaration-source")
     builder = load("build_facade_candidate")
-    peers = (("facade", "pyshacl-turbo", facade), ("owlrl", "owlrl-turbo", owlrl))
+    peers = (
+        ("facade", "pyshacl-turbo", facade),
+        ("declaration", "pyshacl-turbo", declaration),
+        ("owlrl", "owlrl-turbo", owlrl),
+    )
     frozen = {}
     for name, project, source in peers:
         checkout(selected[name], source)
@@ -114,8 +120,8 @@ def prepare(output):
         facade_source=facade,
         facade_revision=selected["facade"]["revision"],
         provider_revision=owner["revision"],
-        declaration_source=None,
-        declaration_revision=None,
+        declaration_source=declaration,
+        declaration_revision=selected["declaration"]["revision"],
         declaration_archive=None,
         declaration_sha256=None,
         output=build_output,
@@ -147,6 +153,12 @@ def declaration_peer(manifest):
     return ROOT.parent / "pyshacl-turbo"
 
 
+def verify_declaration(record, selected):
+    authority = record.get("authority", {})
+    if authority.get("kind") != "git" or authority.get("revision") != selected["revision"]:
+        raise ValueError("Candidate declaration authority differs from independent CI policy")
+
+
 def consume(bundle):
     bundle = bundle.resolve(strict=True)
     selected, owner, manifest = policy(), owner_input(), owner_manifest()
@@ -160,6 +172,7 @@ def consume(bundle):
     record, artifacts = verified["record"], verified["artifacts"]
     if record["provider_input"] != owner:
         raise ValueError("Candidate receipt differs from the complete native provider source")
+    verify_declaration(record["declaration"], selected["declaration"])
     builder = load("build_facade_candidate")
     facade_source = bundle / "candidate-source"
     extract_original(

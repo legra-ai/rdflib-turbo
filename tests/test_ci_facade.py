@@ -23,6 +23,10 @@ def test_policy_requires_the_public_repository_and_an_immutable_revision(tmp_pat
     policy = tmp_path / "policy.json"
     document = {
         "facade": {"repository": "https://github.com/legra-ai/pyshacl-turbo", "revision": REVISION},
+        "declaration": {
+            "repository": "https://github.com/legra-ai/pyshacl-turbo",
+            "revision": REVISION,
+        },
         "owlrl": {"repository": "https://github.com/legra-ai/owlrl-turbo", "revision": REVISION},
     }
     policy.write_text(json.dumps(document))
@@ -158,7 +162,11 @@ def test_prepare_rejects_an_unavailable_owl_revision_before_building_any_facade(
     tmp_path, monkeypatch
 ):
     module = helper()
-    selected = {"facade": {"revision": REVISION}, "owlrl": {"revision": "c" * 40}}
+    selected = {
+        "facade": {"revision": REVISION},
+        "declaration": {"revision": "d" * 40},
+        "owlrl": {"revision": "c" * 40},
+    }
     monkeypatch.setattr(module, "policy", lambda: selected)
     monkeypatch.setattr(module, "owner_input", lambda: {"revision": "b" * 40})
     calls = []
@@ -177,14 +185,18 @@ def test_prepare_rejects_an_unavailable_owl_revision_before_building_any_facade(
     monkeypatch.setattr(module, "load", lambda name: builder)
     with pytest.raises(subprocess.CalledProcessError):
         module.prepare(tmp_path / "candidate-facade-evidence")
-    assert calls == [("checkout", REVISION), ("checkout", "c" * 40)]
+    assert calls == [("checkout", REVISION), ("checkout", "d" * 40), ("checkout", "c" * 40)]
 
 
 def test_prepare_rechecks_both_immutable_peers_after_pure_artifact_construction(
     tmp_path, monkeypatch
 ):
     module = helper()
-    selected = {"facade": {"revision": REVISION}, "owlrl": {"revision": "c" * 40}}
+    selected = {
+        "facade": {"revision": REVISION},
+        "declaration": {"revision": "d" * 40},
+        "owlrl": {"revision": "c" * 40},
+    }
     monkeypatch.setattr(module, "policy", lambda: selected)
     monkeypatch.setattr(module, "owner_input", lambda: {"revision": "b" * 40})
     calls = []
@@ -256,7 +268,11 @@ def test_every_consumer_receives_the_same_original_owl_without_fetching_or_build
     record = {
         "provider_input": owner,
         "candidate_archive_sha256": "d" * 64,
-        "declaration": {"archive": "base.tar.gz", "archive_sha256": "e" * 64},
+        "declaration": {
+            "archive": "base.tar.gz",
+            "archive_sha256": "e" * 64,
+            "authority": {"kind": "git", "revision": "d" * 40},
+        },
     }
     artifacts = {
         "candidate_archive": bundle / "candidate.tar.gz",
@@ -285,7 +301,11 @@ def test_every_consumer_receives_the_same_original_owl_without_fetching_or_build
     monkeypatch.setattr(
         module,
         "policy",
-        lambda: {"facade": {"revision": REVISION}, "owlrl": {"revision": "c" * 40}},
+        lambda: {
+            "facade": {"revision": REVISION},
+            "declaration": {"revision": "d" * 40},
+            "owlrl": {"revision": "c" * 40},
+        },
     )
     monkeypatch.setattr(module, "extract_original", lambda *args: None)
     monkeypatch.setattr(module, "declaration_peer", lambda manifest: tmp_path / "peer")
@@ -297,3 +317,45 @@ def test_every_consumer_receives_the_same_original_owl_without_fetching_or_build
     assert environment["OWLRL_SOURCE"] == str(owl["source"])
     assert environment["OWLRL_ARCHIVE"] == str(owl["archive"])
     assert environment["OWLRL_SHA256"] == "f" * 64
+
+
+def test_declaration_authority_is_mandatory_even_when_facade_is_identical(tmp_path):
+    document = helper().policy()
+    document.pop("declaration")
+    path = tmp_path / "policy.json"
+    path.write_text(json.dumps(document))
+    with pytest.raises(ValueError, match="declaration"):
+        helper().policy(path)
+
+
+def test_candidate_declaration_must_match_its_independent_policy():
+    module = helper()
+    selected = {"repository": "https://github.com/legra-ai/pyshacl-turbo", "revision": "d" * 40}
+    for authority in ({"kind": "git", "revision": REVISION}, {"kind": "original-sdist"}, {}):
+        with pytest.raises(ValueError, match="declaration authority"):
+            module.verify_declaration({"authority": authority}, selected)
+    module.verify_declaration({"authority": {"kind": "git", "revision": "d" * 40}}, selected)
+
+
+def test_prepare_explicitly_passes_independent_declaration_before_any_build(tmp_path, monkeypatch):
+    module = helper()
+    selected = {
+        name: {"revision": char * 40}
+        for name, char in (("facade", "a"), ("declaration", "d"), ("owlrl", "c"))
+    }
+    monkeypatch.setattr(module, "policy", lambda: selected)
+    monkeypatch.setattr(module, "owner_input", lambda: {"revision": "b" * 40})
+    checked = []
+    monkeypatch.setattr(module, "checkout", lambda peer, path: checked.append(peer["revision"]))
+
+    def build(arguments):
+        assert checked == ["a" * 40, "d" * 40, "c" * 40]
+        assert arguments.declaration_revision == "d" * 40
+        assert arguments.declaration_source.name == "candidate-facade-evidence-declaration-source"
+        raise RuntimeError("all independent authorities checked")
+
+    monkeypatch.setattr(
+        module, "load", lambda name: SimpleNamespace(build=build, freeze=lambda *args: {})
+    )
+    with pytest.raises(RuntimeError, match="independent authorities"):
+        module.prepare(tmp_path / "candidate-facade-evidence")
