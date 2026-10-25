@@ -7,11 +7,18 @@ use pyo3::types::{PyDict, PyModule};
 #[pyfunction]
 fn memory_phase(name: &str, quads: usize) {
     super::phase(name, quads);
+    if name == "inference" {
+        super::trace::pause();
+    }
 }
 
 #[test]
 #[ignore = "isolated requested-Rust-heap profile with frozen public Python source authorities"]
 fn profile_canonical_store_pipeline_allocations() {
+    let _trace = std::env::var_os("MEMORY_INFERENCE_TRACE").map(|setting| {
+        assert_eq!(setting, "1", "invalid source-only inference trace selector");
+        super::trace::Guard::enable()
+    });
     Python::initialize();
     Python::attach(|py| {
         let native = PyModule::new(py, "source_memory_profile").unwrap();

@@ -83,6 +83,10 @@ pub(crate) fn mark(event: &'static str, round: usize, heads: (usize, usize)) {
     emit_into(&mut io::stdout().lock(), event, round, heads).expect("write allocation trace");
 }
 
+pub(crate) fn pause() {
+    ENABLED.store(false, Relaxed);
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::{Cursor, Write};
@@ -160,5 +164,19 @@ mod tests {
             assert!(ENABLED.load(Relaxed));
         }
         assert!(!ENABLED.load(Relaxed));
+    }
+
+    #[test]
+    #[ignore = "exact isolated allocator process required"]
+    fn paused_trace_does_not_observe_the_independent_semantic_replay() {
+        let _guard = Guard::enable();
+        pause();
+        let mut bytes = [0; 512];
+        let mut output = Cursor::new(bytes.as_mut_slice());
+        let before = counters();
+        emit_into(&mut output, "semantic-replay", 0, (0, 0)).unwrap();
+        mark("semantic-replay", 0, (0, 0));
+        assert_eq!(counters(), before);
+        assert_eq!(output.position(), 0);
     }
 }

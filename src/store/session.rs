@@ -1,4 +1,6 @@
 //! A transaction stays on its native owner thread; no borrowed handle escapes.
+#[cfg(all(test, feature = "allocation-profiling"))]
+use crate::allocation_tests::trace;
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread::{self, JoinHandle};
 
@@ -192,6 +194,8 @@ impl Session {
                     .map_err(|e| Error::Runtime(e.to_string()));
                 match transaction {
                     Ok(transaction) => {
+                        #[cfg(all(test, feature = "allocation-profiling"))]
+                        trace::mark("worker_transaction_ready", 0, (0, 0));
                         if ready.send(Ok(())).is_ok() {
                             run(transaction, receiver);
                         }
@@ -352,9 +356,14 @@ fn run(mut transaction: Transaction<'_>, receiver: mpsc::Receiver<Command>) {
                         "Cannot commit before validation output is accepted".into(),
                     ))
                 } else if commit {
-                    transaction
+                    #[cfg(all(test, feature = "allocation-profiling"))]
+                    trace::mark("worker_commit_before", 0, (0, 0));
+                    let result = transaction
                         .commit()
-                        .map_err(|e| Error::Runtime(e.to_string()))
+                        .map_err(|e| Error::Runtime(e.to_string()));
+                    #[cfg(all(test, feature = "allocation-profiling"))]
+                    trace::mark("worker_commit_after", 0, (0, 0));
+                    result
                 } else {
                     drop(changes.take());
                     drop(transaction);
