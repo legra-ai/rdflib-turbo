@@ -1,4 +1,5 @@
-Cargo.lock
+# The locked standalone CI graph is an attributed source input.
+!Cargo.lock
 target
 
 *.iml
