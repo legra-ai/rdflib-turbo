@@ -44,7 +44,15 @@ CHANGE_TESTS = (
 # bounded: only the two native owner cohorts are selected, never unrelated suites.
 COHORTS = ("storage::", "store::generalized::")
 
+EXACT_FEATURES = "exact-term-storage,rocksdb,spareval/rdf-set-union,spareval/exact-custom-function-terms,spareval/exact-term-builtins"
+UNION_BUDGET = (
+    "storage::memory_union_cache_tests::native_union_query_cache_does_not_exceed_sixteen_mebibytes"
+)
+
 REQUIRED_TESTS = (
+    UNION_BUDGET,
+    "storage::memory_union_semantic_tests::native_union_cancellation_errors_when_only_physical_duplicates_remain",
+    "storage::memory_union_semantic_tests::native_union_prefix_cancellation_snapshot_and_rollback_preserve_complete_physical_facts",
     *CHANGE_TESTS,
     "store::generalized::lexical_tests::generalized_lexical_projection_keeps_every_role_mask_and_strict_projection_errors",
     "store::generalized::lexical_tests::generalized_projected_words_outlive_owner_and_keep_pinned_committed_version",
@@ -80,7 +88,7 @@ def patch_arguments(root):
     return arguments
 
 
-def run_configuration(root, features, required):
+def run_configuration(root, features, required, *, isolated=()):
     cargo = ["cargo", *patch_arguments(root)]
     arguments = [
         "--locked",
@@ -100,7 +108,7 @@ def run_configuration(root, features, required):
     available = {
         line.removesuffix(": test") for line in listed.splitlines() if line.endswith(": test")
     }
-    missing = set(required) - available
+    missing = set((*required, *isolated)) - available
     if missing:
         raise RuntimeError(f"Missing native storage regressions: {sorted(missing)}")
     for cohort in COHORTS:
@@ -108,9 +116,23 @@ def run_configuration(root, features, required):
             raise RuntimeError(f"Empty native owner cohort: {cohort}")
         subprocess.run([*arguments, cohort], cwd=root, check=True)
 
+    for name in isolated:
+        result = subprocess.run(
+            [*arguments, name, "--", "--ignored", "--exact", "--nocapture", "--test-threads=1"],
+            cwd=root,
+            check=True,
+            stdout=subprocess.PIPE,
+            text=True,
+        )
+        print(result.stdout, end="")
+        if "test result: ok. 1 passed; 0 failed;" not in result.stdout:
+            raise RuntimeError(
+                f"Native isolated regression did not execute exactly one test: {name}"
+            )
+
 
 def run(root):
-    run_configuration(root, "exact-term-storage,rocksdb", REQUIRED_TESTS)
+    run_configuration(root, EXACT_FEATURES, REQUIRED_TESTS, isolated=(UNION_BUDGET,))
     run_configuration(
         root,
         "rocksdb",

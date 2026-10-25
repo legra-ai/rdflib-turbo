@@ -6,6 +6,9 @@ from pathlib import Path
 from scripts.vendor_memory_tests import patch_arguments
 
 GENERALIZED_GUARDS = (
+    "dataset::default_union_tests::supplied_union_error_propagates_without_reading_generic_rows",
+    "dataset::default_union_tests::absent_union_capability_and_disabled_feature_preserve_existing_generic_semantics",
+    "dataset::default_union_tests::single_default_and_selected_graphs_do_not_invoke_union_capability",
     "dataset::generalized_tests::generalized_adapter_retains_all_roles_masks_and_exact_graph_kinds",
     "dataset::generalized_tests::generalized_adapter_borrows_long_terms_after_temporary_patterns_drop",
     "dataset::generalized_tests::generalized_adapter_graph_names_borrow_and_reject_non_graph_terms",

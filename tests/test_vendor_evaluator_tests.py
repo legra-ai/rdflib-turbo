@@ -66,3 +66,11 @@ def test_explicit_inference_heads_are_mandatory_in_every_feature_profile(runner)
         "inference_construct_tests::inference_construct_retains_quoted_roles_and_propagates_nested_template_errors"
         in runner.ALL_GUARDS
     )
+
+
+def test_optional_unique_union_contract_is_mandatory_with_and_without_union_feature(runner):
+    assert {
+        "dataset::default_union_tests::supplied_union_error_propagates_without_reading_generic_rows",
+        "dataset::default_union_tests::absent_union_capability_and_disabled_feature_preserve_existing_generic_semantics",
+        "dataset::default_union_tests::single_default_and_selected_graphs_do_not_invoke_union_capability",
+    } <= set(runner.GUARDS)
