@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use oxigraph::model::{
-    BlankNode, GeneralizedQuad, GraphName, Literal, NamedNode, NamedOrBlankNode,
+    BlankNode, GeneralizedQuad, GeneralizedQuadRef, GraphName, Literal, NamedNode, NamedOrBlankNode,
 };
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
@@ -363,7 +363,10 @@ fn bounded_equality_witnesses_never_read_destination_edges_in_the_same_round() {
             assert_eq!(expected, generalized, "ordinary strict-domain control");
         }
         assert_eq!(
-            (&actual).into_iter().cloned().collect::<HashSet<_>>(),
+            (&actual)
+                .into_iter()
+                .map(GeneralizedQuadRef::into_owned)
+                .collect::<HashSet<_>>(),
             generalized
         );
         assert!(!actual.contains(&GeneralizedQuad::new(

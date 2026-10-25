@@ -92,7 +92,10 @@ fn sparse_common_predecessors_keep_terminal_terms_and_scoped_visibility() {
                 "strict public CONSTRUCT control"
             );
             assert_eq!(
-                (&actual).into_iter().cloned().collect::<HashSet<_>>(),
+                (&actual)
+                    .into_iter()
+                    .map(GeneralizedQuadRef::into_owned)
+                    .collect::<HashSet<_>>(),
                 generalized
             );
             assert!(actual.contains(&GeneralizedQuad::new(

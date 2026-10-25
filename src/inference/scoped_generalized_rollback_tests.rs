@@ -96,7 +96,7 @@ fn pending_list_error_keeps_generalized_destination_and_rolls_back_prior_writes(
         );
         for quad in &pending {
             assert!(
-                !data.contains(quad.into()).unwrap(),
+                !data.contains(quad).unwrap(),
                 "pending output became visible"
             );
         }

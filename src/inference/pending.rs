@@ -138,18 +138,30 @@ impl IntoIterator for Pending {
 
 #[cfg(test)]
 impl<'a> IntoIterator for &'a Pending {
-    type Item = &'a GeneralizedQuad;
-    type IntoIter = std::iter::Map<
-        std::collections::btree_set::Iter<'a, QuadKey>,
-        fn(&QuadKey) -> &GeneralizedQuad,
-    >;
+    type Item = GeneralizedQuadRef<'a>;
+    type IntoIter = BorrowedHeads<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
-        assert!(
-            self.1.is_empty(),
-            "native frontier must be observed through borrowed heads"
-        );
-        self.0.iter().map(|quad| &quad.0)
+        BorrowedHeads {
+            owned: self.0.iter(),
+            native: self.1.iter(),
+        }
+    }
+}
+
+#[cfg(test)]
+pub(super) struct BorrowedHeads<'a> {
+    owned: std::collections::btree_set::Iter<'a, QuadKey>,
+    native: std::collections::btree_set::Iter<'a, NativeKey>,
+}
+#[cfg(test)]
+impl<'a> Iterator for BorrowedHeads<'a> {
+    type Item = GeneralizedQuadRef<'a>;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.owned
+            .next()
+            .map(QuadView::quad)
+            .or_else(|| self.native.next().map(QuadView::quad))
     }
 }
 
