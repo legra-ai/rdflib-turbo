@@ -102,7 +102,9 @@ def source_fixture(tmp_path, members):
 
 
 def frozen_git(module, source, monkeypatch):
-    tracked = sorted(str(path.relative_to(source)) for path in source.rglob("*") if path.is_file())
+    tracked = sorted(
+        path.relative_to(source).as_posix() for path in source.rglob("*") if path.is_file()
+    )
 
     def run(arguments, *args, **kwargs):
         command = list(map(str, arguments))
@@ -251,3 +253,16 @@ def test_candidate_authority_cannot_enter_published_provider_path(tmp_path):
         "provider_revision": "b" * 40,
         "provider_version": "1.0.0",
     }
+
+
+def test_frozen_git_fixture_emits_git_paths_on_windows(monkeypatch):
+    from pathlib import PureWindowsPath
+    from types import SimpleNamespace
+
+    file = SimpleNamespace(
+        is_file=lambda: True, relative_to=lambda source: PureWindowsPath("tests/test_acceptance.py")
+    )
+    source = SimpleNamespace(rglob=lambda pattern: [file])
+    module = SimpleNamespace(run=None)
+    frozen_git(module, source, monkeypatch)
+    assert module.run(["git", "-C", str(source), "ls-files", "-z"]) == "tests/test_acceptance.py\0"
