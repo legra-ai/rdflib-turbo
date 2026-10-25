@@ -149,6 +149,7 @@ def test_prepare_rejects_unsafe_original_archive(helper, tmp_path, monkeypatch, 
         "lock",
         "record-payload",
         "record-schema",
+        "schema-bool",
         "record-path",
         "record-provenance",
         "python-command",
@@ -170,6 +171,8 @@ def test_verify_rejects_altered_authority_inputs(prepared, mutation):
         record["package_payload"]["yaml/reader.py"] = "0" * 64
     elif mutation == "record-schema":
         record["publishable"] = True
+    elif mutation == "schema-bool":
+        record["schema"] = True
     elif mutation == "record-path":
         record["source"] = "../outside"
     elif mutation == "record-provenance":
@@ -182,7 +185,18 @@ def test_verify_rejects_altered_authority_inputs(prepared, mutation):
 
 
 @pytest.mark.parametrize(
-    "mutation", ["payload", "extra", "dso", "tag", "version", "pure", "filename"]
+    "mutation",
+    [
+        "payload",
+        "extra",
+        "dso",
+        "tag",
+        "version",
+        "pure",
+        "filename",
+        "duplicate-version",
+        "duplicate-pure",
+    ],
 )
 def test_verify_rejects_wheel_mutations_even_with_updated_digest(prepared, mutation):
     helper, owner, output, record, _ = prepared
@@ -198,6 +212,10 @@ def test_verify_rejects_wheel_mutations_even_with_updated_digest(prepared, mutat
         kwargs["version"] = "6.0.4"
     if mutation == "pure":
         kwargs["pure"] = "false"
+    if mutation == "duplicate-version":
+        kwargs["version"] = "6.0.3\nVersion: 6.0.4"
+    if mutation == "duplicate-pure":
+        kwargs["pure"] = "true\nRoot-Is-Purelib: false"
     if mutation == "filename":
         target = target.with_name("other-0-py3-none-any.whl")
         record["wheel"] = "wheels/" + target.name

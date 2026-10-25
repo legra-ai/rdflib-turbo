@@ -120,7 +120,9 @@ def _wheel(wheel):
         info = email.parser.BytesParser().parsebytes(stream.read(metadata[0]))
         tags = email.parser.BytesParser().parsebytes(stream.read(wheel_info[0]))
         if (
-            re.sub(r"[-_.]+", "-", info.get("Name", "")).lower() != "pyyaml"
+            len(info.get_all("Name", [])) != 1
+            or len(info.get_all("Version", [])) != 1
+            or re.sub(r"[-_.]+", "-", info.get("Name", "")).lower() != "pyyaml"
             or info.get("Version") != VERSION
         ):
             raise ValueError("Wrong YAML wheel name/version")
@@ -131,9 +133,11 @@ def _wheel(wheel):
             or fields[1] != VERSION
         ):
             raise ValueError("Wheel filename differs from YAML metadata")
-        if tags.get("Root-Is-Purelib", "").lower() != "true" or tags.get_all("Tag") != [
-            "py3-none-any"
-        ]:
+        if (
+            len(tags.get_all("Root-Is-Purelib", [])) != 1
+            or tags.get("Root-Is-Purelib", "").lower() != "true"
+            or tags.get_all("Tag") != ["py3-none-any"]
+        ):
             raise ValueError("YAML test wheel must be universal pure Python")
         if not Path(wheel).name.endswith("-py3-none-any.whl") or any(
             name.lower().endswith(DSO) for name in names
@@ -303,7 +307,8 @@ def verify(owner, authority):
     root = authority.resolve().parent
     entry, lock_sha = _locked(owner)
     if (
-        record.get("schema") != 1
+        type(record.get("schema")) is not int
+        or record.get("schema") != 1
         or record.get("kind") != KIND
         or record.get("publishable") is not False
     ):
