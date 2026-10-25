@@ -144,3 +144,49 @@ def test_public_source_layout_comes_from_declared_build_inputs(tmp_path):
     assert module.source_package_root(tmp_path, "owlrl-turbo") == tmp_path / "src"
     finder = module.SourceFinder({"owlrl-turbo": "0.1.0a3"})
     assert list(finder.find_distributions()) == []
+
+
+def test_semantic_audit_runs_after_measured_release_with_actual_package_init(tmp_path, monkeypatch):
+    import sys
+    from types import SimpleNamespace
+
+    root = Path(__file__).resolve().parents[1]
+    spec = importlib.util.spec_from_file_location(
+        "memory_fixture_boundaries", root / "scripts/canonical_memory_fixture.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    inputs = {}
+    for name in module.PROJECTS:
+        source = tmp_path / name
+        package = source / "python" / name.replace("-", "_")
+        package.mkdir(parents=True)
+        (package / "__init__.py").write_text("initialized = True\n")
+        tool = (
+            '[tool.maturin]\npython-source="python"\n'
+            if name == "rdflib-turbo"
+            else f'[tool.hatch.build.targets.wheel]\npackages=["python/{name.replace("-", "_")}"]\n'
+        )
+        (source / "pyproject.toml").write_text(
+            f'[project]\nname="{name}"\nversion="1.0.0"\n' + tool
+        )
+        inputs[name] = {"source": str(source)}
+    inputs["declaration"] = {"source": str(tmp_path)}
+    monkeypatch.setattr(module, "assert_no_installed_turbo", lambda: None)
+    events = []
+    native = SimpleNamespace()
+
+    def pipeline(received, phase, *args, observe):
+        assert received is native
+        package = sys.modules["rdflib_turbo"]
+        assert package.initialized and package._native is native
+        events.append("semantic" if observe else "measurement")
+        phase("validation_public_report", 1)
+        return {"native_origin": "compiled-source-test-binary"}
+
+    monkeypatch.setattr(module, "pipeline", pipeline)
+    module.execute(
+        native, lambda name, count: events.append(name), inputs, "data", "shapes", "rdfs"
+    )
+    assert events == ["measurement", "validation_public_report", "released", "semantic"]
+    assert "rdflib_turbo" not in sys.modules

@@ -32,7 +32,10 @@ supplies those exact manifest versions, never installed wheel provenance.
 The dependency environment rejects installed turbo distributions and the fixture
 rejects an installed extension fallback. It checks complete physical facts,
 contexts, report graph/text and Decimal flags against the original packages
-after recording the measured stages. No RSS or timing result is emitted.
+in a separate unmeasured run after measured teardown, using the same frozen
+inputs. The release phase retains the normal bounded compilation cache;
+observation buffers and reference execution never enter its counters.
+No RSS or timing result is emitted.
 
 The allocator records requested live bytes, peak live bytes, cumulative requested
 bytes and allocation calls. A realloc records the replacement's requested size;

@@ -120,6 +120,9 @@ def main():
             [
                 "cargo",
                 "test",
+                "--package",
+                "rdflib-turbo-native",
+                "--lib",
                 "--manifest-path",
                 ROOT / "Cargo.toml",
                 "--locked",

@@ -157,6 +157,7 @@ def test_memory_profile_entrypoint_uses_same_verified_locked_runtime(monkeypatch
         if arguments[0] != "cargo":
             return "revision\n" if "rev-parse" in arguments else ""
         assert environment["PYO3_PYTHON"] == selected["PYO3_PYTHON"]
+        assert arguments[arguments.index("--package") + 1] == "rdflib-turbo-native"
         calls.append("profile")
         return "\n".join(
             "MEMORY_PHASE " + json.dumps({"phase": phase})

@@ -1,7 +1,7 @@
 """Test-binary-only public pipeline; never an installed-wheel authority."""
 
 import decimal
-import gc
+import importlib
 import importlib.metadata
 import sys
 import tomllib
@@ -118,19 +118,30 @@ def execute(native, phase, inputs, data_path, shapes_path, mode):
         sys.path[:0] = [str(source_package_root(source, name)) for name, source in sources.items()]
         sys.modules["rdflib_turbo._native"] = native
         try:
-            result = pipeline(native, phase, data_path, shapes_path, mode, sources)
+            package = importlib.import_module("rdflib_turbo")
+            package._native = native
+            result = pipeline(native, phase, data_path, shapes_path, mode, sources, observe=False)
+            # Observe teardown before any semantic materialization. The normal
+            # bounded compile cache and source modules remain naturally loaded.
+            phase("released", 0)
+            audit = pipeline(
+                native, lambda *_: None, data_path, shapes_path, mode, sources, observe=True
+            )
+            result["semantic_run"] = audit
+            result["measurement_run"] = "public-pipeline-before-independent-semantic-run"
+            result["released_scope"] = (
+                "explicit-close-and-local-handles-drop-with-normal-compile-cache"
+            )
             result["metadata"] = metadata
         finally:
             for name in list(sys.modules):
                 if name.split(".")[0] in {p.replace("-", "_") for p in PROJECTS}:
                     del sys.modules[name]
             sys.path[:] = old_path
-        gc.collect()
-        phase("released", 0)
         return result
 
 
-def pipeline(native, phase, data_path, shapes_path, mode, sources):
+def pipeline(native, phase, data_path, shapes_path, mode, sources, *, observe):
     import owlrl_turbo
     import pyshacl_turbo
     import rdflib
@@ -171,43 +182,41 @@ def pipeline(native, phase, data_path, shapes_path, mode, sources):
         phase("validation_public_report", len(data))
         assert owner_ids(data) == identity
         flags = sorted(signal.__name__ for signal, active in context.flags.items() if active)
-    # All semantic materialization is deliberately AFTER the last measured stage.
-    observation = {
-        "physical": facts(data),
-        "contexts": {str(g.identifier) for g in data.contexts()},
-        "report": report,
-        "flags": flags,
-    }
-    comparison = validate_observation(data, observation, text, shape_text, mode)
-
-    class RejectedProfileTransaction(Exception):
-        pass
-
-    try:
-        with data.transaction() as pending:
-            pending.add(
-                (
-                    rdflib.URIRef("urn:profile:rejected"),
-                    rdflib.URIRef("urn:profile:p"),
-                    rdflib.Literal("rejected"),
-                )
-            )
-            raise RejectedProfileTransaction
-    except RejectedProfileTransaction:
-        pass
-    assert facts(data) == observation["physical"]
-    assert owner_ids(data) == identity
-    data.close()
-    del report, shapes, data, shape_graph
-    pyshacl_turbo._compile_native.cache_clear()
-    return {
+    result = {
         "owner_ids": identity,
         "native_origin": "compiled-source-test-binary",
-        "physical_quad_count": len(observation["physical"]),
-        "semantic_guards": "complete-facts-report-text-flags",
-        "observation": comparison,
-        "phases_exclude_semantic_audit": True,
+        "compile_cache_entries": pyshacl_turbo._compile_native.cache_info().currsize,
     }
+    if observe:
+        observation = {
+            "physical": facts(data),
+            "contexts": {str(g.identifier) for g in data.contexts()},
+            "report": report,
+            "flags": flags,
+        }
+        result["observation"] = validate_observation(data, observation, text, shape_text, mode)
+
+        class RejectedProfileTransaction(Exception):
+            pass
+
+        try:
+            with data.transaction() as pending:
+                pending.add(
+                    (
+                        rdflib.URIRef("urn:profile:rejected"),
+                        rdflib.URIRef("urn:profile:p"),
+                        rdflib.Literal("rejected"),
+                    )
+                )
+                raise RejectedProfileTransaction
+        except RejectedProfileTransaction:
+            pass
+        assert facts(data) == observation["physical"]
+        assert owner_ids(data) == identity
+        result["rollback_complete_physical_facts_equal"] = True
+    data.close()
+    del report, shapes, data, shape_graph
+    return result
 
 
 def owner_ids(data):
