@@ -9,8 +9,10 @@ To distinguish transient native heap from Python/runtime/allocator overhead, run
 
 ```sh
 uv run --no-project --python 3.13 python scripts/profile_memory.py \
+  --owner generalized-dataset \
   --data /absolute/path/data.ttl --shapes /absolute/path/shapes.ttl \
-  --inference owlrl --output /tmp/native-memory/profile.json
+  --inference owlrl --output /tmp/native-memory/profile.json \
+  --yaml-authority /absolute/path/yaml-inputs.json
 ```
 
 The script builds a separate release **test binary** with the optional
@@ -19,6 +21,18 @@ runs its ignored profile test alone. It does not modify an installed extension.
 The JSON and adjacent raw log retain input hashes, exact revision, tracked-tree
 dirty status, interpreter/platform and allocation counts for parse, inference,
 shape compilation, native validation/report serialization and release.
+
+The owner is mandatory. `generalized-dataset` retains the historical internal
+NativeDataset profile; it does not measure the canonical public Dataset owner.
+`canonical-store` runs the real source StoreDataset, owlrl-turbo and pyshacl-turbo
+public APIs against the native module compiled into that isolated test binary.
+It freezes the two immutable public peer revisions from `scripts/ci-facade.json`
+and all three source manifests. Its explicitly test-only distribution finder
+supplies those exact manifest versions, never installed wheel provenance.
+The dependency environment rejects installed turbo distributions and the fixture
+rejects an installed extension fallback. It checks complete physical facts,
+contexts, report graph/text and Decimal flags against the original packages
+after recording the measured stages. No RSS or timing result is emitted.
 
 The allocator records requested live bytes, peak live bytes, cumulative requested
 bytes and allocation calls. A realloc records the replacement's requested size;

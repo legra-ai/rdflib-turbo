@@ -101,3 +101,25 @@ fn quad_range_first_lock_does_not_allocate() {
         "quad range first-touch allocated backing storage"
     );
 }
+
+#[test]
+#[ignore = "explicit production-type layout observation; no allocator-bin or RSS claim"]
+fn profile_actual_storage_type_layouts() {
+    use super::super::numeric_encoder::EncodedGraphName;
+    use std::mem::{align_of, size_of};
+    macro_rules! layout {
+        ($ty:ty) => {
+            println!(
+                "MEMORY_LAYOUT {{\"type\":\"{}\",\"size\":{},\"align\":{}}}",
+                stringify!($ty),
+                size_of::<$ty>(),
+                align_of::<$ty>()
+            );
+        };
+    }
+    layout!(EncodedTerm);
+    layout!(EncodedGraphName);
+    layout!(EncodedQuad);
+    layout!(QuadListNode);
+    layout!(VersionRange);
+}

@@ -8,6 +8,9 @@ use oxigraph::model::vocab::{rdf, rdfs, xsd};
 
 use super::*;
 
+#[path = "allocation_canonical_profile.rs"]
+mod canonical;
+
 struct CountingAllocator;
 static LIVE: AtomicUsize = AtomicUsize::new(0);
 static PEAK: AtomicUsize = AtomicUsize::new(0);

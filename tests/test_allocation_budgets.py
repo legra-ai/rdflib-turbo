@@ -177,6 +177,8 @@ def test_memory_profile_entrypoint_uses_same_verified_locked_runtime(monkeypatch
         "argv",
         [
             "profile_memory",
+            "--owner",
+            "generalized-dataset",
             "--data",
             str(data),
             "--shapes",
