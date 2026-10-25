@@ -67,6 +67,7 @@ def arm(tmp_path, monkeypatch):
         modules[name] = SimpleNamespace(__file__=str(package / "__init__.py"))
         wheels[name] = wheel
     native = SimpleNamespace(
+        __file__=str(site / "rdflib_turbo/_native.so"),
         SHACL_ENGINE_SOURCE="crates/engine",
         SHACL_ENGINE_FINGERPRINT=identity["engine_fingerprint"],
         shacl=SimpleNamespace(SHACL_ENGINE_FINGERPRINT=identity["engine_fingerprint"]),
@@ -149,3 +150,11 @@ def test_source_fork_model_and_compiled_authorities_cannot_diverge(arm, tamper):
         receipt["cargo_metadata_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
     with pytest.raises(ValueError):
         arm["checker"].attest(receipt)
+
+
+def test_loaded_native_library_cannot_differ_from_the_verified_wheel_location(arm, tmp_path):
+    outside = tmp_path / "foreign_native.so"
+    outside.write_bytes(Path(arm["native"].__file__).read_bytes())
+    arm["native"].__file__ = str(outside)
+    with pytest.raises(ValueError, match="Loaded native library"):
+        arm["checker"].attest(arm["receipt"])
