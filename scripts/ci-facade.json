@@ -1,7 +1,7 @@
 {
   "facade": {
     "repository": "https://github.com/legra-ai/pyshacl-turbo",
-    "revision": "45defbbdde2047c1c02fd1e2b5eeda7d96d0c0dc"
+    "revision": "c85f67874a0be0065089b21f33d903d2da82f712"
   },
   "owlrl": {
     "repository": "https://github.com/legra-ai/owlrl-turbo",
