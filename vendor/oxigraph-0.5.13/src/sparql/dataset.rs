@@ -39,6 +39,26 @@ impl<'a> DatasetView<'a> {
     }
 }
 
+impl DatasetView<'_> {
+    pub(super) fn lease_term(
+        &self,
+        term: &EncodedTerm,
+    ) -> Result<super::leased::HeadTerm, StorageError> {
+        #[cfg(feature = "rdf-12")]
+        if matches!(term, EncodedTerm::Triple(_)) {
+            return Ok(super::leased::HeadTerm::Owned(self.decode_term(term)?));
+        }
+        crate::store::LexicalTerm::decode_with(&self.reader, term, &|id| {
+            if let Some(value) = self.extra.borrow().get(id) {
+                Ok(crate::storage::term_text::TermText::owned(value.clone()))
+            } else {
+                self.reader.get_term_text(id)
+            }
+        })
+        .map(super::leased::HeadTerm::Lexical)
+    }
+}
+
 impl<'a> QueryableDataset<'a> for DatasetView<'a> {
     type InternalTerm = EncodedTerm;
     type Error = StorageError;

@@ -148,8 +148,8 @@ pub(super) fn expand_configured<'a>(
                 }
             }
         }
-        for quad in additions {
-            data.insert(quad)?;
+        for quad in additions.into_heads() {
+            data.insert_head(quad)?;
         }
     }
     prepared.insert(|quad| data.insert(quad.into()))?;

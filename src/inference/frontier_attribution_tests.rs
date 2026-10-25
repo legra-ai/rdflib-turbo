@@ -2,8 +2,8 @@
 use std::mem::size_of;
 
 use oxigraph::model::{
-    BlankNode, GeneralizedQuad, GeneralizedQuadRef, GeneralizedTriple, GraphName, GraphNameRef,
-    Literal, NamedNode, Term, TermRef,
+    BlankNode, GeneralizedQuad, GeneralizedQuadRef, GraphName, GraphNameRef, Literal, NamedNode,
+    Term, TermRef,
     vocab::{rdf, rdfs, xsd},
 };
 use oxigraph::store::Store;
@@ -145,15 +145,6 @@ fn graphs(store: &Store) -> Vec<TermProof> {
     graphs
 }
 
-fn head(value: GeneralizedTriple) -> GeneralizedQuad {
-    GeneralizedQuad::new(
-        value.subject,
-        value.predicate,
-        value.object,
-        GraphName::DefaultGraph,
-    )
-}
-
 #[derive(Serialize)]
 struct SemanticProof {
     source_before: Vec<QuadProof>,
@@ -182,24 +173,21 @@ fn semantic_replay(heads: usize, bytes: usize) -> SemanticProof {
         };
         // bounded: exactly one missing head per fixed probe subject.
         dropped_heads = graph
-            .inference_heads(query.clone())
+            .projected_inference_heads(query.clone())
             .unwrap()
-            .map(|row| quad(head(row.unwrap()).as_ref()))
+            .map(|row| quad(row.unwrap().as_ref()))
             .collect::<Vec<_>>();
         let mut pending = Pending::default();
-        for row in graph.inference_heads(query).unwrap() {
+        for row in graph.projected_inference_heads(query).unwrap() {
             assert_eq!(
-                pending.push(&graph, head(row.unwrap())).unwrap(),
+                pending.push_head(&graph, row.unwrap()).unwrap(),
                 HeadDisposition::Accepted
             );
         }
-        pending_heads = (&pending)
-            .into_iter()
-            .map(|row| quad(row.as_ref()))
-            .collect::<Vec<_>>();
+        pending_heads = pending.heads().map(quad).collect::<Vec<_>>();
         assert_eq!(pending.len(), heads);
-        for row in pending {
-            graph.insert(row).unwrap();
+        for row in pending.into_heads() {
+            graph.insert_borrowed(row.as_ref()).unwrap();
         }
         published_relation = graph
             .transaction
@@ -282,14 +270,14 @@ fn canonical_encoded_construct_drop_versus_pending_attribution() {
     let ((pending, count), allocations) = measure_requested(|| {
         let mut pending = Pending::default();
         let mut count = 0;
-        for row in graph.inference_heads(query.clone()).unwrap() {
+        for row in graph.projected_inference_heads(query.clone()).unwrap() {
             // Both arms must materialize the same decoded head even when its
             // consumer immediately drops it; do not measure dead-code elision.
-            let row = std::hint::black_box(head(row.unwrap()));
+            let row = std::hint::black_box(row.unwrap());
             count += 1;
             if arm == "pending" {
                 assert_eq!(
-                    pending.push(&graph, row).unwrap(),
+                    pending.push_head(&graph, row).unwrap(),
                     HeadDisposition::Accepted
                 );
             } else {
@@ -334,11 +322,5 @@ fn canonical_encoded_construct_drop_versus_pending_attribution() {
     );
 }
 
-#[test]
-fn compiled_domain_heads_preserve_full_terms_contexts_and_rollback() {
-    let proof = semantic_replay(8, 64);
-    assert_eq!(proof.dropped_heads.len(), 8);
-    assert_eq!(proof.dropped_heads, proof.pending_heads);
-    assert_eq!(proof.source_before, proof.source_after_rollback);
-    assert_eq!(proof.graphs_before, proof.graphs_after_rollback);
-}
+#[path = "frontier_sharing_tests.rs"]
+mod sharing;

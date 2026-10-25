@@ -21,6 +21,38 @@ pub(super) trait Graph {
         &self,
         query: PreparedSparqlQuery,
     ) -> Result<oxigraph::sparql::QueryTripleIter<'_, GeneralizedTriple>>;
+    /// Explicit owned-domain path for generalized datasets; native owners override this.
+    fn projected_inference_heads(
+        &self,
+        query: PreparedSparqlQuery,
+    ) -> Result<Box<dyn Iterator<Item = Result<super::pending::Head>> + '_>> {
+        Ok(Box::new(self.inference_heads(query)?.map(|head| {
+            let head = head?;
+            Ok(super::pending::Head::Owned(GeneralizedQuad::new(
+                head.subject,
+                head.predicate,
+                head.object,
+                GraphName::DefaultGraph,
+            )))
+        })))
+    }
+    fn insert_head(&mut self, head: super::pending::Head) -> Result<()> {
+        match head {
+            super::pending::Head::Owned(quad) => self.insert(quad),
+            super::pending::Head::Native(head) => {
+                let head = head.as_ref();
+                self.insert_borrowed(GeneralizedQuadRef {
+                    subject: head.subject,
+                    predicate: head.predicate,
+                    object: head.object,
+                    graph_name: GraphNameRef::DefaultGraph,
+                })
+            }
+        }
+    }
+    fn insert_borrowed(&mut self, quad: GeneralizedQuadRef<'_>) -> Result<()> {
+        self.insert(quad.into_owned())
+    }
     fn insert(&mut self, quad: GeneralizedQuad) -> Result<()>;
     fn cleanup_blank_predicates(&mut self) -> Result<()>;
 
@@ -131,6 +163,25 @@ impl<'owner, 'data> Graph for TransactionGraph<'owner, 'data> {
             .execute_inference_construct()?)
     }
 
+    fn projected_inference_heads(
+        &self,
+        mut query: PreparedSparqlQuery,
+    ) -> Result<Box<dyn Iterator<Item = Result<super::pending::Head>> + '_>> {
+        query.dataset_mut().set_default_graph_as_union();
+        Ok(Box::new(
+            query
+                .on_transaction(self.transaction)
+                .execute_leased_inference_construct()?
+                .map(|head| Ok(super::pending::Head::Native(head?))),
+        ))
+    }
+    fn insert_borrowed(&mut self, quad: GeneralizedQuadRef<'_>) -> Result<()> {
+        self.transaction.insert_generalized(GeneralizedQuadRef {
+            graph_name: self.destination.as_ref(),
+            ..quad
+        });
+        Ok(())
+    }
     fn insert(&mut self, mut quad: GeneralizedQuad) -> Result<()> {
         quad.graph_name = self.destination.clone();
         self.transaction.insert_generalized(&quad);

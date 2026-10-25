@@ -3,6 +3,8 @@
 //! The entry point for SPARQL execution is the [`SparqlEvaluator`] type.
 
 mod algebra;
+mod leased;
+pub use leased::LeasedInferenceTriple;
 mod dataset;
 mod error;
 #[cfg(feature = "http-client")]
@@ -787,5 +789,23 @@ impl<'a, D: QueryableDataset<'a>> BoundPreparedSparqlQuery<'a, D> {
         }
         *prepared.dataset_mut() = self.dataset;
         prepared.explain(self.queryable_dataset)
+    }
+}
+
+impl<'a> BoundPreparedSparqlQuery<'a, DatasetView<'a>> {
+    /// Projects encoded inference heads into query-cached immutable lexical owners.
+    /// This native route preserves full-Term roles, checked errors and CONSTRUCT identity.
+    pub fn execute_leased_inference_construct(
+        self,
+    ) -> Result<QueryTripleIter<'a, LeasedInferenceTriple>, QueryEvaluationError> {
+        let mut prepared = self.evaluator.prepare(&self.query);
+        for (variable, term) in self.substitutions {
+            prepared = prepared.substitute_variable(variable, term);
+        }
+        *prepared.dataset_mut() = self.dataset;
+        prepared.execute_projected_inference_construct(
+            self.queryable_dataset,
+            leased::Projection::default(),
+        )
     }
 }

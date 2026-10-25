@@ -76,6 +76,28 @@ impl<'owner, 'data> Graph for ScopedGraph<'owner, 'data> {
         self.contains_destination(quad)
     }
 
+    fn projected_inference_heads(
+        &self,
+        mut query: PreparedSparqlQuery,
+    ) -> Result<Box<dyn Iterator<Item = Result<super::pending::Head>> + '_>> {
+        // bounded: one explicitly selected source graph, independent of destination.
+        query
+            .dataset_mut()
+            .set_default_graph(vec![self.source.clone()]);
+        Ok(Box::new(
+            query
+                .on_transaction(self.transaction)
+                .execute_leased_inference_construct()?
+                .map(|head| Ok(super::pending::Head::Native(head?))),
+        ))
+    }
+    fn insert_borrowed(&mut self, quad: GeneralizedQuadRef<'_>) -> Result<()> {
+        self.transaction.insert_generalized(GeneralizedQuadRef {
+            graph_name: self.destination.as_ref(),
+            ..quad
+        });
+        Ok(())
+    }
     fn insert(&mut self, mut quad: GeneralizedQuad) -> Result<()> {
         quad.graph_name = self.destination.clone();
         self.transaction.insert_generalized(&quad);
