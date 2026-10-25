@@ -5,7 +5,7 @@
   },
   "owlrl": {
     "repository": "https://github.com/legra-ai/owlrl-turbo",
-    "revision": "83226072c97e165a4cfaceae22d0396336041b08"
+    "revision": "0a17190b79776a8f92c74b548339fb18aed620b2"
   },
   "declaration": {
     "repository": "https://github.com/legra-ai/pyshacl-turbo",
