@@ -204,3 +204,24 @@ def test_partial_physical_and_union_scans_release_real_native_cursors():
     rows.close()
     source.add((URIRef("urn:after"), URIRef("urn:p"), Literal("released")))
     assert len(source) == 402
+
+
+@pytest.mark.parametrize("public_id", [None, "https://example.test/base/"])
+def test_store_file_input_resolves_relative_iris_against_the_selected_public_base(
+    tmp_path, public_id
+):
+    document = tmp_path / "relative.ttl"
+    document.write_text('<relative> <urn:p> "value" .', encoding="utf-8")
+    expected = URIRef(
+        "https://example.test/base/relative" if public_id else (tmp_path / "relative").as_uri()
+    )
+    with Store() as source:
+        source.parse(document, format="turtle", publicID=public_id)
+        assert physical_keys(source) == {
+            (
+                ("URIRef", str(expected), None, None),
+                ("URIRef", "urn:p", None, None),
+                ("Literal", "value", None, None),
+                None,
+            )
+        }
