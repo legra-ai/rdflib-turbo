@@ -85,12 +85,23 @@ def identity(owner, source):
     return version
 
 
+def build_command(source, output, python):
+    return [
+        "uv",
+        "build",
+        "--sdist",
+        "--no-sources",
+        "--python",
+        str(python),
+        "--out-dir",
+        str(output),
+        str(source),
+    ]
+
+
 def build(source, output, python):
     output.mkdir()
-    subprocess.run(
-        ["uv", "build", "--sdist", "--python", str(python), "--out-dir", str(output), str(source)],
-        check=True,
-    )
+    subprocess.run(build_command(source, output, python), check=True)
     archives = list(output.iterdir())
     if len(archives) != 1 or not archives[0].name.endswith(".tar.gz"):
         raise ValueError("Declaration build must produce one original source archive")
@@ -137,7 +148,7 @@ def prepare(owner, output, python):
             "repository": str(repository),
             "source": str(source),
             "python": str(python),
-            "command": "uv build --sdist",
+            "command": build_command(source, output / "originals", python),
         },
     }
     return verify(owner, record)
@@ -161,6 +172,14 @@ def verify(owner, record, initial=True):
     files, modes = raw_tree(repository, policy["revision"])
     if files != authority["files"] or modes != authority["modes"]:
         raise ValueError("Declaration raw Git authority inventory changed")
+    raw = Path(record["build"]["source"])
+    if inventory(raw) != files or (
+        os.name != "nt"
+        and any(
+            bool((raw / name).stat().st_mode & 0o111) != (modes[name] == "100755") for name in files
+        )
+    ):
+        raise ValueError("Declaration raw source inventory or executable modes changed")
     source, archive = Path(record["source"]), Path(record["archive"])
     if identity(owner, source) != record["version"]:
         raise ValueError("Declaration locked version changed")

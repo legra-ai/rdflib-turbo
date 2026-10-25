@@ -148,3 +148,46 @@ def test_mandatory_policy_does_not_infer_declaration_from_facade(tmp_path):
     )
     with pytest.raises(ValueError, match="declaration"):
         helper().selected(owner)
+
+
+def test_uv_sdist_command_disables_source_overrides(tmp_path, monkeypatch):
+    module = helper()
+    source, output = tmp_path / "raw", tmp_path / "artifacts"
+    source.mkdir()
+    calls = []
+
+    def launch(command, **kwargs):
+        calls.append(command)
+        (output / "original.tar.gz").write_bytes(b"archive")
+
+    monkeypatch.setattr(module.subprocess, "run", launch)
+    module.build(source, output, "3.13")
+    assert calls == [
+        [
+            "uv",
+            "build",
+            "--sdist",
+            "--no-sources",
+            "--python",
+            "3.13",
+            "--out-dir",
+            str(output),
+            str(source),
+        ]
+    ]
+
+
+@pytest.mark.parametrize("mutation", ["bytes", "mode", "extra"])
+def test_retained_raw_build_source_remains_frozen(original, tmp_path, monkeypatch, mutation):
+    module, _ = arrange(monkeypatch, original)
+    owner, _, _ = original
+    record = module.prepare(owner, tmp_path / "reconstructed", "3.13")
+    raw = Path(record["build"]["source"])
+    if mutation == "bytes":
+        (raw / "raw.txt").write_bytes(b"changed")
+    elif mutation == "mode":
+        (raw / "tool.sh").chmod(0o644)
+    else:
+        (raw / "unrecorded").write_text("changed")
+    with pytest.raises(ValueError, match="raw source"):
+        module.verify(owner, record, initial=False)
