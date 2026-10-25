@@ -97,3 +97,34 @@ def test_source_metadata_cannot_fabricate_wheel_or_native_file_authority():
             distribution.read_text(name)
     with pytest.raises(RuntimeError, match="cannot locate installed files"):
         distribution.locate_file("rdflib_turbo/_native.so")
+
+
+def test_profile_rejects_installed_turbo_before_source_finder(monkeypatch):
+    root = Path(__file__).resolve().parents[1]
+    spec = importlib.util.spec_from_file_location(
+        "memory_fixture_installed_guard", root / "scripts/canonical_memory_fixture.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(module.importlib.metadata, "distribution", lambda name: object())
+    with pytest.raises(RuntimeError, match="forbids installed turbo distribution"):
+        module.assert_no_installed_turbo()
+
+
+def test_export_context_has_independent_declaration_authority(profiler, monkeypatch, tmp_path):
+    import ci_facade
+
+    monkeypatch.setattr(
+        ci_facade,
+        "checkout",
+        lambda selected, destination: pytest.fail(
+            "dependency role must be independently checked before checkout"
+        ),
+    )
+    monkeypatch.setattr(
+        ci_facade,
+        "policy",
+        lambda: {"facade": {"revision": "b" * 40}, "owlrl": {"revision": "c" * 40}},
+    )
+    with pytest.raises(ValueError, match="independent declaration"):
+        profiler.source_inputs(tmp_path / "sources")

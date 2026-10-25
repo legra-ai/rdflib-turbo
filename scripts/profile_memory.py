@@ -10,6 +10,7 @@ import hashlib
 import json
 import platform
 import sys
+import tomllib
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -31,7 +32,23 @@ def source_inputs(destination):
 
     builder = ci_facade.load("build_facade_candidate")
     selected = ci_facade.policy()
-    sources = {"rdflib-turbo": ROOT}
+    if "declaration" not in selected:
+        raise ValueError("Profile export requires its independent declaration authority")
+    provider_revision = ci_facade.run(
+        ["git", "-C", ROOT, "rev-parse", "HEAD"], capture=True
+    ).strip()
+    provider_input = builder.freeze(ROOT, provider_revision, "rdflib-turbo", ci_facade.run)
+    cohort = destination / "export"
+    cohort.mkdir(parents=True)
+    manifest = tomllib.loads((ROOT / "pyproject.toml").read_text())
+    declaration = cohort / builder.peer_name(manifest, "pyshacl-turbo")
+    ci_facade.checkout(selected["declaration"], declaration)
+    declared = tomllib.loads((declaration / "pyproject.toml").read_text())
+    provider = cohort / builder.peer_name(declared, "rdflib-turbo")
+    ci_facade.checkout({"repository": str(ROOT), "revision": provider_revision}, provider)
+    if builder.freeze(provider, provider_revision, "rdflib-turbo", ci_facade.run) != provider_input:
+        raise RuntimeError("Export provider differs from the compiled source owner")
+    sources = {"rdflib-turbo": provider, "declaration": declaration}
     for role, name in (("facade", "pyshacl-turbo"), ("owlrl", "owlrl-turbo")):
         source = destination / role
         source.parent.mkdir(parents=True, exist_ok=True)
@@ -42,8 +59,12 @@ def source_inputs(destination):
         revision = ci_facade.run(["git", "-C", source, "rev-parse", "HEAD"], capture=True).strip()
         records[name] = {
             "source": str(source),
-            **builder.freeze(source, revision, name, ci_facade.run),
+            "project": "pyshacl-turbo" if name == "declaration" else name,
+            **builder.freeze(
+                source, revision, "pyshacl-turbo" if name == "declaration" else name, ci_facade.run
+            ),
         }
+    records["rdflib-turbo"]["compiled_source"] = str(ROOT)
     return records
 
 
@@ -52,9 +73,16 @@ def verify_source_inputs(records):
 
     builder = ci_facade.load("build_facade_candidate")
     for name, record in records.items():
-        actual = builder.freeze(Path(record["source"]), record["revision"], name, ci_facade.run)
+        actual = builder.freeze(
+            Path(record["source"]), record["revision"], record["project"], ci_facade.run
+        )
         if actual != {key: record[key] for key in ("revision", "files")}:
             raise RuntimeError("Profile source inputs changed: " + name)
+        if (
+            name == "rdflib-turbo"
+            and builder.freeze(ROOT, record["revision"], name, ci_facade.run) != actual
+        ):
+            raise RuntimeError("Compiled source owner changed during profile")
 
 
 def main():
@@ -74,8 +102,9 @@ def main():
         if args.owner == "canonical-store"
         else None
     )
+    dependency_root = Path(sources["rdflib-turbo"]["source"]) if sources is not None else ROOT
     with locked_python_environment(
-        ROOT, runtime_output, sys.executable, args.yaml_authority
+        dependency_root, runtime_output, sys.executable, args.yaml_authority
     ) as environment:
         environment.update(
             MEMORY_DATA=str(args.data.resolve(strict=True)),

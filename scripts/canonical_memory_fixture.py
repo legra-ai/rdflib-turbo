@@ -94,7 +94,9 @@ def execute(native, phase, inputs, data_path, shapes_path, mode):
         raise RuntimeError("Turbo modules were loaded before source-module injection")
     if getattr(native, "__file__", None) is not None:
         raise RuntimeError("Expected compiled test-binary module, not an installed DSO")
-    sources = {name: Path(record["source"]) for name, record in inputs.items()}
+    if set(inputs) != PROJECTS | {"declaration"}:
+        raise RuntimeError("Expected separate source and export-declaration authorities")
+    sources = {name: Path(inputs[name]["source"]) for name in PROJECTS}
     old_path = list(sys.path)
     with source_metadata(sources) as metadata:
         sys.path[:0] = [str(source / "python") for source in sources.values()]
