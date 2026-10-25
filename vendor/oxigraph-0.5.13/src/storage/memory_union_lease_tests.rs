@@ -12,8 +12,7 @@ use rustc_hash::{FxHashSet, FxHasher};
 use super::super::super::{EncodedQuad, QuadListNode};
 use super::{fixture, measure_requested_heap, metrics};
 
-#[derive(Clone)]
-struct Lease(Arc<QuadListNode>);
+use super::super::super::union::MemoryUnionKey as Lease;
 
 trait NodeKey {
     fn node(&self) -> &QuadListNode;
@@ -21,31 +20,7 @@ trait NodeKey {
 
 impl NodeKey for Lease {
     fn node(&self) -> &QuadListNode {
-        &self.0
-    }
-}
-
-fn same_spo(left: &QuadListNode, right: &QuadListNode) -> bool {
-    left.quad.subject == right.quad.subject
-        && left.quad.predicate == right.quad.predicate
-        && left.quad.object == right.quad.object
-}
-
-fn hash_spo<H: Hasher>(node: &QuadListNode, state: &mut H) {
-    node.quad.subject.hash(state);
-    node.quad.predicate.hash(state);
-    node.quad.object.hash(state);
-}
-
-impl PartialEq for Lease {
-    fn eq(&self, other: &Self) -> bool {
-        same_spo(&self.0, &other.0)
-    }
-}
-impl Eq for Lease {}
-impl Hash for Lease {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        hash_spo(&self.0, state);
+        self.owner().as_ref()
     }
 }
 
@@ -73,7 +48,7 @@ impl Hasher for CollisionHasher {
 impl CachedLease {
     fn new(node: Arc<QuadListNode>) -> Self {
         let mut hasher = FxHasher::default();
-        hash_spo(&node, &mut hasher);
+        Lease::hash_node(&node, &mut hasher);
         Self {
             hash: hasher.finish(),
             node,
@@ -83,7 +58,7 @@ impl CachedLease {
 
 impl PartialEq for CachedLease {
     fn eq(&self, other: &Self) -> bool {
-        same_spo(&self.node, &other.node)
+        Lease::same_spo(&self.node, &other.node)
     }
 }
 impl Eq for CachedLease {}
@@ -164,7 +139,7 @@ pub(super) fn profile(reader: &StorageReader<'_>, rows: usize, cached: bool) {
     if cached {
         run(reader, rows, CachedLease::new, "lease-hash");
     } else {
-        run(reader, rows, Lease, "lease");
+        run(reader, rows, Lease::from_node, "lease");
     }
 }
 
@@ -180,7 +155,7 @@ fn node_lease_keys_ignore_scope_and_never_use_pointer_identity() {
     assert!(!Arc::ptr_eq(&nodes[0], &nodes[1]));
     let mut seen = FxHashSet::default();
     for node in nodes {
-        seen.insert(Lease(node));
+        seen.insert(Lease::from_node(node));
     }
     assert_eq!(
         seen.len(),
@@ -228,7 +203,7 @@ fn cached_node_hash_collisions_still_compare_every_full_spo() {
         std::collections::HashSet::<Lease, BuildHasherDefault<CollisionHasher>>::default();
     for quad in reader.quads_for_pattern(None, None, None, None) {
         let node = acquire(&reader, &quad.unwrap());
-        plain.insert(Lease(Arc::clone(&node)));
+        plain.insert(Lease::from_node(Arc::clone(&node)));
         // The forced collision is a hash accelerator only; equality retains all terms.
         seen.insert(CachedLease { hash: 0, node });
     }
@@ -248,12 +223,12 @@ fn native_node_cache_leases_do_not_retain_a_second_store_and_retire_every_node()
     };
     let mut seen = FxHashSet::default();
     for quad in reader.quads_for_pattern(None, None, None, None) {
-        seen.insert(Lease(acquire(&reader, &quad.unwrap())));
+        seen.insert(Lease::from_node(acquire(&reader, &quad.unwrap())));
     }
     // bounded: exactly37 unique native nodes, keeping only weak observation handles.
     let nodes = seen
         .iter()
-        .map(|key| Arc::downgrade(&key.0))
+        .map(|key| Arc::downgrade(key.owner()))
         .collect::<Vec<_>>();
     drop(reader);
     drop(store);
@@ -296,16 +271,16 @@ fn node_key_witnesses_keep_snapshot_visibility_and_stable_identity_after_rollbac
     store.insert_generalized(&added).unwrap();
     let mut old_keys = FxHashSet::default();
     for q in old_reader.quads_for_pattern(None, None, None, None) {
-        old_keys.insert(Lease(acquire(&old_reader, &q.unwrap())));
+        old_keys.insert(Lease::from_node(acquire(&old_reader, &q.unwrap())));
     }
     // bounded: all five old logical triples, preserving every canonical term field.
     let actual = old_keys
         .iter()
         .map(|k| {
             (
-                k.0.quad.subject.clone(),
-                k.0.quad.predicate.clone(),
-                k.0.quad.object.clone(),
+                k.owner().quad.subject.clone(),
+                k.owner().quad.predicate.clone(),
+                k.owner().quad.object.clone(),
             )
         })
         .collect::<FxHashSet<_>>();

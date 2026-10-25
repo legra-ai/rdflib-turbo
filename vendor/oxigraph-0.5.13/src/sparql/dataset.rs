@@ -7,9 +7,12 @@ use crate::storage::{CorruptionError, StorageError, StorageReader};
 use oxrdf::Term;
 #[cfg(not(feature = "exact-term-storage"))]
 use oxsdatatypes::Boolean;
+use rustc_hash::FxHashSet;
 #[cfg(feature = "rdf-12")]
 use spareval::ExpressionTriple;
-use spareval::{ExpressionTerm, InternalQuad, QueryableDataset};
+use spareval::{
+    CancellationToken, ExpressionTerm, InternalQuad, QueryEvaluationError, QueryableDataset,
+};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
@@ -90,6 +93,35 @@ impl<'a> QueryableDataset<'a> for DatasetView<'a> {
                     },
                 })
             })
+    }
+
+    fn internal_unique_default_union_quads_for_pattern(
+        &self,
+        subject: Option<&EncodedTerm>,
+        predicate: Option<&EncodedTerm>,
+        object: Option<&EncodedTerm>,
+        cancellation_token: &CancellationToken,
+    ) -> Option<
+        Box<dyn Iterator<Item = Result<InternalQuad<EncodedTerm>, QueryEvaluationError>> + 'a>,
+    > {
+        let candidates = self
+            .reader
+            .memory_union_candidates(subject, predicate, object)?;
+        let token = cancellation_token.clone();
+        // Query-local ownership: one existing node lease per canonical SPO.
+        let mut seen = FxHashSet::default();
+        Some(Box::new(candidates.filter_map(move |(quad, key)| {
+            // Check every raw visible candidate before discarding duplicates.
+            if token.is_cancelled() {
+                return Some(Err(QueryEvaluationError::Cancelled));
+            }
+            seen.insert(key).then_some(Ok(InternalQuad {
+                subject: quad.subject,
+                predicate: quad.predicate,
+                object: quad.object,
+                graph_name: None,
+            }))
+        })))
     }
 
     fn internal_named_graphs(

@@ -246,3 +246,28 @@ fn native_union_prefix_cancellation_snapshot_and_rollback_preserve_complete_phys
         serde_json::to_string(&(before, after, expected, old, first)).unwrap()
     );
 }
+
+#[test]
+fn native_union_cancellation_errors_when_only_physical_duplicates_remain() {
+    let store = fixture(1, 64, false, 3);
+    let before = physical(&store);
+    let token = CancellationToken::new();
+    let mut query = SparqlEvaluator::new()
+        .with_cancellation_token(token.clone())
+        .parse_query(FULL_QUERY)
+        .unwrap();
+    query.dataset_mut().set_default_graph_as_union();
+    let mut heads = query
+        .on_store(&store)
+        .execute_inference_construct()
+        .unwrap();
+    heads.next().unwrap().unwrap();
+    token.cancel();
+    assert!(matches!(
+        heads.next().unwrap(),
+        Err(QueryEvaluationError::Cancelled)
+    ));
+    drop(heads);
+    assert_eq!(physical(&store), before);
+    semantic_replay(&store, 1);
+}
