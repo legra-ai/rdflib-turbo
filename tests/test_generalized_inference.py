@@ -1,11 +1,12 @@
 """Ordinary RDF consequences must survive generalized intermediate tuples."""
 
 import pytest
-from inference_observers import physical_keys, union_graph
 from owlrl import DeductiveClosure, OWLRL_Semantics
 from rdflib import Graph, Literal, URIRef
 from rdflib.compare import isomorphic
 from rdflib_turbo import Dataset, Store
+
+from .inference_observers import physical_keys, union_graph
 
 DOCUMENT = """
 @prefix owl: <http://www.w3.org/2002/07/owl#> .

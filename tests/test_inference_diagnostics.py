@@ -1,12 +1,13 @@
 """Inconsistencies are standard RDF output, distinct from execution failures."""
 
 import pytest
-from inference_observers import union_graph
 from owlrl import DeductiveClosure, OWLRL_Semantics, RDFS_OWLRL_Semantics, RDFS_Semantics
 from rdflib import RDF, Namespace, URIRef
 from rdflib import Graph as ReferenceGraph
 from rdflib.compare import isomorphic
 from rdflib_turbo import Dataset, Store
+
+from .inference_observers import union_graph
 
 ERR = Namespace("http://www.daml.org/2002/03/agents/agent-ont#")
 PREFIXES = """

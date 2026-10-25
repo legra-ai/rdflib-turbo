@@ -3,11 +3,12 @@
 from importlib.resources import files
 
 import pytest
-from inference_observers import physical_keys
 from rdflib import Graph as ReferenceGraph
 from rdflib import Literal, Namespace, URIRef
 from rdflib.namespace import XSD
 from rdflib_turbo import Dataset
+
+from .inference_observers import physical_keys
 
 PREFIX = "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n"
 SCHEMA = """

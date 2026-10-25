@@ -1,12 +1,13 @@
 """Specialized list and cardinality rules retain generalized intermediates."""
 
 import pytest
-from inference_observers import physical_keys, union_graph
 from owlrl import DeductiveClosure, OWLRL_Semantics
 from rdflib import BNode, Graph, Literal, URIRef
 from rdflib.compare import isomorphic
 from rdflib_turbo import Dataset, Store
 from rdflib_turbo import Graph as NativeGraph
+
+from .inference_observers import physical_keys, union_graph
 
 PREFIX = """
 @prefix owl: <http://www.w3.org/2002/07/owl#> .

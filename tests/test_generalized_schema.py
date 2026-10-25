@@ -1,13 +1,14 @@
 """Generalized schema terms keep their diagnostic meanings."""
 
 import pytest
-from inference_observers import inference_outcome, physical_keys, union_graph
 from owlrl import DeductiveClosure, OWLRL_Semantics
 from rdflib import BNode, Graph, Literal, Namespace, URIRef
 from rdflib.compare import isomorphic
 from rdflib.namespace import OWL, RDF, RDFS
 from rdflib_turbo import Dataset, Store
 from rdflib_turbo import Graph as NativeGraph
+
+from .inference_observers import inference_outcome, physical_keys, union_graph
 
 ERR = Namespace("http://www.daml.org/2002/03/agents/agent-ont#")
 PREFIX = """

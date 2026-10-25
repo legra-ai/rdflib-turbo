@@ -3,12 +3,13 @@
 from itertools import product
 
 import pytest
-from inference_observers import union_graph
 from owlrl import DeductiveClosure, OWLRL_Semantics, RDFS_OWLRL_Semantics, RDFS_Semantics
 from rdflib import RDF, RDFS, URIRef
 from rdflib import Dataset as ReferenceDataset
 from rdflib import Graph as ReferenceGraph
 from rdflib_turbo import Dataset, Store
+
+from .inference_observers import union_graph
 
 CLASSES = {"rdfs": RDFS_Semantics, "owlrl": OWLRL_Semantics, "both": RDFS_OWLRL_Semantics}
 DOCUMENT = """

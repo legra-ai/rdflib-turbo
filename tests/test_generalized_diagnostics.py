@@ -1,12 +1,13 @@
 """Diagnostic conditions read the same generalized closure as entailment rules."""
 
 import pytest
-from inference_observers import inference_outcome, physical_keys, union_graph
 from owlrl import DeductiveClosure, OWLRL_Semantics, RDFS_OWLRL_Semantics
 from rdflib import BNode, Graph, Namespace, URIRef
 from rdflib.compare import isomorphic
 from rdflib_turbo import Dataset, Store
 from rdflib_turbo import Graph as NativeGraph
+
+from .inference_observers import inference_outcome, physical_keys, union_graph
 
 ERR = Namespace("http://www.daml.org/2002/03/agents/agent-ont#")
 PREFIX = """

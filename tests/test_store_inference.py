@@ -1,8 +1,9 @@
 """Inference reads the native transaction, including pending writes."""
 
 import pytest
-from inference_observers import physical_keys, reference_dataset
 from rdflib_turbo import Dataset, Store
+
+from .inference_observers import physical_keys, reference_dataset
 
 PREFIX = """
 @prefix : <urn:> .
