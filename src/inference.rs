@@ -17,6 +17,8 @@ mod delta;
 mod diagnostic_datatypes;
 pub(crate) use diagnostic_datatypes::unicode as python_unicode;
 mod diagnostics;
+#[cfg(all(test, feature = "allocation-profiling"))]
+mod frontier_attribution_tests;
 mod intersections;
 mod literal_values;
 mod options;

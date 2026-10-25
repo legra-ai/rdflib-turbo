@@ -87,6 +87,33 @@ pub(crate) fn measure_allocated<T>(operation: impl FnOnce() -> T) -> (T, usize) 
     (result, TOTAL.load(Relaxed))
 }
 
+/// Detached counters for one isolated test-only attribution arm.
+#[derive(Debug, serde::Serialize)]
+pub(crate) struct RequestedAllocation {
+    pub live_before: usize,
+    pub live_after: usize,
+    pub peak: usize,
+    pub allocated: usize,
+    pub calls: usize,
+}
+
+/// Keep input construction and semantic observations outside this scope.
+pub(crate) fn measure_requested<T>(operation: impl FnOnce() -> T) -> (T, RequestedAllocation) {
+    let live_before = LIVE.load(Relaxed);
+    PEAK.store(live_before, Relaxed);
+    TOTAL.store(0, Relaxed);
+    CALLS.store(0, Relaxed);
+    let result = operation();
+    let observed = RequestedAllocation {
+        live_before,
+        live_after: LIVE.load(Relaxed),
+        peak: PEAK.load(Relaxed),
+        allocated: TOTAL.load(Relaxed),
+        calls: CALLS.load(Relaxed),
+    };
+    (result, observed)
+}
+
 #[test]
 #[ignore = "global allocation counters require isolated execution"]
 fn named_inference_does_not_clone_source_lexical_storage() {
