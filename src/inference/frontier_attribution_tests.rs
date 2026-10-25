@@ -283,7 +283,9 @@ fn canonical_encoded_construct_drop_versus_pending_attribution() {
         let mut pending = Pending::default();
         let mut count = 0;
         for row in graph.inference_heads(query.clone()).unwrap() {
-            let row = head(row.unwrap());
+            // Both arms must materialize the same decoded head even when its
+            // consumer immediately drops it; do not measure dead-code elision.
+            let row = std::hint::black_box(head(row.unwrap()));
             count += 1;
             if arm == "pending" {
                 assert_eq!(
