@@ -262,6 +262,31 @@ def facade_source_payload(source, wheel):
     return payload
 
 
+def release_project_helper():
+    spec = importlib.util.spec_from_file_location(
+        "facade_release_project", Path(__file__).with_name("facade_release_project.py")
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def run_facade_suite(arguments, environment, authority, frozen, candidate):
+    stage_environment = dict(environment)
+    for name in (
+        "SHACL_RELEASE_PROJECT_AUTHORITY",
+        "SHACL_BASE_REVISION",
+        "SHACL_CANDIDATE_RECEIPT",
+    ):
+        stage_environment.pop(name, None)
+    with release_project_helper().stage(authority, frozen) as original:
+        stage_environment.update(original)
+        if candidate is not None:
+            stage_environment["SHACL_BASE_REVISION"] = candidate["facade_revision"]
+            stage_environment["SHACL_CANDIDATE_RECEIPT"] = str(candidate["receipt"])
+        run(arguments, stage_environment)
+
+
 def freeze_facade_inputs(source, wheel, *, candidate=None):
     """Freeze acceptance sources separately from byte-equal runtime wheel payload."""
     source, wheel = source.resolve(strict=True), wheel.resolve(strict=True)
@@ -596,6 +621,8 @@ def main():
     shacl = args.shacl_source.resolve() if args.shacl_source else None
     facade_wheel = args.shacl_wheel.resolve(strict=True) if args.shacl_wheel else None
     facade_inputs = None
+    release_project = None
+    release_project_inputs = None
     candidate = None
     authority = None
     if project == "rdflib-turbo":
@@ -617,6 +644,10 @@ def main():
         )
         facade_inputs = freeze_facade_inputs(shacl, facade_wheel, candidate=candidate)
         (output / "facade-inputs.json").write_text(json.dumps(facade_inputs, indent=2))
+        if candidate is not None:
+            release_helper = release_project_helper()
+            release_project = release_helper.prepare(candidate, output, facade_payload)
+            release_project_inputs = release_helper.verify(release_project)
     if project == "rdflib-turbo" and (owlrl is None or not (owlrl / "tests").is_dir()):
         raise ValueError(
             "rdflib-turbo coverage requires --owlrl-source with the companion test suite"
@@ -633,6 +664,7 @@ def main():
     environment.pop("PYTHONPATH", None)
     environment.pop("VIRTUAL_ENV", None)
     environment.pop("UV_PYTHON", None)
+    environment.pop("SHACL_RELEASE_PROJECT_AUTHORITY", None)
     environment.pop("UV_PROJECT_ENVIRONMENT", None)
     environment.pop("UV_PROJECT", None)
     if (
@@ -801,7 +833,7 @@ def main():
             "base_revision", facade_inputs["revision"]
         )
         shacl_lock = record_environment_lock(project_environment, output, "shacl")
-        run(
+        run_facade_suite(
             [
                 *project_run,
                 "python",
@@ -817,7 +849,12 @@ def main():
                 f"--cov-report=html:{output / 'shacl-python-html'}",
             ],
             {**environment, "LLVM_PROFILE_FILE": str(profiles / "shacl/%p-%m.profraw")},
+            release_project,
+            release_project_inputs,
+            candidate,
         )
+        if release_project_inputs is not None:
+            result["shacl_release_project"] = release_project_inputs
         result["stages"]["shacl"], _ = export(
             llvm, [profiles / "shacl"], objects, output / "shacl", root
         )

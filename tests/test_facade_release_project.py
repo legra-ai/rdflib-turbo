@@ -119,3 +119,49 @@ def test_invalid_candidate_is_rejected_before_materializing_any_source(inputs, m
     with pytest.raises(ValueError, match="artifact proof"):
         module.prepare(candidate, output, object())
     assert list(output.iterdir()) == []
+
+
+def test_collector_passes_original_authority_only_to_the_candidate_shacl_suite(inputs, monkeypatch):
+    module, candidate, output, _, _ = inputs
+    authority = module.prepare(candidate, output, object())
+    record = module.verify(authority)
+    spec = importlib.util.spec_from_file_location("collector", ROOT / "scripts/native_coverage.py")
+    collector = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(collector)
+    calls = []
+    monkeypatch.setattr(collector, "run", lambda args, env: calls.append((args, env)))
+    inherited = {
+        "KEEP": "yes",
+        "SHACL_RELEASE_PROJECT_AUTHORITY": "untrusted",
+        "SHACL_BASE_REVISION": "stale",
+        "SHACL_CANDIDATE_RECEIPT": "stale",
+    }
+    collector.run_facade_suite(
+        ["pytest", "candidate/tests"], inherited, authority, record, candidate
+    )
+    assert calls[0][1] == {
+        "KEEP": "yes",
+        "SHACL_RELEASE_PROJECT_AUTHORITY": str(authority),
+        "SHACL_BASE_REVISION": candidate["facade_revision"],
+        "SHACL_CANDIDATE_RECEIPT": str(candidate["receipt"]),
+    }
+    collector.run_facade_suite(["pytest", "original/tests"], inherited, None, None, None)
+    assert calls[1][1] == {"KEEP": "yes"}
+    assert inherited["SHACL_BASE_REVISION"] == "stale"
+
+
+def test_collector_preserves_original_proof_after_its_python_command_fails(inputs, monkeypatch):
+    module, candidate, output, _, _ = inputs
+    authority = module.prepare(candidate, output, object())
+    record = module.verify(authority)
+    spec = importlib.util.spec_from_file_location("collector", ROOT / "scripts/native_coverage.py")
+    collector = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(collector)
+
+    def run(args, environment):
+        (Path(record["source"]) / "uv.lock").write_text("changed")
+        raise LookupError("pytest failed")
+
+    monkeypatch.setattr(collector, "run", run)
+    with pytest.raises(ValueError, match="original archive"):
+        collector.run_facade_suite(["pytest"], {}, authority, record, candidate)
