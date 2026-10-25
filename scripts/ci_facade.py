@@ -66,6 +66,7 @@ def checkout(selected, destination):
     if destination.exists():
         raise ValueError("An immutable peer checkout must have a fresh destination")
     run(["git", "clone", "--no-checkout", selected["repository"], destination])
+    run(["git", "-C", destination, "fetch", "--no-tags", "origin", selected["revision"]])
     run(["git", "-C", destination, "checkout", "--detach", selected["revision"]])
     actual = run(["git", "-C", destination, "rev-parse", "HEAD"], capture=True).strip()
     if actual != selected["revision"]:
