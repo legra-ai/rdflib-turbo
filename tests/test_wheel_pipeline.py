@@ -91,6 +91,7 @@ def test_installed_matrix_tests_every_matching_pair(tmp_path, monkeypatch):
     )
     facade = facade_wheel(tmp_path)
     owl = reasoning_wheel(tmp_path)
+    monkeypatch.setattr(module, "prefetch_test_dependencies", lambda: None)
     module.test_matrix(expected, facade, owl)
     assert called == [
         (expected[version], version, facade, owl)

@@ -268,10 +268,20 @@ def test_installed_wheel(wheel, version, shacl_wheel, owlrl_wheel):
             subprocess.run(command, cwd=directory, check=True)
 
 
+def prefetch_test_dependencies():
+    spec = importlib.util.spec_from_file_location(
+        "wheel_test_dependencies", Path(__file__).with_name("wheel_test_dependencies.py")
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.prepare(ROOT)
+
+
 def test_matrix(wheels, shacl_wheel, owlrl_wheel, *, versions=None):
     versions = selected_versions(versions)
     if set(wheels) != set(versions):
         raise ValueError("Wheel inventory must exactly match the requested interpreter cohort")
+    prefetch_test_dependencies()
     for version in versions:
         test_installed_wheel(wheels[version], version, shacl_wheel, owlrl_wheel)
 

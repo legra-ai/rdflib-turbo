@@ -45,6 +45,7 @@ def test_explicit_cohort_keeps_the_exact_facade_for_every_interpreter(
         "test_installed_wheel",
         lambda path, version, peer, reasoning: called.append((path, version, peer, reasoning)),
     )
+    monkeypatch.setattr(module, "prefetch_test_dependencies", lambda: None)
     module.test_matrix(selected, facade, owl, versions=versions)
     assert called == [(expected[version], version, facade, owl) for version in versions]
 
@@ -97,6 +98,7 @@ def test_main_accepts_both_required_facade_and_selected_cohort(tmp_path, monkeyp
         "test_installed_wheel",
         lambda path, version, peer, reasoning: called.append((path, version, peer, reasoning)),
     )
+    monkeypatch.setattr(module, "prefetch_test_dependencies", lambda: None)
     module.main()
     assert called == [(expected[version], version, facade, owl) for version in VERSIONS[3:]]
     monkeypatch.setattr(
