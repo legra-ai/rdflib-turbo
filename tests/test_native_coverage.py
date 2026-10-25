@@ -153,14 +153,19 @@ def test_profile_mapping_cannot_shrink_the_owned_denominator():
 
 
 @pytest.mark.parametrize("same_sites", [False, True])
-def test_embedded_python_binds_only_selected_runtime_sites(monkeypatch, tmp_path, same_sites):
+@pytest.mark.parametrize("runtime_platform", ["win32", "linux", "darwin"])
+def test_embedded_python_binds_only_selected_runtime_sites(
+    monkeypatch, tmp_path, same_sites, runtime_platform
+):
     module = harness()
+    monkeypatch.setattr(module.sys, "platform", runtime_platform)
     prefix = tmp_path / "selected-runtime"
     purelib = tmp_path / "selected venv" / "purelib"
     platlib = purelib if same_sites else tmp_path / "selected venv" / "platlib"
     calls = []
 
-    def run(arguments, environment, *, capture=False):
+    def query(python, code, environment):
+        arguments = [python, "-I", "-c", code]
         calls.append(arguments)
         if "get_path" in arguments[-1]:
             return json.dumps(
@@ -172,7 +177,7 @@ def test_embedded_python_binds_only_selected_runtime_sites(monkeypatch, tmp_path
             )
         return str(prefix)
 
-    monkeypatch.setattr(module, "run", run)
+    monkeypatch.setattr(module, "runtime_query", query)
     original = {"PYTHONPATH": str(tmp_path / "untrusted-source"), "PYTHONNOUSERSITE": "0"}
     configured = module.embedded_python_environment("/selected/python", original)
     assert configured["PYTHONPATH"].split(module.os.pathsep) == list(
@@ -243,14 +248,19 @@ def test_embedded_python_imports_rdflib_from_actual_selected_uv_environment(tmp_
         module.embedded_python_environment(selected, inherited)
 
 
-def test_embedded_python_uses_the_selected_interpreters_standard_library(monkeypatch, tmp_path):
+@pytest.mark.parametrize("runtime_platform", ["win32", "linux", "darwin"])
+def test_embedded_python_uses_the_selected_interpreters_standard_library(
+    monkeypatch, tmp_path, runtime_platform
+):
     module = harness()
+    monkeypatch.setattr(module.sys, "platform", runtime_platform)
     calls = []
     prefix = tmp_path / "Python runtime"
     interpreter = tmp_path / "venv" / "python"
 
-    def run(arguments, environment, *, capture=False):
-        calls.append((arguments, environment, capture))
+    def query(python, code, environment):
+        arguments = [python, "-I", "-c", code]
+        calls.append((arguments, environment, True))
         if "get_path" in arguments[-1]:
             return json.dumps(
                 {
@@ -261,7 +271,7 @@ def test_embedded_python_uses_the_selected_interpreters_standard_library(monkeyp
             )
         return f"{prefix}\n"
 
-    monkeypatch.setattr(module, "run", run)
+    monkeypatch.setattr(module, "runtime_query", query)
     original = {"PATH": "/bin", "LLVM_PROFILE_FILE": "profiles/%p.profraw"}
     configured = module.embedded_python_environment(interpreter, original)
     assert configured["PYTHONHOME"] == str(prefix)
@@ -271,9 +281,11 @@ def test_embedded_python_uses_the_selected_interpreters_standard_library(monkeyp
     assert calls[0][2] is True
 
 
-def test_embedded_python_rejects_an_invalid_runtime_prefix(monkeypatch):
+@pytest.mark.parametrize("runtime_platform", ["win32", "linux", "darwin"])
+def test_embedded_python_rejects_an_invalid_runtime_prefix(monkeypatch, runtime_platform):
     module = harness()
-    monkeypatch.setattr(module, "run", lambda *args, **kwargs: "relative-prefix\n")
+    monkeypatch.setattr(module.sys, "platform", runtime_platform)
+    monkeypatch.setattr(module, "runtime_query", lambda *args, **kwargs: "relative-prefix\n")
     with pytest.raises(RuntimeError, match="absolute runtime prefix"):
         module.embedded_python_environment(Path("/venv/bin/python"), {})
 
