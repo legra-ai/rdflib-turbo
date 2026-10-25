@@ -118,7 +118,7 @@ def initialize_project(project, python, environment):
             run(arguments, environment)
 
 
-def initialize_dependencies(root, profiles, output, project, python, environment):
+def initialize_dependencies(root, profiles, output, project, python, environment, yaml_wheel):
     """Export authoritative locked dependencies before creating an isolated project."""
     root, profiles, output = root.resolve(), profiles.resolve(), output.resolve()
     selections = {"rdflib-turbo": ["--group", "coverage"], "pyshacl-turbo": ["--extra", "test"]}
@@ -167,10 +167,19 @@ def initialize_dependencies(root, profiles, output, project, python, environment
     project_environment = profiles / "project"
     initialize_project(project_environment, python, environment)
     run(
-        ["uv", "add", "--project", project_environment, "--no-sync", "--requirements", lock],
+        [
+            "uv",
+            "add",
+            "--project",
+            project_environment,
+            "--no-sync",
+            "--requirements",
+            lock,
+            yaml_wheel,
+        ],
         environment,
     )
-    run(["uv", "sync", "--project", project_environment, "--locked"], environment)
+    run(["uv", "sync", "--project", project_environment, "--locked", "--no-build"], environment)
     verify_dependency_inputs(root, profiles, output, provenance)
     return provenance
 
@@ -735,8 +744,10 @@ def main():
     environment["LLVM_PROFILE_FILE"] = str(profiles / "build/%p-%m.profraw")
     project_environment = profiles / "project"
     dependencies = initialize_dependencies(
-        root, profiles, output, project, args.python, environment
+        root, profiles, output, project, args.python, environment, yaml_inputs["wheel"]
     )
+    if yaml_checker().verify(root, yaml_authority) != yaml_inputs:
+        raise RuntimeError("YAML dependency changed during coverage dependency setup")
     venv = project_environment / ".venv"
     python = venv / "bin/python"
     rust_lock = record_environment_lock(project_environment, output, "rust")

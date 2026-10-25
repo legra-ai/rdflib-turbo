@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tomllib
 from pathlib import Path
+from zipfile import ZipFile
 
 import pytest
 from packaging.requirements import Requirement
@@ -17,6 +18,23 @@ def harness():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def yaml_wheel(directory):
+    """A tiny explicit artifact exercises real uv installation without any build."""
+    path = directory / "yaml_fixture-1.0-py3-none-any.whl"
+    with ZipFile(path, "w") as archive:
+        archive.writestr("yaml_fixture/__init__.py", "")
+        archive.writestr(
+            "yaml_fixture-1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: yaml-fixture\nVersion: 1.0\n",
+        )
+        archive.writestr(
+            "yaml_fixture-1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        archive.writestr("yaml_fixture-1.0.dist-info/RECORD", "")
+    return path
 
 
 def source_project(root, project="rdflib-turbo"):
@@ -72,8 +90,14 @@ def test_locked_export_precedes_isolated_import_and_preserves_source(
 
     monkeypatch.setattr(module, "run", run)
     monkeypatch.setattr(module, "initialize_project", lambda *args: commands.append(["initialize"]))
-    provenance = module.initialize_dependencies(root, profiles, output, project, sys.executable, {})
+    provenance = module.initialize_dependencies(
+        root, profiles, output, project, sys.executable, {}, tmp_path / "yaml.whl"
+    )
     assert commands[0][:2] == ["uv", "export"]
+    addition = next(command for command in commands if command[:2] == ["uv", "add"])
+    assert addition[-1] == str(tmp_path / "yaml.whl")
+    sync = next(command for command in commands if command[:2] == ["uv", "sync"])
+    assert "--locked" in sync and "--no-build" in sync
     assert [p.name for p in root.iterdir()] == list(before)
     assert {p.name: p.read_bytes() for p in root.iterdir()} == before
     assert provenance["source_uv_lock_sha256"] == module.digest(root / "uv.lock")
@@ -103,7 +127,13 @@ def test_export_failure_never_initializes_or_installs(tmp_path, monkeypatch):
     )
     with pytest.raises(RuntimeError, match="locked export failed"):
         module.initialize_dependencies(
-            root, tmp_path / "profiles", tmp_path / "reports", "rdflib-turbo", sys.executable, {}
+            root,
+            tmp_path / "profiles",
+            tmp_path / "reports",
+            "rdflib-turbo",
+            sys.executable,
+            {},
+            tmp_path / "yaml.whl",
         )
     assert {p.name: p.read_bytes() for p in root.iterdir()} == before
 
@@ -148,7 +178,7 @@ def test_real_locked_export_ignores_stale_snapshot_and_fails_stale_uv_lock(tmp_p
     profiles.mkdir()
     output.mkdir()
     provenance = module.initialize_dependencies(
-        root, profiles, output, "rdflib-turbo", sys.executable, environment
+        root, profiles, output, "rdflib-turbo", sys.executable, environment, yaml_wheel(tmp_path)
     )
     installed = subprocess.check_output(
         [
@@ -178,6 +208,7 @@ def test_real_locked_export_ignores_stale_snapshot_and_fails_stale_uv_lock(tmp_p
             "rdflib-turbo",
             sys.executable,
             environment,
+            yaml_wheel(tmp_path),
         )
     assert not (tmp_path / "failed-profiles/project").exists()
 
@@ -191,7 +222,13 @@ def test_project_identity_mismatch_fails_before_any_command(tmp_path, monkeypatc
     )
     with pytest.raises(ValueError, match="identity"):
         module.initialize_dependencies(
-            root, tmp_path / "profiles", tmp_path / "reports", "rdflib-turbo", sys.executable, {}
+            root,
+            tmp_path / "profiles",
+            tmp_path / "reports",
+            "rdflib-turbo",
+            sys.executable,
+            {},
+            tmp_path / "yaml.whl",
         )
 
 
