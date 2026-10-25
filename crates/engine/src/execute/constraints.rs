@@ -96,6 +96,11 @@ impl CompiledShapes {
         };
         for constraint in &shape.constraints {
             match constraint {
+                Constraint::MemberShape(_)
+                | Constraint::ListLength { .. }
+                | Constraint::UniqueMembers(_) => self.evaluate_list_constraint(
+                    index, focus, &values, data, constraint, results, evaluation,
+                )?,
                 Constraint::NodeExpression { .. } | Constraint::Sparql(_) => self
                     .evaluate_advanced_constraint(
                         index, focus, &values, data, constraint, results, evaluation,
