@@ -1,7 +1,5 @@
 """Build and retain original public source archives and native comparison wheels."""
 
-import copy
-import hashlib
 import json
 import os
 import subprocess
@@ -9,14 +7,21 @@ import tarfile
 import tomllib
 
 from audit_sdist import audit
-from comparison_identity import derive
+from comparison_identity import derive, verify_receipt
+from comparison_model import prepare as prepare_model
+from comparison_model import verify as verify_model
+from comparison_source import (
+    audit_tree,
+    freeze,
+    sha,
+    verify_tree,
+)
+from comparison_source import (
+    normalized_manifest as normalized_manifest,
+)
 from test_wheel import verify_metadata
 
 PYTHON = "3.13.16"
-
-
-def sha(path):
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def run(command, cwd, log, env=None):
@@ -33,72 +38,6 @@ def run(command, cwd, log, env=None):
 
 def json_file(path, value):
     path.write_text(json.dumps(value, indent=2) + "\n")
-
-
-def freeze(source):
-    dirty = subprocess.check_output(["git", "-C", str(source), "status", "--porcelain"])
-    if dirty:
-        raise ValueError("Source checkout is not clean")
-    names = (
-        subprocess.check_output(["git", "-C", str(source), "ls-files", "-z"]).decode().split("\0")
-    )
-    return {name: sha(source / name) for name in names if name}
-
-
-def normalized_manifest(original, archived):
-    expected = copy.deepcopy(original)
-    if "readme" not in expected["package"] and archived["package"].get("readme") == "README.md":
-        expected["package"]["readme"] = "README.md"
-    if expected == archived:
-        return
-    workspace = expected.get("workspace", {})
-    members = workspace.get("members")
-    if members is not None:
-        # Maturin keeps the root package implicit in the packaged workspace.
-        # A distinct default selection is authoritative and must remain exact.
-        if workspace.get("default-members") == members:
-            del workspace["default-members"]
-        workspace["members"] = [member for member in members if member != "."]
-    if expected != archived:
-        raise ValueError("Unexpected Cargo manifest normalization")
-
-
-def audit_tree(source, extracted, names):
-    included = {}
-    for name in names:
-        path = extracted / name
-        required = name.startswith(
-            (
-                "src/",
-                "python/",
-                "vendor/",
-                "crates/",
-                "build_support/",
-                "tests/",
-                "scripts/",
-                ".github/",
-            )
-        )
-        required |= name in (
-            "Cargo.toml",
-            "Cargo.lock",
-            "pyproject.toml",
-            "uv.lock",
-            "rust-toolchain.toml",
-            ".cargo/config.toml",
-        )
-        if not path.is_file():
-            if required:
-                raise ValueError(f"Missing source archive input: {name}")
-            continue
-        if name == "Cargo.toml":
-            normalized_manifest(
-                tomllib.loads((source / name).read_text()), tomllib.loads(path.read_text())
-            )
-        elif sha(path) != sha(source / name):
-            raise ValueError(f"Changed source archive input: {name}")
-        included[name] = sha(path)
-    return included
 
 
 def checkout(repository, commit, destination, log):
@@ -174,7 +113,12 @@ def build(source, output, commit):
             stdout=stream,
             check=True,
         )
-    identity = derive(extracted, json.loads((output / "cargo-metadata.json").read_text()))
+    metadata_path = output / "cargo-metadata.json"
+    metadata = json.loads(metadata_path.read_text())
+    identity = derive(extracted, metadata)
+    payload = verify_tree(extracted, archive, archive_sha)
+    model = prepare_model(extracted, metadata, output / "model")
+    json_file(output / "model-source.json", model)
     json_file(output / "expected-identity.json", identity)
     env = {**os.environ, "CARGO_BUILD_JOBS": "2", "CARGO_TARGET_DIR": str(output / "target")}
     # These native Linux inputs are comparison artifacts, never release inventory.
@@ -199,8 +143,15 @@ def build(source, output, commit):
     verify_metadata(wheel)
     if freeze(source) != start or sha(archive) != archive_sha:
         raise ValueError("Build mutated original source or archive")
-    return {
+    verify_model(extracted, metadata, model)
+    receipt = {
         "commit": commit,
+        "source_checkout": str(source),
+        "archive_source": str(extracted),
+        "archive_files": payload,
+        "cargo_metadata": str(metadata_path),
+        "cargo_metadata_sha256": sha(metadata_path),
+        "model_source": model,
         "wheel": str(wheel),
         "wheel_sha256": sha(wheel),
         "archive": str(archive),
@@ -208,6 +159,8 @@ def build(source, output, commit):
         "expected_identity": identity,
         "source_files": start,
     }
+    verify_receipt(receipt)
+    return receipt
 
 
 def project(path, output, wheels=(), reference=False):

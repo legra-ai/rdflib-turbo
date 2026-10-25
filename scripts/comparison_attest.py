@@ -46,14 +46,19 @@ def attest(receipt):
         if len(libraries) != (1 if name == "rdflib_turbo" else 0):
             raise ValueError("Unexpected native payload")
         proof[name] = actual
+    source_path = Path(__file__).with_name("comparison_identity.py")
+    spec = importlib.util.spec_from_file_location("attested_comparison_source", source_path)
+    source = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(source)
+    derived = source.verify_receipt(receipt)
     native = importlib.import_module("rdflib_turbo._native")
-    expected = receipt["expected_identity"]
     if (
-        native.SHACL_ENGINE_REVISION != expected["engine_revision"]
-        or native.SHACL_ENGINE_FINGERPRINT != expected["engine_fingerprint"]
+        native.SHACL_ENGINE_SOURCE != derived["engine"]["engine_source"]
+        or native.SHACL_ENGINE_FINGERPRINT != derived["engine"]["engine_fingerprint"]
+        or native.shacl.SHACL_ENGINE_FINGERPRINT != derived["engine"]["engine_fingerprint"]
     ):
         raise ValueError("Compiled source identity differs from independently derived inputs")
-    proof["engine"] = expected
+    proof.update(derived)
     return proof
 
 

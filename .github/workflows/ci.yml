@@ -414,6 +414,8 @@ jobs:
             ${{ runner.temp }}/performance-comparison/head/sdist/*.tar.gz
             ${{ runner.temp }}/performance-comparison/base/wheels/*.whl
             ${{ runner.temp }}/performance-comparison/head/wheels/*.whl
+            ${{ runner.temp }}/performance-comparison/base/model/*.crate
+            ${{ runner.temp }}/performance-comparison/head/model/*.crate
             ${{ runner.temp }}/performance-comparison/owl/sdist/*.tar.gz
             ${{ runner.temp }}/performance-comparison/owl/wheels/*.whl
             ${{ runner.temp }}/performance-comparison/*.whl
