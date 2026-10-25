@@ -99,3 +99,9 @@ def test_wheel_driver_binds_same_yaml_wheel_and_checks_authority_after_suite(tmp
     verifiers = [command for command in commands if "--verify-loaded" in command]
     assert len(verifiers) == 2 and all(command[-1] == str(yaml) for command in verifiers)
     assert checks == [(module.ROOT, authority)] * 2
+
+
+def test_candidate_evidence_upload_keeps_original_hidden_source_files():
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+    upload = workflow.split("name: candidate-facade-evidence\n", 1)[1].split("\n  sdist:", 1)[0]
+    assert "include-hidden-files: true" in upload

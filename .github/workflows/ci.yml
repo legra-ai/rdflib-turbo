@@ -84,6 +84,7 @@ jobs:
         with:
           name: candidate-facade-evidence
           path: ${{ runner.temp }}/candidate-facade-evidence
+          include-hidden-files: true
           if-no-files-found: error
 
   sdist:
@@ -174,6 +175,7 @@ jobs:
         with:
           name: candidate-facade-evidence
           path: ${{ runner.temp }}/candidate-facade-evidence
+          include-hidden-files: true
       - name: Verify the facade cohort and arrange the original locked peer
         run: uv run --no-project --python 3.13 python -B scripts/ci_facade.py consume --input "$RUNNER_TEMP/candidate-facade-evidence" --environment-file "$GITHUB_ENV"
       - name: Unpack the tested source distribution once for every interpreter
@@ -232,6 +234,7 @@ jobs:
         with:
           name: candidate-facade-evidence
           path: ${{ runner.temp }}/candidate-facade-evidence
+          include-hidden-files: true
       - name: Verify the facade cohort and arrange the original locked peer
         run: uv run --no-project --python 3.13 python -B scripts/ci_facade.py consume --input "$RUNNER_TEMP/candidate-facade-evidence" --environment-file "$GITHUB_ENV"
       - run: cargo +nightly-2026-10-16 fmt --check
