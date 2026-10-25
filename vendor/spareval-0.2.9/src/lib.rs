@@ -24,11 +24,12 @@ mod source_identity;
 mod update;
 
 mod prepared_algebra;
+pub use crate::construct_projection::InferenceProjection;
 #[cfg(feature = "sparql-12")]
 pub use crate::dataset::ExpressionTriple;
 pub use crate::dataset::{ExpressionTerm, InternalQuad, QueryableDataset, ScopedCustomFunction};
 pub use crate::error::QueryEvaluationError;
-pub use crate::eval::CancellationToken;
+pub use crate::eval::{CancellationToken, ConstructTerm as InferenceTerm};
 use crate::eval::{EvalNodeWithStats, SimpleEvaluator, Timer};
 use crate::expression::{
     CustomFunctionRegistry, ExpressionEvaluatorContext, build_expression_evaluator,
@@ -761,7 +762,12 @@ impl PreparedQuery<'_> {
         self,
         dataset: impl QueryableDataset<'b>,
     ) -> Result<QueryTripleIter<'b, oxrdf::GeneralizedTriple>, QueryEvaluationError> {
-        self.evaluate_inference_construct(dataset, false).0
+        self.evaluate_projected_inference_construct(
+            dataset,
+            construct_projection::InferenceConstruct,
+            false,
+        )
+        .0
     }
 
     /// Explains the same inference-only head execution without losing body statistics.
@@ -772,15 +778,42 @@ impl PreparedQuery<'_> {
         Result<QueryTripleIter<'b, oxrdf::GeneralizedTriple>, QueryEvaluationError>,
         QueryExplanation,
     ) {
-        self.evaluate_inference_construct(dataset, true)
+        self.evaluate_projected_inference_construct(
+            dataset,
+            construct_projection::InferenceConstruct,
+            true,
+        )
     }
 
-    fn evaluate_inference_construct<'b>(
+    /// Executes inference heads with an owner-specific, query-local internal projection.
+    pub fn execute_projected_inference_construct<
+        'b,
+        D: QueryableDataset<'b>,
+        P: InferenceProjection<'b, D>,
+    >(
         self,
-        dataset: impl QueryableDataset<'b>,
+        dataset: D,
+        projection: P,
+    ) -> Result<QueryTripleIter<'b, P::Output>, QueryEvaluationError> {
+        self.evaluate_projected_inference_construct(
+            dataset,
+            construct_projection::ProjectedInference(projection),
+            false,
+        )
+        .0
+    }
+
+    fn evaluate_projected_inference_construct<
+        'b,
+        D: QueryableDataset<'b>,
+        P: construct_projection::ConstructProjection<'b, D>,
+    >(
+        self,
+        dataset: D,
+        projection: P,
         explain: bool,
     ) -> (
-        Result<QueryTripleIter<'b, oxrdf::GeneralizedTriple>, QueryEvaluationError>,
+        Result<QueryTripleIter<'b, P::Output>, QueryEvaluationError>,
         QueryExplanation,
     ) {
         let start_planning = Timer::now();
@@ -821,9 +854,12 @@ impl PreparedQuery<'_> {
                 .evaluator
                 .simple_evaluator(dataset, self.dataset, base_iri, explain)
             {
-                Ok(evaluator) => {
-                    evaluator.evaluate_inference_construct(&pattern, template, self.substitutions)
-                }
+                Ok(evaluator) => evaluator.evaluate_construct_projected(
+                    &pattern,
+                    template,
+                    self.substitutions,
+                    projection,
+                ),
                 Err(error) => (Err(error), Rc::new(EvalNodeWithStats::empty())),
             };
         (

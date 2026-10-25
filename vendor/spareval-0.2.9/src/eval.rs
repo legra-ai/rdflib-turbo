@@ -1,5 +1,5 @@
 use crate::construct_cache::ConstructCache;
-use crate::construct_projection::{ConstructProjection, InferenceConstruct, StrictConstruct};
+use crate::construct_projection::{ConstructProjection, StrictConstruct};
 #[cfg(feature = "sparql-12")]
 use crate::dataset::ExpressionTriple;
 use crate::dataset::{ExpressionTerm, InternalQuad, QueryableDataset};
@@ -17,7 +17,7 @@ use json_event_parser::{JsonEvent, WriterJsonSerializer};
 use oxiri::Iri;
 #[cfg(feature = "sparql-12")]
 use oxrdf::{BaseDirection, NamedOrBlankNode};
-use oxrdf::{BlankNode, GeneralizedTriple, GraphName, Literal, NamedNode, Term, Triple, Variable};
+use oxrdf::{BlankNode, GraphName, Literal, NamedNode, Term, TermRef, Triple, Variable};
 use oxsdatatypes::{DateTime, DayTimeDuration, Decimal, Double, Float, Integer};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet, FxHasher};
 use spargebra::algebra::{AggregateFunction, PropertyPathExpression};
@@ -51,8 +51,8 @@ type InternalTupleEvaluator<'a, T> =
     Rc<dyn Fn(InternalTuple<T>) -> InternalTuplesIterator<'a, T> + 'a>;
 
 /// Wrapper on top of [`QueryableDataset`]
-struct EvalDataset<'a, D: QueryableDataset<'a>> {
-    dataset: Rc<D>,
+pub(crate) struct EvalDataset<'a, D: QueryableDataset<'a>> {
+    pub(crate) dataset: Rc<D>,
     specification: EncodedDatasetSpec<D::InternalTerm>,
     cancellation_token: CancellationToken,
     _lifetime: PhantomData<&'a ()>,
@@ -667,26 +667,15 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
         Result<QueryTripleIter<'a>, QueryEvaluationError>,
         Rc<EvalNodeWithStats>,
     ) {
-        self.evaluate_construct_projected::<StrictConstruct>(pattern, template, substitutions)
+        self.evaluate_construct_projected(pattern, template, substitutions, StrictConstruct)
     }
 
-    pub fn evaluate_inference_construct(
+    pub(crate) fn evaluate_construct_projected<P: ConstructProjection<'a, D>>(
         &self,
         pattern: &GraphPattern,
         template: &[TriplePattern],
         substitutions: impl IntoIterator<Item = (Variable, Term)>,
-    ) -> (
-        Result<QueryTripleIter<'a, GeneralizedTriple>, QueryEvaluationError>,
-        Rc<EvalNodeWithStats>,
-    ) {
-        self.evaluate_construct_projected::<InferenceConstruct>(pattern, template, substitutions)
-    }
-
-    fn evaluate_construct_projected<P: ConstructProjection>(
-        &self,
-        pattern: &GraphPattern,
-        template: &[TriplePattern],
-        substitutions: impl IntoIterator<Item = (Variable, Term)>,
+        projection: P,
     ) -> (
         Result<QueryTripleIter<'a, P::Output>, QueryEvaluationError>,
         Rc<EvalNodeWithStats>,
@@ -739,6 +728,7 @@ impl<'a, D: QueryableDataset<'a>> SimpleEvaluator<'a, D> {
         (
             Ok(QueryTripleIter::new(ConstructIterator::<_, P> {
                 eval: self.clone(),
+                projection,
                 iter: eval(from),
                 template,
                 buffered_results: Vec::default(),
@@ -4455,8 +4445,9 @@ impl<T: Eq> Iterator for ConsecutiveDeduplication<'_, T> {
     }
 }
 
-struct ConstructIterator<'a, D: QueryableDataset<'a>, P: ConstructProjection> {
+struct ConstructIterator<'a, D: QueryableDataset<'a>, P: ConstructProjection<'a, D>> {
     eval: SimpleEvaluator<'a, D>,
+    projection: P,
     iter: InternalTuplesIterator<'a, D::InternalTerm>,
     template: Vec<TripleTemplate>,
     buffered_results: Vec<Result<P::Output, QueryEvaluationError>>,
@@ -4468,7 +4459,7 @@ struct ConstructIterator<'a, D: QueryableDataset<'a>, P: ConstructProjection> {
     bnodes: Vec<BlankNode>,
 }
 
-impl<'a, D: QueryableDataset<'a>, P: ConstructProjection> ConstructIterator<'a, D, P> {
+impl<'a, D: QueryableDataset<'a>, P: ConstructProjection<'a, D>> ConstructIterator<'a, D, P> {
     fn fail(
         &mut self,
         error: QueryEvaluationError,
@@ -4484,7 +4475,9 @@ impl<'a, D: QueryableDataset<'a>, P: ConstructProjection> ConstructIterator<'a, 
     }
 }
 
-impl<'a, D: QueryableDataset<'a>, P: ConstructProjection> Iterator for ConstructIterator<'a, D, P> {
+impl<'a, D: QueryableDataset<'a>, P: ConstructProjection<'a, D>> Iterator
+    for ConstructIterator<'a, D, P>
+{
     type Item = Result<P::Output, QueryEvaluationError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -4532,11 +4525,11 @@ impl<'a, D: QueryableDataset<'a>, P: ConstructProjection> Iterator for Construct
                     else {
                         continue;
                     };
-                    let key = (internal_subject, internal_predicate, internal_object);
+                    let key = [internal_subject, internal_predicate, internal_object];
                     if let (Some(&subject), Some(&predicate), Some(&object)) = (
-                        key.0.id(&self.seen_terms, &self.constant_ids),
-                        key.1.id(&self.seen_terms, &self.constant_ids),
-                        key.2.id(&self.seen_terms, &self.constant_ids),
+                        key[0].id(&self.seen_terms, &self.constant_ids),
+                        key[1].id(&self.seen_terms, &self.constant_ids),
+                        key[2].id(&self.seen_terms, &self.constant_ids),
                     ) {
                         if self
                             .already_emitted_results
@@ -4545,44 +4538,29 @@ impl<'a, D: QueryableDataset<'a>, P: ConstructProjection> Iterator for Construct
                             continue;
                         }
                     }
-                    let externalize = |term: &ConstructTerm<'_, D::InternalTerm>| {
-                        if P::PROPAGATE_EXTERNALIZATION_ERRORS {
-                            term.externalize_checked(&self.eval.dataset).map(Some)
-                        } else {
-                            Ok(term.externalize(&self.eval.dataset))
-                        }
-                    };
-                    let subject = match externalize(&key.0) {
-                        Ok(value) => value,
+                    let triple = match self.projection.project_internal(&key, &self.eval.dataset) {
+                        Ok(triple) => triple,
                         Err(error) => return self.fail(error),
                     };
-                    let predicate = match externalize(&key.1) {
-                        Ok(value) => value,
-                        Err(error) => return self.fail(error),
-                    };
-                    let object = match externalize(&key.2) {
-                        Ok(value) => value,
-                        Err(error) => return self.fail(error),
-                    };
-                    let (Some(subject), Some(predicate), Some(object)) =
-                        (subject, predicate, object)
-                    else {
-                        continue;
-                    };
-                    if let Some(triple) = P::project(subject, predicate, object) {
+                    if let Some(triple) = triple {
                         let new_triple = P::uncached(&triple) || {
                             let [subject, predicate, object] = P::terms(&triple);
-                            let subject =
-                                key.0
-                                    .assign_id(&subject, &mut self.seen_terms, &self.constant_ids);
-                            let predicate = key.1.assign_id(
-                                &predicate,
+                            let [subject_key, predicate_key, object_key] = key;
+                            let subject = subject_key.assign_id(
+                                subject,
                                 &mut self.seen_terms,
                                 &self.constant_ids,
                             );
-                            let object =
-                                key.2
-                                    .assign_id(&object, &mut self.seen_terms, &self.constant_ids);
+                            let predicate = predicate_key.assign_id(
+                                predicate,
+                                &mut self.seen_terms,
+                                &self.constant_ids,
+                            );
+                            let object = object_key.assign_id(
+                                object,
+                                &mut self.seen_terms,
+                                &self.constant_ids,
+                            );
                             self.already_emitted_results
                                 .insert([subject, predicate, object])
                         };
@@ -4592,6 +4570,7 @@ impl<'a, D: QueryableDataset<'a>, P: ConstructProjection> Iterator for Construct
                                 // We don't want to have a too big memory impact
                                 self.already_emitted_results.clear();
                                 self.seen_terms.clear();
+                                self.projection.clear();
                             }
                         }
                     }
@@ -4680,9 +4659,13 @@ impl TripleTemplateValue {
     }
 }
 
-enum ConstructTerm<'t, T> {
+/// A CONSTRUCT position before externalization. Internal IDs are query-owner scoped.
+pub enum ConstructTerm<'t, T> {
+    /// A term already present in this query's dataset or expression overlay.
     Internal(T),
+    /// A borrowed immutable template constant.
     Constant(&'t Term),
+    /// A freshly generated blank node or checked quoted triple.
     External(Term),
 }
 
@@ -4701,7 +4684,7 @@ impl<T: Clone + Eq + Hash> ConstructTerm<'_, T> {
 
     fn assign_id(
         self,
-        external: &Term,
+        external: TermRef<'_>,
         terms: &mut FxHashMap<T, usize>,
         constants: &FxHashMap<Term, usize>,
     ) -> usize {
@@ -4711,8 +4694,8 @@ impl<T: Clone + Eq + Hash> ConstructTerm<'_, T> {
                     return id;
                 }
                 let id = constants
-                    .get(external)
-                    .copied()
+                    .iter()
+                    .find_map(|(constant, id)| (constant.as_ref() == external).then_some(*id))
                     .unwrap_or(constants.len() + terms.len());
                 terms.insert(term, id);
                 id
@@ -4726,7 +4709,7 @@ impl<T: Clone + Eq + Hash> ConstructTerm<'_, T> {
         }
     }
 
-    fn externalize_checked<'a, D: QueryableDataset<'a, InternalTerm = T>>(
+    pub(crate) fn externalize_checked<'a, D: QueryableDataset<'a, InternalTerm = T>>(
         &self,
         dataset: &EvalDataset<'a, D>,
     ) -> Result<Term, QueryEvaluationError> {
@@ -4737,7 +4720,7 @@ impl<T: Clone + Eq + Hash> ConstructTerm<'_, T> {
         }
     }
 
-    fn externalize<'a, D: QueryableDataset<'a, InternalTerm = T>>(
+    pub(crate) fn externalize<'a, D: QueryableDataset<'a, InternalTerm = T>>(
         &self,
         dataset: &EvalDataset<'a, D>,
     ) -> Option<Term> {

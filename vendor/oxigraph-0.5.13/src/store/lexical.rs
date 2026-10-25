@@ -70,6 +70,14 @@ impl LexicalTerm {
         reader: &StorageReader<'_>,
         encoded: &EncodedTerm,
     ) -> Result<Self, StorageError> {
+        Self::decode_with(reader, encoded, &|id| reader.get_term_text(id))
+    }
+
+    pub(crate) fn decode_with(
+        reader: &StorageReader<'_>,
+        encoded: &EncodedTerm,
+        lookup: &impl Fn(&crate::storage::numeric_encoder::StrHash) -> Result<TermText, StorageError>,
+    ) -> Result<Self, StorageError> {
         use EncodedTerm::*;
         Ok(match encoded {
             DefaultGraph => {
@@ -77,52 +85,36 @@ impl LexicalTerm {
                     CorruptionError::msg("The default graph tag is not a valid term").into(),
                 );
             }
-            NamedNode { iri_id } => Self::NamedNode(reader.get_term_text(iri_id)?),
+            NamedNode { iri_id } => Self::NamedNode(lookup(iri_id)?),
             NumericalBlankNode { id } => Self::BlankNode(TermText::owned(
                 BlankNode::new_from_unique_id(u128::from_be_bytes(*id)).into_string(),
             )),
             SmallBlankNode(id) => Self::BlankNode(TermText::inline(*id)),
-            BigBlankNode { id_id } => Self::BlankNode(reader.get_term_text(id_id)?),
+            BigBlankNode { id_id } => Self::BlankNode(lookup(id_id)?),
             SmallStringLiteral(value) => Self::literal(TermText::inline(*value), None, None),
-            BigStringLiteral { value_id } => {
-                Self::literal(reader.get_term_text(value_id)?, None, None)
-            }
+            BigStringLiteral { value_id } => Self::literal(lookup(value_id)?, None, None),
             SmallSmallLangStringLiteral { value, language } => Self::literal(
                 TermText::inline(*value),
                 None,
                 Some(TermText::inline(*language)),
             ),
-            SmallBigLangStringLiteral { value, language_id } => Self::literal(
-                TermText::inline(*value),
-                None,
-                Some(reader.get_term_text(language_id)?),
-            ),
-            BigSmallLangStringLiteral { value_id, language } => Self::literal(
-                reader.get_term_text(value_id)?,
-                None,
-                Some(TermText::inline(*language)),
-            ),
+            SmallBigLangStringLiteral { value, language_id } => {
+                Self::literal(TermText::inline(*value), None, Some(lookup(language_id)?))
+            }
+            BigSmallLangStringLiteral { value_id, language } => {
+                Self::literal(lookup(value_id)?, None, Some(TermText::inline(*language)))
+            }
             BigBigLangStringLiteral {
                 value_id,
                 language_id,
-            } => Self::literal(
-                reader.get_term_text(value_id)?,
-                None,
-                Some(reader.get_term_text(language_id)?),
-            ),
-            SmallTypedLiteral { value, datatype_id } => Self::literal(
-                TermText::inline(*value),
-                Some(reader.get_term_text(datatype_id)?),
-                None,
-            ),
+            } => Self::literal(lookup(value_id)?, None, Some(lookup(language_id)?)),
+            SmallTypedLiteral { value, datatype_id } => {
+                Self::literal(TermText::inline(*value), Some(lookup(datatype_id)?), None)
+            }
             BigTypedLiteral {
                 value_id,
                 datatype_id,
-            } => Self::literal(
-                reader.get_term_text(value_id)?,
-                Some(reader.get_term_text(datatype_id)?),
-                None,
-            ),
+            } => Self::literal(lookup(value_id)?, Some(lookup(datatype_id)?), None),
             BooleanLiteral(_)
             | FloatLiteral(_)
             | DoubleLiteral(_)
@@ -165,12 +157,12 @@ impl LexicalTerm {
             #[cfg(feature = "rdf-12")]
             LtrSmallBigDirLangStringLiteral { value, language_id } => Self::directional(
                 TermText::inline(*value),
-                reader.get_term_text(language_id)?,
+                lookup(language_id)?,
                 BaseDirection::Ltr,
             ),
             #[cfg(feature = "rdf-12")]
             LtrBigSmallDirLangStringLiteral { value_id, language } => Self::directional(
-                reader.get_term_text(value_id)?,
+                lookup(value_id)?,
                 TermText::inline(*language),
                 BaseDirection::Ltr,
             ),
@@ -178,11 +170,7 @@ impl LexicalTerm {
             LtrBigBigDirLangStringLiteral {
                 value_id,
                 language_id,
-            } => Self::directional(
-                reader.get_term_text(value_id)?,
-                reader.get_term_text(language_id)?,
-                BaseDirection::Ltr,
-            ),
+            } => Self::directional(lookup(value_id)?, lookup(language_id)?, BaseDirection::Ltr),
             #[cfg(feature = "rdf-12")]
             RtlSmallSmallDirLangStringLiteral { value, language } => Self::directional(
                 TermText::inline(*value),
@@ -192,12 +180,12 @@ impl LexicalTerm {
             #[cfg(feature = "rdf-12")]
             RtlSmallBigDirLangStringLiteral { value, language_id } => Self::directional(
                 TermText::inline(*value),
-                reader.get_term_text(language_id)?,
+                lookup(language_id)?,
                 BaseDirection::Rtl,
             ),
             #[cfg(feature = "rdf-12")]
             RtlBigSmallDirLangStringLiteral { value_id, language } => Self::directional(
-                reader.get_term_text(value_id)?,
+                lookup(value_id)?,
                 TermText::inline(*language),
                 BaseDirection::Rtl,
             ),
@@ -205,11 +193,7 @@ impl LexicalTerm {
             RtlBigBigDirLangStringLiteral {
                 value_id,
                 language_id,
-            } => Self::directional(
-                reader.get_term_text(value_id)?,
-                reader.get_term_text(language_id)?,
-                BaseDirection::Rtl,
-            ),
+            } => Self::directional(lookup(value_id)?, lookup(language_id)?, BaseDirection::Rtl),
             #[cfg(feature = "rdf-12")]
             Triple(triple) => Self::Triple(Box::new([
                 Self::decode_position(reader, &triple.subject, 0)?,

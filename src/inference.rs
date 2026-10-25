@@ -17,6 +17,8 @@ mod delta;
 mod diagnostic_datatypes;
 pub(crate) use diagnostic_datatypes::unicode as python_unicode;
 mod diagnostics;
+#[cfg(all(test, feature = "allocation-profiling"))]
+mod frontier_attribution_tests;
 mod intersections;
 mod literal_values;
 mod options;
@@ -139,18 +141,10 @@ fn apply_rules(
         same_as::apply(data, additions)?;
     }
     for query in queries {
-        let triples = data.inference_heads(query.clone())?;
+        let triples = data.projected_inference_heads(query.clone())?;
         for triple in triples {
             let triple = triple?;
-            additions.push(
-                data,
-                GeneralizedQuad::new(
-                    triple.subject,
-                    triple.predicate,
-                    triple.object,
-                    GraphName::DefaultGraph,
-                ),
-            )?;
+            additions.push_head(data, triple)?;
         }
     }
     Ok(())
@@ -178,8 +172,8 @@ fn expand_inner(
                 literal_publications.insert(quad);
             }
         }
-        for quad in literal_publications {
-            data.insert(quad)?;
+        for quad in literal_publications.into_heads() {
+            data.insert_head(quad)?;
         }
         literal_values::substitute(data, &request.lexical_context)?;
     }
@@ -242,11 +236,11 @@ fn expand_inner(
             return Ok(outcome);
         }
         let mut dirty = 0;
-        for quad in additions {
+        for quad in additions.into_heads() {
             // Conservatively count destination-only publications too. Native
             // membership kernels still run every round and retain their wider view.
-            dirty |= schedule.changed(&quad.predicate);
-            data.insert(quad)?;
+            dirty |= schedule.changed(&quad.as_ref().predicate.into_owned());
+            data.insert_head(quad)?;
         }
         schedule.advance(dirty);
     }

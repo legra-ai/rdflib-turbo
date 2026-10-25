@@ -96,7 +96,7 @@ fn late_grouped_query_failure_keeps_pending_private_and_rolls_back_prior_writes(
             "first grouped body must emit both heads before failure"
         );
         for quad in &pending {
-            assert!(!journal.contains(quad.into()).unwrap());
+            assert!(!journal.contains(quad).unwrap());
         }
         assert!(journal.contains((&previous).into()).unwrap());
         // The same production insertion journal drops without commit on error.

@@ -270,8 +270,8 @@ pub(super) fn owl(
     for quad in fixed {
         additions.push(data, quad)?;
     }
-    for quad in additions {
-        data.insert(quad)?;
+    for quad in additions.into_heads() {
+        data.insert_head(quad)?;
     }
     Ok(())
 }

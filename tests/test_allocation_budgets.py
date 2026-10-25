@@ -128,7 +128,11 @@ def test_bare_allocation_entrypoint_uses_verified_locked_runtime(budgets, monkey
     assert calls == ["enter", selected, "verify-after"]
 
 
-def test_memory_profile_entrypoint_uses_same_verified_locked_runtime(monkeypatch, tmp_path):
+@pytest.mark.parametrize("malformed_receipt", [False, True])
+@pytest.mark.parametrize("owner_kind", ["generalized-dataset", "canonical-store"])
+def test_memory_profile_entrypoint_uses_same_verified_locked_runtime(
+    monkeypatch, tmp_path, malformed_receipt, owner_kind
+):
     import importlib.util
     import json
     from contextlib import contextmanager
@@ -145,10 +149,19 @@ def test_memory_profile_entrypoint_uses_same_verified_locked_runtime(monkeypatch
         path.write_text("frozen")
     selected = {"PYO3_PYTHON": "/isolated/project/.venv/bin/python"}
     calls = []
+    source_calls = []
+
+    def sources(destination):
+        source_calls.append(destination)
+        return {"rdflib-turbo": {"source": str(root)}}
+
+    monkeypatch.setattr(module, "source_inputs", sources)
+    monkeypatch.setattr(module, "verify_source_inputs", lambda records: None)
 
     @contextmanager
     def locked(owner, output, python, yaml_authority):
         assert owner == root and yaml_authority == authority
+        output.mkdir()
         calls.append("enter")
         yield selected
         calls.append("verify-after")
@@ -157,18 +170,27 @@ def test_memory_profile_entrypoint_uses_same_verified_locked_runtime(monkeypatch
         if arguments[0] != "cargo":
             return "revision\n" if "rev-parse" in arguments else ""
         assert environment["PYO3_PYTHON"] == selected["PYO3_PYTHON"]
+        assert arguments[arguments.index("--package") + 1] == "rdflib-turbo-native"
         calls.append("profile")
-        return "\n".join(
+        result = "\n".join(
             "MEMORY_PHASE " + json.dumps({"phase": phase})
             for phase in (
                 "setup",
                 "parse",
                 "inference",
                 "compile_shapes",
-                "validation_native_report",
+                "validation_public_report"
+                if owner_kind == "canonical-store"
+                else "validation_native_report",
                 "released",
             )
         )
+        receipt = (
+            '\nMEMORY_SEMANTICS {"guard":true}unexpected'
+            if malformed_receipt
+            else '\nMEMORY_SEMANTICS {"native_origin":"compiled-source-test-binary"}'
+        )
+        return result + receipt
 
     monkeypatch.setattr(module, "locked_python_environment", locked, raising=False)
     monkeypatch.setattr(module, "run", run)
@@ -177,6 +199,8 @@ def test_memory_profile_entrypoint_uses_same_verified_locked_runtime(monkeypatch
         "argv",
         [
             "profile_memory",
+            "--owner",
+            owner_kind,
             "--data",
             str(data),
             "--shapes",
@@ -187,5 +211,15 @@ def test_memory_profile_entrypoint_uses_same_verified_locked_runtime(monkeypatch
             str(authority),
         ],
     )
-    module.main()
+    if malformed_receipt:
+        with pytest.raises(json.JSONDecodeError):
+            module.main()
+        assert (
+            (tmp_path / "report.log")
+            .read_text()
+            .endswith('MEMORY_SEMANTICS {"guard":true}unexpected')
+        )
+    else:
+        module.main()
     assert calls == ["enter", "profile", "verify-after"]
+    assert len(source_calls) == 1

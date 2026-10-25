@@ -99,8 +99,8 @@ pub(super) fn substitute(data: &mut impl Graph, context: &LexicalContext) -> Res
         // Retain immutable query evaluation and only distinct destination delta.
         additions.publish(data, quad)?;
     }
-    for quad in additions {
-        data.insert(quad)?;
+    for quad in additions.into_heads() {
+        data.insert_head(quad)?;
     }
     Ok(())
 }
