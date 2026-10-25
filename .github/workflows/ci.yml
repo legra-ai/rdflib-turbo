@@ -195,7 +195,7 @@ jobs:
           done
       - run: uv tool run --from twine==6.2.0 twine check --strict dist/*
       - name: Test the installed wheel without source-tree imports
-        run: uv run --no-project python scripts/test_wheel.py --python-versions ${{ matrix.python-versions }} --shacl-wheel "$SHACL_WHEEL" --owlrl-wheel "$OWLRL_WHEEL"
+        run: uv run --no-project python scripts/test_wheel.py --python-versions ${{ matrix.python-versions }} --shacl-wheel "$SHACL_WHEEL" --owlrl-wheel "$OWLRL_WHEEL" --yaml-authority "$YAML_AUTHORITY"
       - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}

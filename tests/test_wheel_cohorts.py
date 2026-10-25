@@ -3,6 +3,7 @@
 import importlib.util
 import re
 import sys
+import types
 from collections import Counter
 from pathlib import Path
 
@@ -80,6 +81,12 @@ def driver(monkeypatch):
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    module.yaml_checker = lambda: types.SimpleNamespace(
+        verify=lambda owner, authority: {
+            "wheel": Path(authority).parent / "pyyaml-0.0.0-py3-none-any.whl",
+            "record": {},
+        }
+    )
     return module
 
 
@@ -103,12 +110,12 @@ def test_explicit_cohort_selects_and_tests_every_matching_pair(tmp_path, monkeyp
     monkeypatch.setattr(
         module,
         "test_installed_wheel",
-        lambda path, version, facade, owl: called.append((path, version, facade, owl)),
+        lambda path, version, facade, owl, yaml: called.append((path, version, facade, owl)),
     )
     facade = tmp_path / "pyshacl_turbo-0.7.0-py3-none-any.whl"
     owl = tmp_path / "owlrl_turbo-0.1.0a3-py3-none-any.whl"
     monkeypatch.setattr(module, "prefetch_test_dependencies", lambda: None)
-    module.test_matrix(selected, facade, owl, versions=versions)
+    module.test_matrix(selected, facade, owl, tmp_path / "yaml-inputs.json", versions=versions)
     assert called == [(expected[version], version, facade, owl) for version in versions]
 
 
@@ -148,6 +155,8 @@ def test_main_accepts_an_explicit_cohort_without_weakening_the_default(tmp_path,
             str(facade),
             "--owlrl-wheel",
             str(owl),
+            "--yaml-authority",
+            str(tmp_path / "yaml-inputs.json"),
             "--python-versions",
             *VERSIONS[3:],
         ],
@@ -156,13 +165,23 @@ def test_main_accepts_an_explicit_cohort_without_weakening_the_default(tmp_path,
     monkeypatch.setattr(
         module,
         "test_installed_wheel",
-        lambda path, version, facade, owl: called.append((path, version, facade, owl)),
+        lambda path, version, facade, owl, yaml: called.append((path, version, facade, owl)),
     )
     monkeypatch.setattr(module, "prefetch_test_dependencies", lambda: None)
     module.main()
     assert called == [(expected[version], version, facade, owl) for version in VERSIONS[3:]]
     monkeypatch.setattr(
-        sys, "argv", ["test_wheel.py", "--shacl-wheel", str(facade), "--owlrl-wheel", str(owl)]
+        sys,
+        "argv",
+        [
+            "test_wheel.py",
+            "--shacl-wheel",
+            str(facade),
+            "--owlrl-wheel",
+            str(owl),
+            "--yaml-authority",
+            str(tmp_path / "yaml-inputs.json"),
+        ],
     )
     with pytest.raises(ValueError):
         module.main()
@@ -174,9 +193,15 @@ def test_host_dependency_preflight_runs_once_before_any_wheel_acceptance(tmp_pat
     calls = []
     monkeypatch.setattr(module, "prefetch_test_dependencies", lambda: calls.append("locked-fetch"))
     monkeypatch.setattr(
-        module, "test_installed_wheel", lambda wheel, version, facade, owl: calls.append(version)
+        module,
+        "test_installed_wheel",
+        lambda wheel, version, facade, owl, yaml: calls.append(version),
     )
     module.test_matrix(
-        selected, tmp_path / "facade.whl", tmp_path / "owl.whl", versions=VERSIONS[:3]
+        selected,
+        tmp_path / "facade.whl",
+        tmp_path / "owl.whl",
+        tmp_path / "yaml-inputs.json",
+        versions=VERSIONS[:3],
     )
     assert calls == ["locked-fetch", *VERSIONS[:3]]

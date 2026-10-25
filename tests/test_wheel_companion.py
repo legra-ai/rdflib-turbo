@@ -19,6 +19,12 @@ def driver():
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    module.yaml_checker = lambda: types.SimpleNamespace(
+        verify=lambda owner, authority: {
+            "wheel": Path(authority).parent / "pyyaml-0.0.0-py3-none-any.whl",
+            "record": {},
+        }
+    )
     return module
 
 
@@ -203,6 +209,7 @@ def test_isolated_project_receives_only_exact_wheel_sources(tmp_path, monkeypatc
         check=True,
         capture_output=True,
     )
+    wheel(tmp_path / "pyyaml-0.0.0-py3-none-any.whl", name="pyyaml")
     archive = wheel(tmp_path / "rdflib_turbo-0.0.0-py3-none-any.whl")
     module = driver()
     monkeypatch.setattr(module, "ROOT", tmp_path)
@@ -219,7 +226,7 @@ def test_isolated_project_receives_only_exact_wheel_sources(tmp_path, monkeypatc
 
     monkeypatch.setattr(module.subprocess, "run", run)
     python = f"{sys.version_info.major}.{sys.version_info.minor}"
-    module.test_installed_wheel(archive, python, facade, owl)
+    module.test_installed_wheel(archive, python, facade, owl, tmp_path / "yaml-inputs.json")
     project, manifest = snapshots[0]
     for name, expected in (
         ("pyshacl-turbo", facade),

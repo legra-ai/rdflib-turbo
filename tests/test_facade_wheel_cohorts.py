@@ -2,6 +2,7 @@
 
 import importlib.util
 import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,12 @@ def driver(monkeypatch):
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    module.yaml_checker = lambda: types.SimpleNamespace(
+        verify=lambda owner, authority: {
+            "wheel": Path(authority).parent / "pyyaml-0.0.0-py3-none-any.whl",
+            "record": {},
+        }
+    )
     return module
 
 
@@ -43,10 +50,12 @@ def test_explicit_cohort_keeps_the_exact_facade_for_every_interpreter(
     monkeypatch.setattr(
         module,
         "test_installed_wheel",
-        lambda path, version, peer, reasoning: called.append((path, version, peer, reasoning)),
+        lambda path, version, peer, reasoning, yaml: called.append(
+            (path, version, peer, reasoning)
+        ),
     )
     monkeypatch.setattr(module, "prefetch_test_dependencies", lambda: None)
-    module.test_matrix(selected, facade, owl, versions=versions)
+    module.test_matrix(selected, facade, owl, tmp_path / "yaml-inputs.json", versions=versions)
     assert called == [(expected[version], version, facade, owl) for version in versions]
 
 
@@ -65,7 +74,11 @@ def test_missing_extra_and_wrong_matrix_inventory_fail(tmp_path, monkeypatch):
         module.select_wheels(tmp_path, "0.2.0a1", versions=VERSIONS[:1])
     with pytest.raises(ValueError):
         module.test_matrix(
-            paths, tmp_path / "facade.whl", tmp_path / "owl.whl", versions=VERSIONS[:1]
+            paths,
+            tmp_path / "facade.whl",
+            tmp_path / "owl.whl",
+            tmp_path / "yaml-inputs.json",
+            versions=VERSIONS[:1],
         )
 
 
@@ -88,6 +101,8 @@ def test_main_accepts_both_required_facade_and_selected_cohort(tmp_path, monkeyp
             str(facade),
             "--owlrl-wheel",
             str(owl),
+            "--yaml-authority",
+            str(tmp_path / "yaml-inputs.json"),
             "--python-versions",
             *VERSIONS[3:],
         ],
@@ -96,13 +111,25 @@ def test_main_accepts_both_required_facade_and_selected_cohort(tmp_path, monkeyp
     monkeypatch.setattr(
         module,
         "test_installed_wheel",
-        lambda path, version, peer, reasoning: called.append((path, version, peer, reasoning)),
+        lambda path, version, peer, reasoning, yaml: called.append(
+            (path, version, peer, reasoning)
+        ),
     )
     monkeypatch.setattr(module, "prefetch_test_dependencies", lambda: None)
     module.main()
     assert called == [(expected[version], version, facade, owl) for version in VERSIONS[3:]]
     monkeypatch.setattr(
-        sys, "argv", ["test_wheel.py", "--shacl-wheel", str(facade), "--owlrl-wheel", str(owl)]
+        sys,
+        "argv",
+        [
+            "test_wheel.py",
+            "--shacl-wheel",
+            str(facade),
+            "--owlrl-wheel",
+            str(owl),
+            "--yaml-authority",
+            str(tmp_path / "yaml-inputs.json"),
+        ],
     )
     with pytest.raises(ValueError):
         module.main()

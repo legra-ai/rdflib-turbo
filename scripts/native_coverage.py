@@ -378,9 +378,47 @@ def freeze_owl_inputs(source, wheel):
     }
 
 
-def install_python_cohort(project, native_wheel, facade_wheel, owlrl_wheel, environment):
+def yaml_checker():
+    spec = importlib.util.spec_from_file_location(
+        "coverage_yaml_checker", Path(__file__).with_name("yaml_test_inputs.py")
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def verify_installed_yaml(owner, authority, project_run, venv, environment):
+    """Verify the original dependency and its complete isolated installed payload."""
+    frozen = yaml_checker().verify(owner, authority)
+    actual = json.loads(
+        run(
+            [
+                *project_run,
+                "python",
+                "-I",
+                "-B",
+                str(Path(__file__).with_name("yaml_test_inputs.py")),
+                "--wheel",
+                str(frozen["wheel"]),
+                "--environment",
+                str(venv),
+            ],
+            environment,
+            capture=True,
+        )
+    )
+    if yaml_checker().verify(owner, authority) != frozen:
+        raise RuntimeError("YAML dependency authority changed during its isolated probe")
+    return actual
+
+
+def install_python_cohort(
+    project, native_wheel, facade_wheel, owlrl_wheel, yaml_wheel, environment
+):
     installation = [
-        wheel for wheel in (native_wheel, facade_wheel, owlrl_wheel) if wheel is not None
+        wheel
+        for wheel in (native_wheel, facade_wheel, owlrl_wheel, yaml_wheel)
+        if wheel is not None
     ]
     run(["uv", "add", "--project", project, "--no-sync", *installation], environment)
     run(["uv", "sync", "--project", project, "--locked", "--no-build"], environment)
@@ -597,6 +635,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=Path("native-coverage"))
     parser.add_argument("--python", default="3.13")
+    parser.add_argument("--yaml-authority", type=Path, required=True)
     parser.add_argument("--owlrl-source", type=Path)
     parser.add_argument("--owlrl-wheel", type=Path)
     parser.add_argument("--owlrl-archive", type=Path)
@@ -610,6 +649,8 @@ def main():
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     os.chdir(root)
+    yaml_authority = args.yaml_authority.resolve(strict=True)
+    yaml_inputs = yaml_checker().verify(root, yaml_authority)
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     manifest = tomllib.loads((root / "pyproject.toml").read_text())
@@ -749,7 +790,12 @@ def main():
         verify_facade_inputs(shacl, facade_wheel, facade_inputs, candidate=candidate)
     if owlrl and freeze_owl_inputs(owlrl, owlrl_wheel) != owlrl_inputs:
         raise RuntimeError("Original OWL companion inputs changed during the native build")
-    install_python_cohort(project_environment, wheel, facade_wheel, owlrl_wheel, environment)
+    if yaml_checker().verify(root, yaml_authority) != yaml_inputs:
+        raise RuntimeError("YAML dependency changed during the native build")
+    install_python_cohort(
+        project_environment, wheel, facade_wheel, owlrl_wheel, yaml_inputs["wheel"], environment
+    )
+    yaml_installed = verify_installed_yaml(root, yaml_authority, project_run, venv, environment)
     if owlrl:
         owlrl_installed = verify_installed_companion(
             owlrl, owlrl_wheel, owlrl_inputs, project_run, venv, environment
@@ -819,6 +865,9 @@ def main():
     result["stages"]["python"], _ = export(
         llvm, [profiles / "python"], objects, output / "python", root
     )
+    result["yaml_inputs"] = yaml_inputs["record"]
+    result["yaml_installed"] = yaml_installed
+    result["yaml_environment"] = {"project": str(project_environment), "venv": str(venv)}
     result["stages"]["python"]["environment_lock_sha256"] = python_lock
     require_python_execution(result["stages"]["python"], binding)
     if owlrl:
@@ -912,6 +961,11 @@ def main():
         ],
         capture=True,
     )
+    if (
+        verify_installed_yaml(root, yaml_authority, project_run, venv, environment)
+        != yaml_installed
+    ):
+        raise RuntimeError("Installed YAML dependency changed during coverage")
     verify_dependency_inputs(root, profiles, output, dependencies)
     if source_authority(root, args.source_archive, args.source_sha256) != authority:
         raise RuntimeError("Native provider source authority changed during measurement")

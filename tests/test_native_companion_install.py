@@ -20,7 +20,9 @@ def helper():
 
 def test_all_three_original_wheels_are_bound_before_the_one_sync(tmp_path, monkeypatch):
     module = helper()
-    paths = [tmp_path / name for name in ("project", "native.whl", "facade.whl", "owl.whl")]
+    paths = [
+        tmp_path / name for name in ("project", "native.whl", "facade.whl", "owl.whl", "yaml.whl")
+    ]
     commands = []
     monkeypatch.setattr(module, "run", lambda args, environment: commands.append(list(args)))
     module.install_python_cohort(*paths, {})

@@ -50,7 +50,7 @@ jobs:
       - name: Verify the facade cohort and arrange exact source peers
         run: uv run --no-project --python 3.13 python -B scripts/ci_facade.py consume --input "$RUNNER_TEMP/candidate-facade-evidence" --environment-file "$GITHUB_ENV"
       - run: cargo install cargo-llvm-cov --version 0.9.1 --locked
-      - run: uv run --no-project python scripts/native_coverage.py --shacl-source "$SHACL_SOURCE" --shacl-wheel "$SHACL_WHEEL" --shacl-candidate-receipt "$SHACL_CANDIDATE_RECEIPT" --shacl-base-revision "$SHACL_BASE_REVISION" --owlrl-source "$OWLRL_SOURCE" --owlrl-wheel "$OWLRL_WHEEL" --owlrl-archive "$OWLRL_ARCHIVE" --owlrl-sha256 "$OWLRL_SHA256"
+      - run: uv run --no-project python scripts/native_coverage.py --shacl-source "$SHACL_SOURCE" --shacl-wheel "$SHACL_WHEEL" --shacl-candidate-receipt "$SHACL_CANDIDATE_RECEIPT" --shacl-base-revision "$SHACL_BASE_REVISION" --owlrl-source "$OWLRL_SOURCE" --owlrl-wheel "$OWLRL_WHEEL" --yaml-authority "$YAML_AUTHORITY" --owlrl-archive "$OWLRL_ARCHIVE" --owlrl-sha256 "$OWLRL_SHA256"
       - uses: actions/upload-artifact@v7
         if: always()
         with:

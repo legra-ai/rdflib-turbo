@@ -48,6 +48,15 @@ def reasoning_checker():
     return module
 
 
+def yaml_checker():
+    spec = importlib.util.spec_from_file_location(
+        "wheel_yaml_checker", Path(__file__).with_name("yaml_test_inputs.py")
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def require_owlrl_wheel(wheel):
     if wheel is None or not Path(wheel).is_file():
         raise ValueError("Wheel verification requires the original pure OWL companion wheel")
@@ -155,7 +164,9 @@ def verify_loaded_package(wheel, python, environment):
     print(f"Verified CPython {python} and every installed wheel source/native hash", flush=True)
 
 
-def test_installed_wheel(wheel, version, shacl_wheel, owlrl_wheel):
+def test_installed_wheel(wheel, version, shacl_wheel, owlrl_wheel, yaml_authority):
+    yaml_inputs = yaml_checker().verify(ROOT, yaml_authority)
+    yaml_wheel = yaml_inputs["wheel"]
     shacl_wheel = require_facade_wheel(shacl_wheel)
     owlrl_wheel = require_owlrl_wheel(owlrl_wheel)
     wheel = Path(wheel).resolve()
@@ -217,6 +228,7 @@ def test_installed_wheel(wheel, version, shacl_wheel, owlrl_wheel):
                 str(wheel),
                 str(shacl_wheel),
                 str(owlrl_wheel),
+                str(yaml_wheel),
             ],
             [
                 "uv",
@@ -242,6 +254,7 @@ def test_installed_wheel(wheel, version, shacl_wheel, owlrl_wheel):
                 str(project / ".venv"),
                 str(shacl_wheel),
                 str(owlrl_wheel),
+                str(yaml_wheel),
             ],
             [
                 "uv",
@@ -264,8 +277,12 @@ def test_installed_wheel(wheel, version, shacl_wheel, owlrl_wheel):
         ]
         verification = next(command for command in commands if "--verify-loaded" in command)
         commands.append(verification)
-        for command in commands:
-            subprocess.run(command, cwd=directory, check=True)
+        try:
+            for command in commands:
+                subprocess.run(command, cwd=directory, check=True)
+        finally:
+            if yaml_checker().verify(ROOT, yaml_authority) != yaml_inputs:
+                raise RuntimeError("YAML dependency changed during wheel acceptance")
 
 
 def prefetch_test_dependencies():
@@ -277,29 +294,31 @@ def prefetch_test_dependencies():
     return module.prepare(ROOT)
 
 
-def test_matrix(wheels, shacl_wheel, owlrl_wheel, *, versions=None):
+def test_matrix(wheels, shacl_wheel, owlrl_wheel, yaml_authority, *, versions=None):
     versions = selected_versions(versions)
     if set(wheels) != set(versions):
         raise ValueError("Wheel inventory must exactly match the requested interpreter cohort")
     prefetch_test_dependencies()
     for version in versions:
-        test_installed_wheel(wheels[version], version, shacl_wheel, owlrl_wheel)
+        test_installed_wheel(wheels[version], version, shacl_wheel, owlrl_wheel, yaml_authority)
 
 
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == "--verify-loaded":
-        if len(sys.argv) != 7:
+        if len(sys.argv) != 8:
             raise ValueError(
-                "Expected --verify-loaded WHEEL PYTHON ENVIRONMENT SHACL_WHEEL OWLRL_WHEEL"
+                "Expected --verify-loaded WHEEL PYTHON ENVIRONMENT SHACL_WHEEL OWLRL_WHEEL YAML_WHEEL"
             )
         verify_loaded_package(Path(sys.argv[2]), sys.argv[3], Path(sys.argv[4]))
         shacl_wheel = require_facade_wheel(Path(sys.argv[5]))
         facade_checker().verify_loaded_facade(shacl_wheel, Path(sys.argv[4]))
         reasoning_checker().verify_loaded(require_owlrl_wheel(Path(sys.argv[6])), Path(sys.argv[4]))
+        yaml_checker().verify_loaded(Path(sys.argv[7]), Path(sys.argv[4]))
         return
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--shacl-wheel", type=Path, required=True)
     parser.add_argument("--owlrl-wheel", type=Path, required=True)
+    parser.add_argument("--yaml-authority", type=Path, required=True)
     parser.add_argument("--python-versions", nargs="+")
     args = parser.parse_args()
     shacl_wheel = require_facade_wheel(args.shacl_wheel)
@@ -307,7 +326,7 @@ def main():
     project = tomllib.loads((ROOT / "pyproject.toml").read_text())
     versions = selected_versions(args.python_versions)
     wheels = select_wheels(ROOT / "dist", project["project"]["version"], versions=versions)
-    test_matrix(wheels, shacl_wheel, owlrl_wheel, versions=versions)
+    test_matrix(wheels, shacl_wheel, owlrl_wheel, args.yaml_authority, versions=versions)
 
 
 if __name__ == "__main__":

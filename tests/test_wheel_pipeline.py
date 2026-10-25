@@ -32,6 +32,12 @@ def driver(monkeypatch):
     spec = importlib.util.spec_from_file_location("wheel_driver", ROOT / "scripts/test_wheel.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    module.yaml_checker = lambda: types.SimpleNamespace(
+        verify=lambda owner, authority: {
+            "wheel": Path(authority).parent / "pyyaml-0.0.0-py3-none-any.whl",
+            "record": {},
+        }
+    )
     return module
 
 
@@ -87,12 +93,12 @@ def test_installed_matrix_tests_every_matching_pair(tmp_path, monkeypatch):
     monkeypatch.setattr(
         module,
         "test_installed_wheel",
-        lambda wheel, version, facade, owl: called.append((wheel, version, facade, owl)),
+        lambda wheel, version, facade, owl, yaml: called.append((wheel, version, facade, owl)),
     )
     facade = facade_wheel(tmp_path)
     owl = reasoning_wheel(tmp_path)
     monkeypatch.setattr(module, "prefetch_test_dependencies", lambda: None)
-    module.test_matrix(expected, facade, owl)
+    module.test_matrix(expected, facade, owl, tmp_path / "yaml-inputs.json")
     assert called == [
         (expected[version], version, facade, owl)
         for version in ("3.11", "3.12", "3.13", "3.14", "3.15")
@@ -208,7 +214,9 @@ def test_wheel_environment_imports_locked_companion_before_artifact(tmp_path, mo
     )
     wheel = metadata_wheel(tmp_path / "candidate.whl")
     facade = facade_wheel(tmp_path)
-    module.test_installed_wheel(wheel, "3.13", facade, reasoning_wheel(tmp_path))
+    module.test_installed_wheel(
+        wheel, "3.13", facade, reasoning_wheel(tmp_path), tmp_path / "yaml-inputs.json"
+    )
     export = next(command for command in commands if command[:2] == ["uv", "export"])
     assert "--locked" in export and "--no-emit-project" in export
     assert export[export.index("--group") + 1] == "coverage"
@@ -243,6 +251,7 @@ def test_dependency_export_failure_stops_wheel_installation(tmp_path, monkeypatc
             "3.13",
             facade_wheel(tmp_path),
             reasoning_wheel(tmp_path),
+            tmp_path / "yaml-inputs.json",
         )
     assert len(commands) == 1
 
@@ -257,7 +266,11 @@ def test_isolated_project_is_bounded_to_its_native_wheel_abi(tmp_path, monkeypat
         module.subprocess, "run", lambda command, **kwargs: commands.append(command)
     )
     module.test_installed_wheel(
-        tmp_path / "candidate.whl", version, facade_wheel(tmp_path), reasoning_wheel(tmp_path)
+        tmp_path / "candidate.whl",
+        version,
+        facade_wheel(tmp_path),
+        reasoning_wheel(tmp_path),
+        tmp_path / "yaml-inputs.json",
     )
     initialize = next(command for command in commands if command[:2] == ["uv", "init"])
     assert initialize[initialize.index("--python") + 1] == f">={version},<{upper}"
