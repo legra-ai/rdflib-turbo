@@ -173,6 +173,20 @@ fn list_parameters_reject_negative_noninteger_duplicate_and_property_shape_value
 }
 
 #[test]
+fn member_shape_rejects_literal_references_at_the_public_parameter_boundary() {
+    let result = CompiledShapes::compile(
+        shapes(r#"<urn:S> sh:targetNode <urn:s>; sh:memberShape "literal-reference"."#),
+        false,
+    );
+    let error = result.err().expect("literal memberShape must be rejected");
+    assert!(
+        error
+            .to_string()
+            .contains("Expected a shape IRI or blank node")
+    );
+}
+
+#[test]
 fn list_length_parameters_require_xsd_integer_lexicals() {
     for name in ["minListLength", "maxListLength"] {
         for lexical in ["1_0", "١", "\u{00a0}1\u{00a0}", "+", ""] {

@@ -122,7 +122,7 @@ def verify_licenses(wheel):
     with ZipFile(wheel) as archive:
         members = archive.namelist()
         for name in ("LICENSE-APACHE", "LICENSE-LEVELDB", "LICENSE-LZ4"):
-            relative = f"vendor/oxrocksdb-sys-0.5.11-notices/{name}"
+            relative = f"vendor/oxrocksdb-sys-0.5.13-notices/{name}"
             matches = [member for member in members if member.endswith(f"/licenses/{relative}")]
             if len(matches) != 1:
                 raise RuntimeError(f"Wheel is missing bundled native license: {relative}")

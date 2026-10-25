@@ -83,7 +83,7 @@ def prepared(helper, tmp_path, monkeypatch):
     def run(command, directory, environment):
         commands.append(command)
         if command == ["uv", "--version"]:
-            return "uv 0.13.1 (fixture)\n"
+            return "uv 0.13.5 (fixture)\n"
         if "-c" in command:
             return "3.13.16\n"
         assert command[:3] == ["uv", "build", "--wheel"]

@@ -1,5 +1,6 @@
 """Standalone Cargo tests must retain their declared native dependency graphs."""
 
+import subprocess
 import tomllib
 from pathlib import Path
 
@@ -7,10 +8,53 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 LOCKFILES = (
-    "vendor/oxigraph-0.5.11/Cargo.lock",
-    "vendor/oxrdf-0.3.4/Cargo.lock",
-    "vendor/spareval-0.2.7/Cargo.lock",
+    "vendor/oxigraph-0.5.13/Cargo.lock",
+    "vendor/oxrdf-0.3.5/Cargo.lock",
+    "vendor/spareval-0.2.9/Cargo.lock",
+    "vendor/fancy-regex-0.20.0/Cargo.lock",
 )
+
+
+def test_every_standalone_vendor_test_lock_is_owned_by_git(tmp_path):
+    # Exercise the shipped ignore policy in a synthetic Git checkout, so this
+    # guard also runs from an original source archive without repository metadata.
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    subprocess.run(["git", "init", "--quiet", str(repository)], check=True)
+    for relative in (".gitignore", "vendor/.gitignore"):
+        source = ROOT / relative
+        if source.exists():
+            target = repository / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(source.read_bytes())
+    patches = tomllib.loads((ROOT / "Cargo.toml").read_text())["patch"]["crates-io"]
+    standalone = set()
+    for patch in patches.values():
+        directory = ROOT / patch["path"]
+        manifest = tomllib.loads((directory / "Cargo.toml").read_text())
+        if "workspace" in manifest:
+            relative = (directory / "Cargo.lock").relative_to(ROOT).as_posix()
+            standalone.add(relative)
+            target = repository / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes((ROOT / relative).read_bytes())
+            ignore = directory / ".gitignore"
+            if ignore.exists():
+                (target.parent / ".gitignore").write_bytes(ignore.read_bytes())
+    subprocess.run(["git", "-c", "core.autocrlf=false", "add", "--all"], cwd=repository, check=True)
+    for relative in sorted(standalone):
+        tracked = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", "--", relative],
+            cwd=repository,
+            capture_output=True,
+            text=True,
+        )
+        assert tracked.returncode == 0, f"Unattributed standalone test input: {relative}"
+        staged = subprocess.run(
+            ["git", "show", f":{relative}"], cwd=repository, capture_output=True, check=True
+        ).stdout
+        assert staged == (ROOT / relative).read_bytes(), f"Unstaged test lock: {relative}"
+    assert standalone == set(LOCKFILES), "Keep the required standalone test inventory complete"
 
 
 @pytest.mark.parametrize("relative", LOCKFILES)

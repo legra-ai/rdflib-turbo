@@ -7,6 +7,10 @@ use pyshacl_turbo_engine::{RegexClasses, RegexPolicy};
 use crate::inference::python_unicode;
 
 pub(crate) fn build(py: Python<'_>) -> PyResult<Arc<RegexPolicy>> {
+    // Initialize the public parent before taking a private child import lock.
+    // A concurrent ordinary `import re` otherwise takes these locks in the
+    // opposite order while importing _compiler/_casefix.
+    py.import("re")?;
     // This finite CPython compiler data is copied while attached. Native
     // compilation and matching never call Python's compiler or matcher.
     let cases: HashMap<u32, Vec<u32>> = py

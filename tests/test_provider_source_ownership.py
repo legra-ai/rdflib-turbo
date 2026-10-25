@@ -18,7 +18,7 @@ def test_native_engine_and_bindings_are_local_workspace_crates():
         assert not {"git", "rev", "branch", "tag"}.intersection(dependency)
         assert path in manifest["workspace"]["members"]
         assert (ROOT / path / "src/lib.rs").is_file()
-    assert manifest["patch"]["crates-io"]["fancy-regex"] == {"path": "vendor/fancy-regex-0.19.2"}
+    assert manifest["patch"]["crates-io"]["fancy-regex"] == {"path": "vendor/fancy-regex-0.20.0"}
 
 
 def test_provider_coverage_includes_the_engine_and_binding_source_files():

@@ -47,7 +47,7 @@ def run(root):
             "test",
             "--locked",
             "--manifest-path",
-            str(root / "vendor/oxrdf-0.3.4/Cargo.toml"),
+            str(root / "vendor/oxrdf-0.3.5/Cargo.toml"),
             "--features",
             features,
         ]

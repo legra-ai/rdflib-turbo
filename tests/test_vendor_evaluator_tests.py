@@ -28,7 +28,7 @@ def test_actual_vendor_feature_modes_require_their_semantic_guards(runner, monke
         assert "--locked" in arguments and "--lib" in arguments
         assert "--no-default-features" in arguments and "--manifest-path" in arguments
         assert "-p" not in arguments
-        assert str(tmp_path / "vendor/spareval-0.2.7/Cargo.toml") in arguments
+        assert str(tmp_path / "vendor/spareval-0.2.9/Cargo.toml") in arguments
     assert "--features" not in calls[1]
     assert calls[3][-1] == "exact-term-builtins,rdf-set-union"
     assert calls[5][-1] == "exact-term-builtins,rdf-set-union,sparql-12"

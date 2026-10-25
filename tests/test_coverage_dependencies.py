@@ -253,7 +253,7 @@ def test_coverage_companion_uses_the_locked_provider_facade():
     engine = cargo["dependencies"]["pyshacl-turbo-engine"]
     companion = project["tool"]["uv"]["sources"]["pyshacl-turbo"]
     assert engine == {"path": "crates/engine"}
-    assert cargo["patch"]["crates-io"]["fancy-regex"] == {"path": "vendor/fancy-regex-0.19.2"}
+    assert cargo["patch"]["crates-io"]["fancy-regex"] == {"path": "vendor/fancy-regex-0.20.0"}
     assert set(companion) == {"path", "editable"}
     assert companion["editable"] is True
     package = next(item for item in lock["package"] if item["name"] == "pyshacl-turbo")

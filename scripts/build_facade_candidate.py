@@ -152,8 +152,8 @@ def build(arguments):
     )
     provider_version = provider["project"]["version"]
     uv = run(["uv", "--version"], capture=True).strip()
-    if not uv.startswith("uv 0.13.1 "):
-        raise ValueError("Candidate artifacts require the pinned uv 0.13.1 builder")
+    if not uv.startswith("uv 0.13.5 "):
+        raise ValueError("Candidate artifacts require the pinned uv 0.13.5 builder")
     output.mkdir(parents=True, exist_ok=False)
     cohort = output / "cohort"
     cohort.mkdir()

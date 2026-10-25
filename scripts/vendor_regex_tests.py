@@ -5,6 +5,7 @@ from pathlib import Path
 
 UNICODE_GUARD = "vm::tests::casei_unicode_fold_equality"
 PYTHON_GUARDS = (
+    "vm::python_re_tests::variable_width_lookbehind_uses_python_compile_error",
     "vm::python_re_tests::unicode_backreferences_advance_by_characters_and_compare_lowercase",
     "vm::python_re_tests::ascii_backreferences_preserve_non_ascii_and_reject_invalid_boundaries",
 )
@@ -13,7 +14,7 @@ ALL_GUARDS = (UNICODE_GUARD, *PYTHON_GUARDS)
 
 
 def run(root):
-    manifest = str(root / "vendor/fancy-regex-0.19.2/Cargo.toml")
+    manifest = str(root / "vendor/fancy-regex-0.20.0/Cargo.toml")
     profiles = (
         ([], (UNICODE_GUARD,)),
         (["--lib", "--no-default-features", "--features", "std,perf,unicode"], (UNICODE_GUARD,)),
@@ -23,7 +24,6 @@ def run(root):
                 "--no-default-features",
                 "--features",
                 "std,perf,unicode,python-re",
-                "python_re_tests",
             ],
             PYTHON_GUARDS,
         ),

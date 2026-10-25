@@ -8,8 +8,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_actual_matcher_identity_changes_for_vendor_only_mutation(tmp_path):
-    original = ROOT / "vendor/fancy-regex-0.19.2"
-    fork = tmp_path / "vendor/fancy-regex-0.19.2"
+    original = ROOT / "vendor/fancy-regex-0.20.0"
+    fork = tmp_path / "vendor/fancy-regex-0.20.0"
     shutil.copytree(
         original,
         fork,
@@ -30,7 +30,7 @@ def test_actual_matcher_identity_changes_for_vendor_only_mutation(tmp_path):
     (project / "src").mkdir(parents=True)
     (project / "Cargo.toml").write_text(
         '[package]\nname="matcher-identity-probe"\nversion="0.0.0"\nedition="2024"\n'
-        '[workspace]\n[dependencies]\nfancy-regex={path="../vendor/fancy-regex-0.19.2",'
+        '[workspace]\n[dependencies]\nfancy-regex={path="../vendor/fancy-regex-0.20.0",'
         'default-features=false,features=["std","perf","unicode","python-re"]}\n'
     )
     (project / "src/main.rs").write_text(

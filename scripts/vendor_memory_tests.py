@@ -85,7 +85,7 @@ def run_configuration(root, features, required):
     arguments = [
         "--locked",
         "--manifest-path",
-        str(root / "vendor/oxigraph-0.5.11/Cargo.toml"),
+        str(root / "vendor/oxigraph-0.5.13/Cargo.toml"),
         "--no-default-features",
     ]
     if features is not None:
