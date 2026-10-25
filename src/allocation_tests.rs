@@ -8,7 +8,7 @@ use oxigraph::model::vocab::{rdf, rdfs, xsd};
 
 use super::*;
 
-#[path = "allocation_canonical_profile.rs"]
+#[path = "allocation_canonical_profile_tests.rs"]
 mod canonical;
 
 struct CountingAllocator;

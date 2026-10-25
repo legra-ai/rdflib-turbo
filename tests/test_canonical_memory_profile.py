@@ -190,3 +190,12 @@ def test_semantic_audit_runs_after_measured_release_with_actual_package_init(tmp
     )
     assert events == ["measurement", "validation_public_report", "released", "semantic"]
     assert "rdflib_turbo" not in sys.modules
+
+
+def test_opt_in_allocator_fixture_is_not_a_production_coverage_source(profiler):
+    import native_coverage
+
+    root = Path(__file__).resolve().parents[1]
+    fixtures = list((root / "src").glob("allocation_canonical_profile*.rs"))
+    assert len(fixtures) == 1
+    assert str(fixtures[0].relative_to(root)) not in native_coverage.owned_sources(root)

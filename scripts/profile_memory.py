@@ -97,12 +97,8 @@ def main():
     parser.add_argument("--yaml-authority", type=Path, required=True)
     args = parser.parse_args()
     runtime_output = args.output.parent / (args.output.stem + "-runtime-" + uuid.uuid4().hex)
-    sources = (
-        source_inputs(runtime_output.with_name(runtime_output.name + "-sources"))
-        if args.owner == "canonical-store"
-        else None
-    )
-    dependency_root = Path(sources["rdflib-turbo"]["source"]) if sources is not None else ROOT
+    sources = source_inputs(runtime_output.with_name(runtime_output.name + "-sources"))
+    dependency_root = Path(sources["rdflib-turbo"]["source"])
     with locked_python_environment(
         dependency_root, runtime_output, sys.executable, args.yaml_authority
     ) as environment:
@@ -111,11 +107,10 @@ def main():
             MEMORY_SHAPES=str(args.shapes.resolve(strict=True)),
             MEMORY_INFERENCE=args.inference,
         )
-        if sources is not None:
-            authority = runtime_output / "source-inputs.json"
-            authority.write_text(json.dumps(sources, indent=2) + "\n")
-            environment.update(MEMORY_SOURCE_INPUTS=str(authority), PYTHONDONTWRITEBYTECODE="1")
-            verify_source_inputs(sources)
+        authority = runtime_output / "source-inputs.json"
+        authority.write_text(json.dumps(sources, indent=2) + "\n")
+        environment.update(MEMORY_SOURCE_INPUTS=str(authority), PYTHONDONTWRITEBYTECODE="1")
+        verify_source_inputs(sources)
         log = run(
             [
                 "cargo",
@@ -139,8 +134,7 @@ def main():
             environment,
             capture=True,
         )
-        if sources is not None:
-            verify_source_inputs(sources)
+        verify_source_inputs(sources)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.with_suffix(".log").write_text(log)
     phases = [
