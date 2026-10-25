@@ -96,6 +96,25 @@ def retain_evidence(source, output, record, owlrl):
         shutil.copyfile(original, target)
 
 
+def retain_yaml_evidence(source, output):
+    record = load("yaml_test_inputs").verify(ROOT, source / "yaml-inputs.json")["record"]
+    # bounded: this one locked dependency's original archive, wheel, receipt and reference files.
+    names = {
+        "yaml-inputs.json",
+        record["archive"],
+        record["wheel"],
+        *(record["source"] + "/" + name for name in record["archive_files"]),
+    }
+    rules = load("facade_candidate")
+    originals = {name: rules.artifact_file(source, name) for name in names}
+    output.mkdir(parents=True, exist_ok=False)
+    for name, original in originals.items():
+        target = output / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(original, target)
+    load("yaml_test_inputs").verify(ROOT, output / "yaml-inputs.json")
+
+
 def prepare(output):
     output = output.resolve()
     if output.is_relative_to(ROOT) or not output.name.startswith("candidate-facade"):
@@ -131,12 +150,15 @@ def prepare(output):
     owlrl_record = load("owl_companion_inputs").prepare(
         owlrl, selected["owlrl"], frozen["owlrl"], build_output, sys.executable, run
     )
+    yaml_source = build_output / "yaml-test-inputs"
+    load("yaml_test_inputs").prepare(ROOT, yaml_source, "3.13.16")
     if owner_input() != owner:
         raise ValueError("Native provider source changed during candidate preparation")
     for name, project, source in peers:
         if builder.freeze(source, selected[name]["revision"], project, run) != frozen[name]:
             raise ValueError("Immutable peer source changed during candidate preparation")
     retain_evidence(build_output, output, record, owlrl_record)
+    retain_yaml_evidence(yaml_source, output / "yaml-test-inputs")
     return output
 
 
@@ -173,6 +195,8 @@ def consume(bundle):
     if record["provider_input"] != owner:
         raise ValueError("Candidate receipt differs from the complete native provider source")
     verify_declaration(record["declaration"], selected["declaration"])
+    yaml_authority = bundle / "yaml-test-inputs/yaml-inputs.json"
+    load("yaml_test_inputs").verify(ROOT, yaml_authority)
     builder = load("build_facade_candidate")
     facade_source = bundle / "candidate-source"
     extract_original(
@@ -187,6 +211,7 @@ def consume(bundle):
     owl_inputs = load("owl_companion_inputs")
     owl = owl_inputs.verify(bundle, selected["owlrl"], owl_inputs.locked_version(ROOT))
     environment = {
+        "YAML_AUTHORITY": str(yaml_authority),
         "SHACL_WHEEL": str(artifacts["candidate_wheel"]),
         "SHACL_SOURCE": str(facade_source),
         "SHACL_CANDIDATE_RECEIPT": str(bundle / "candidate-inputs.json"),

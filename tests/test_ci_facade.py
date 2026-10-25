@@ -120,6 +120,7 @@ def test_consumer_checks_real_provider_inventory_before_extracting_or_exporting(
     dependencies = {
         "facade_candidate": SimpleNamespace(verify_artifacts=verify),
         "native_coverage": SimpleNamespace(facade_payload=object()),
+        "yaml_test_inputs": SimpleNamespace(verify=lambda *args: {}),
     }
     monkeypatch.setattr(module, "load", lambda name: dependencies[name])
     bundle = tmp_path / "candidate-facade-evidence"
@@ -290,6 +291,7 @@ def test_every_consumer_receives_the_same_original_owl_without_fetching_or_build
             artifact_file=lambda root, name: root / name,
         ),
         "native_coverage": SimpleNamespace(facade_payload=object()),
+        "yaml_test_inputs": SimpleNamespace(verify=lambda *args: {}),
         "build_facade_candidate": SimpleNamespace(freeze=lambda *args: owner),
         "owl_companion_inputs": SimpleNamespace(
             verify=lambda *args: owl, locked_version=lambda root: "0.1.0a3"
@@ -359,3 +361,39 @@ def test_prepare_explicitly_passes_independent_declaration_before_any_build(tmp_
     )
     with pytest.raises(RuntimeError, match="independent authorities"):
         module.prepare(tmp_path / "candidate-facade-evidence")
+
+
+def test_portable_yaml_bundle_preserves_all_original_and_reference_files(tmp_path, monkeypatch):
+    module = helper()
+    source, output = tmp_path / "yaml-build", tmp_path / "yaml-relocated"
+    record = {
+        "archive": "originals/pyyaml.tar.gz",
+        "wheel": "wheels/pyyaml.whl",
+        "source": "source",
+        "archive_files": {"lib/yaml/__init__.py": "original", "setup.py": "metadata"},
+    }
+    names = {
+        "yaml-inputs.json",
+        record["archive"],
+        record["wheel"],
+        *(record["source"] + "/" + name for name in record["archive_files"]),
+    }
+    for name in {*names, "scratch/unpublishable.log"}:
+        path = source / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(name)
+    original = module.load
+    monkeypatch.setattr(
+        module,
+        "load",
+        lambda name: (
+            SimpleNamespace(verify=lambda *args: {"record": record})
+            if name == "yaml_test_inputs"
+            else original(name)
+        ),
+    )
+    module.retain_yaml_evidence(source, output)
+    assert {
+        path.relative_to(output).as_posix() for path in output.rglob("*") if path.is_file()
+    } == names
+    assert all((output / name).read_bytes() == (source / name).read_bytes() for name in names)
