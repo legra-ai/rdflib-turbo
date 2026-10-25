@@ -13,6 +13,11 @@ fn legacy_revision(owner: PyRef<'_, crate::NativeDataset>) -> PyResult<u64> {
         .map_err(|_| pyo3::exceptions::PyRuntimeError::new_err("Dataset lock poisoned"))
 }
 
+#[pyfunction]
+fn force_factory_construction(py: Python<'_>) -> PyResult<()> {
+    super::Host::new(py).map(|_| ())
+}
+
 fn execute(source: &str) {
     Python::initialize();
     Python::attach(|py| {
@@ -20,6 +25,12 @@ fn execute(source: &str) {
         crate::_native(&module).unwrap();
         let globals = PyDict::new(py);
         globals.set_item("native", module).unwrap();
+        globals
+            .set_item(
+                "force_factory_construction",
+                wrap_pyfunction!(force_factory_construction, py).unwrap(),
+            )
+            .unwrap();
         globals
             .set_item(
                 "legacy_revision",
@@ -164,6 +175,76 @@ for legacy in [False, True]:
         # The identical successful worker really derives the rule marker.
         assert '<urn:s> <urn:derived> <urn:marker>' in owner.dump('nquads')
     if not legacy: owner.close()
+"#,
+    );
+}
+
+#[test]
+fn native_warning_uses_the_real_host_site_without_repeated_factory_introspection() {
+    execute(
+        r#"
+import decimal
+import dis
+import sys
+import warnings
+from rdflib import Literal, XSD
+left = Literal(1.0, datatype=XSD.double)
+right = Literal(decimal.Decimal('0.9'), datatype=XSD.decimal)
+with decimal.localcontext() as context, warnings.catch_warnings(record=True) as original:
+    context.traps[decimal.FloatOperation] = True
+    warnings.filterwarnings('always', message='NotImplemented should not be used in a boolean context', category=DeprecationWarning)
+    try:
+        assert left <= right
+    except TypeError:
+        assert sys.version_info >= (3,14)
+        assert not original
+    else:
+        assert sys.version_info < (3,14)
+        assert len(original) == 1
+source = '@prefix xsd:<http://www.w3.org/2001/XMLSchema#>. <urn:s> <urn:p> "1.0"^^xsd:double; <urn:q> "0.9"^^xsd:decimal.'
+shapes = '@prefix sh:<http://www.w3.org/ns/shacl#>. <urn:S> sh:targetNode <urn:s>;sh:property [sh:path <urn:p>;sh:lessThanOrEquals <urn:q>].'
+compiled = native.shacl.CompiledShapes(shapes, 'turtle', None, False, True, [], _policy=native.shacl._REGEX_POLICY)
+shared = native.SharedShapes.from_compiled(compiled, _comparison_policy=native.shacl._VALUE_COMPARISON_POLICY)
+store = native.NativeStore()
+store.load(source, 'turtle')
+legacy = native.NativeDataset()
+legacy.load(source, 'turtle', None, True)
+old_dis = dis.get_instructions
+sentinel = RuntimeError('factory introspection must not run per validation')
+def forbidden(*args, **kwargs):
+    raise sentinel
+dis.get_instructions = forbidden
+try:
+    # A negative control proves the spy really detects factory reconstruction.
+    try:
+        force_factory_construction()
+    except RuntimeError as error:
+        assert error is sentinel
+    else:
+        raise AssertionError('Factory introspection guard is ineffective')
+    for operation in [lambda: compiled.validate(source, 'turtle', None, False, 100, 15, False, False, False, False, [], [], [], _comparison_policy=native.shacl._VALUE_COMPARISON_POLICY), lambda: shared.validate_store(store, '{}', False), lambda: shared.validate(legacy, '{}', False)]:
+        with decimal.localcontext() as context, warnings.catch_warnings(record=True) as emitted:
+            context.traps[decimal.FloatOperation] = True
+            context.clear_flags()
+            warnings.filterwarnings('always', message='NotImplemented should not be used in a boolean context', category=DeprecationWarning)
+            try:
+                result = operation()
+            except TypeError as error:
+                assert sys.version_info >= (3,14)
+                assert str(error) == 'NotImplemented should not be used in a boolean context'
+                assert not emitted
+            else:
+                assert sys.version_info < (3,14)
+                assert result[0]
+                assert len(emitted) == 1
+                assert emitted[0].category is original[0].category
+                assert str(emitted[0].message) == str(original[0].message)
+                assert emitted[0].filename == original[0].filename
+                assert emitted[0].lineno == original[0].lineno
+            assert context.flags[decimal.FloatOperation]
+finally:
+    dis.get_instructions = old_dis
+    store.close()
 "#,
     );
 }
