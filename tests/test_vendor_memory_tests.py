@@ -377,7 +377,7 @@ def test_union_budget_requires_exact_isolated_execution(
 ):
     (tmp_path / "Cargo.toml").write_text("[patch.crates-io]\n")
     calls = []
-    name = "storage::memory_union_cache_tests::native_union_query_cache_does_not_exceed_sixteen_mebibytes"
+    name = "storage::memory::lock_tests::union_cache::native_union_query_cache_does_not_exceed_sixteen_mebibytes"
 
     def cargo(arguments, **kwargs):
         calls.append(arguments)
@@ -412,7 +412,15 @@ def test_union_budget_requires_exact_isolated_execution(
 def test_union_semantics_and_budget_are_mandatory(vendor_memory_tests):
     required = set(vendor_memory_tests.REQUIRED_TESTS)
     assert (
-        "storage::memory_union_semantic_tests::native_union_cancellation_errors_when_only_physical_duplicates_remain"
+        "storage::memory::lock_tests::union_cache::semantics::native_union_cancellation_errors_when_only_physical_duplicates_remain"
         in required
     )
     assert vendor_memory_tests.UNION_BUDGET in required
+
+
+def test_native_union_required_names_match_actual_compiled_inventory(vendor_memory_tests):
+    fixture = Path(__file__).parent / "fixtures/native_union_test_inventory.json"
+    actual = json.loads(fixture.read_text())
+    assert set(vendor_memory_tests.REQUIRED_TESTS) <= set(actual["native_exact"])
+    assert vendor_memory_tests.UNION_BUDGET in actual["native_exact"]
+    assert vendor_memory_tests.UNION_BUDGET not in actual["native_standard"]

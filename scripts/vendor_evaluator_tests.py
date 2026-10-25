@@ -6,7 +6,6 @@ from pathlib import Path
 from scripts.vendor_memory_tests import patch_arguments
 
 GENERALIZED_GUARDS = (
-    "dataset::default_union_tests::supplied_union_error_propagates_without_reading_generic_rows",
     "dataset::default_union_tests::absent_union_capability_and_disabled_feature_preserve_existing_generic_semantics",
     "dataset::default_union_tests::single_default_and_selected_graphs_do_not_invoke_union_capability",
     "dataset::generalized_tests::generalized_adapter_retains_all_roles_masks_and_exact_graph_kinds",
@@ -41,6 +40,9 @@ GUARDS = (
     "dataset::scope_tests::invalid_statement_positions_stay_empty",
 )
 DEFAULT_GUARD = "tests::custom_function_upstream_terms_default"
+UNION_ERROR_GUARD = (
+    "dataset::default_union_tests::supplied_union_error_propagates_without_reading_generic_rows"
+)
 EXACT_GUARD = "tests::custom_function_exact_terms_opt_in"
 RDF12_GUARD = "construct_tests::construct_quoted_triples_keep_nested_and_directional_identity"
 # bounded: the fixed critical regression inventory, independent of input RDF size.
@@ -50,6 +52,7 @@ ALL_GUARDS = (
     *GUARDS,
     DEFAULT_GUARD,
     EXACT_GUARD,
+    UNION_ERROR_GUARD,
     RDF12_GUARD,
     GENERALIZED_RDF12_GUARD,
     INFERENCE_RDF12_GUARD,
@@ -59,10 +62,22 @@ ALL_GUARDS = (
 def run(root):
     modes = (
         (None, (DEFAULT_GUARD,)),
-        ("exact-term-builtins,rdf-set-union", (EXACT_GUARD,)),
+        (
+            "exact-term-builtins,rdf-set-union",
+            (
+                EXACT_GUARD,
+                UNION_ERROR_GUARD,
+            ),
+        ),
         (
             "exact-term-builtins,rdf-set-union,sparql-12",
-            (EXACT_GUARD, RDF12_GUARD, GENERALIZED_RDF12_GUARD, INFERENCE_RDF12_GUARD),
+            (
+                EXACT_GUARD,
+                UNION_ERROR_GUARD,
+                RDF12_GUARD,
+                GENERALIZED_RDF12_GUARD,
+                INFERENCE_RDF12_GUARD,
+            ),
         ),
     )
     for features, guards in modes:

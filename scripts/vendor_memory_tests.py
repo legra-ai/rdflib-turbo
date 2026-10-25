@@ -45,14 +45,12 @@ CHANGE_TESTS = (
 COHORTS = ("storage::", "store::generalized::")
 
 EXACT_FEATURES = "exact-term-storage,rocksdb,spareval/rdf-set-union,spareval/exact-custom-function-terms,spareval/exact-term-builtins"
-UNION_BUDGET = (
-    "storage::memory_union_cache_tests::native_union_query_cache_does_not_exceed_sixteen_mebibytes"
-)
+UNION_BUDGET = "storage::memory::lock_tests::union_cache::native_union_query_cache_does_not_exceed_sixteen_mebibytes"
 
 REQUIRED_TESTS = (
     UNION_BUDGET,
-    "storage::memory_union_semantic_tests::native_union_cancellation_errors_when_only_physical_duplicates_remain",
-    "storage::memory_union_semantic_tests::native_union_prefix_cancellation_snapshot_and_rollback_preserve_complete_physical_facts",
+    "storage::memory::lock_tests::union_cache::semantics::native_union_cancellation_errors_when_only_physical_duplicates_remain",
+    "storage::memory::lock_tests::union_cache::semantics::native_union_prefix_cancellation_snapshot_and_rollback_preserve_complete_physical_facts",
     *CHANGE_TESTS,
     "store::generalized::lexical_tests::generalized_lexical_projection_keeps_every_role_mask_and_strict_projection_errors",
     "store::generalized::lexical_tests::generalized_projected_words_outlive_owner_and_keep_pinned_committed_version",

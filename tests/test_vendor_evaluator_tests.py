@@ -68,9 +68,33 @@ def test_explicit_inference_heads_are_mandatory_in_every_feature_profile(runner)
     )
 
 
-def test_optional_unique_union_contract_is_mandatory_with_and_without_union_feature(runner):
+def test_optional_unique_union_contracts_keep_feature_specific_error_guard(runner):
     assert {
         "dataset::default_union_tests::supplied_union_error_propagates_without_reading_generic_rows",
         "dataset::default_union_tests::absent_union_capability_and_disabled_feature_preserve_existing_generic_semantics",
         "dataset::default_union_tests::single_default_and_selected_graphs_do_not_invoke_union_capability",
-    } <= set(runner.GUARDS)
+    } <= set(runner.ALL_GUARDS)
+    assert runner.UNION_ERROR_GUARD not in runner.GUARDS
+
+
+def test_mode_guards_match_actual_compiled_inventory(runner, monkeypatch, tmp_path):
+    import json
+
+    (tmp_path / "Cargo.toml").write_text("[patch.crates-io]\n")
+    actual = json.loads(
+        (Path(__file__).parent / "fixtures/native_union_test_inventory.json").read_text()
+    )
+    executed = []
+
+    def cargo(arguments, **kwargs):
+        key = "evaluator_default"
+        if "--features" in arguments:
+            features = arguments[arguments.index("--features") + 1]
+            key = "evaluator_rdf12" if "sparql-12" in features else "evaluator_exact"
+        if "--list" not in arguments:
+            executed.append(key)
+        return SimpleNamespace(stdout="\n".join(f"{name}: test" for name in actual[key]))
+
+    monkeypatch.setattr(runner.subprocess, "run", cargo)
+    runner.run(tmp_path)
+    assert executed == ["evaluator_default", "evaluator_exact", "evaluator_rdf12"]
