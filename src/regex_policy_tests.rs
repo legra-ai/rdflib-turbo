@@ -4,6 +4,100 @@ use pyo3::prelude::*;
 use pyo3::types::PyString;
 use pyshacl_turbo_engine::RegexClass;
 
+#[pyfunction]
+fn initialize_source_regex_policy(py: Python<'_>) -> PyResult<()> {
+    crate::regex_policy::build(py).map(|_| ())
+}
+
+#[test]
+fn fresh_policy_and_parent_imports_cannot_invert_module_locks() {
+    const CHILD: &str = "RDFLIB_TURBO_REGEX_IMPORT_CHILD";
+    let case = "regex_policy_tests::fresh_policy_and_parent_imports_cannot_invert_module_locks";
+    if std::env::var_os(CHILD).is_none() {
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", case, "--nocapture"])
+            .env(CHILD, "1")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "Fresh import regression failed: {}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(String::from_utf8_lossy(&output.stdout).contains("REGEX_IMPORT_RACE_COMPLETED"));
+        return;
+    }
+    Python::initialize();
+    Python::attach(|py| {
+        let globals = pyo3::types::PyDict::new(py);
+        globals
+            .set_item(
+                "initialize_policy",
+                wrap_pyfunction!(initialize_source_regex_policy, py).unwrap(),
+            )
+            .unwrap();
+        py.run(
+            cr#"import sys
+import threading
+import importlib._bootstrap as bootstrap
+assert 're' not in sys.modules, 'This regression requires a fresh parent module'
+original = bootstrap._get_module_lock
+first_lock = threading.Event()
+parent_locked = threading.Event()
+policy_first = []
+errors = []
+class ObservedLock:
+    def __init__(self, name, lock):
+        self.name, self.lock = name, lock
+    def acquire(self):
+        self.lock.acquire()
+        role = threading.current_thread().name
+        if role == 'policy' and self.name.startswith('re') and not policy_first:
+            policy_first.append(self.name)
+            first_lock.set()
+            if self.name == 're._casefix':
+                assert parent_locked.wait(10), 'Reference parent import never acquired its lock'
+        if role == 'reference' and self.name == 're':
+            parent_locked.set()
+    def release(self):
+        return self.lock.release()
+    def __getattr__(self, name):
+        return getattr(self.lock, name)
+def observed(name):
+    return ObservedLock(name, original(name))
+def policy():
+    try:
+        initialize_policy()
+    except BaseException as error:
+        errors.append(('policy', type(error).__name__, str(error)))
+def reference():
+    try:
+        __import__('re')
+    except BaseException as error:
+        errors.append(('reference', type(error).__name__, str(error)))
+bootstrap._get_module_lock = observed
+try:
+    a = threading.Thread(target=policy, name='policy', daemon=True)
+    a.start()
+    assert first_lock.wait(10), 'Policy never started importing its host authority'
+    b = threading.Thread(target=reference, name='reference', daemon=True)
+    b.start()
+    a.join(20)
+    b.join(20)
+    assert not a.is_alive() and not b.is_alive(), 'Concurrent host imports hung'
+    assert not errors, errors
+    assert policy_first == ['re'], policy_first
+finally:
+    bootstrap._get_module_lock = original
+print('REGEX_IMPORT_RACE_COMPLETED', flush=True)"#,
+            Some(&globals),
+            None,
+        )
+        .unwrap();
+    });
+}
+
 #[test]
 fn host_ffi_store_and_shared_compilers_require_the_module_authority() {
     use pyo3::types::{PyDict, PyModule};
