@@ -141,6 +141,8 @@ def main():
         )
         if sources is not None:
             verify_source_inputs(sources)
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.with_suffix(".log").write_text(log)
     phases = [
         json.loads(line.split("MEMORY_PHASE ", 1)[1])
         for line in log.splitlines()

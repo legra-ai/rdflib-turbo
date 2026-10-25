@@ -128,7 +128,10 @@ def test_bare_allocation_entrypoint_uses_verified_locked_runtime(budgets, monkey
     assert calls == ["enter", selected, "verify-after"]
 
 
-def test_memory_profile_entrypoint_uses_same_verified_locked_runtime(monkeypatch, tmp_path):
+@pytest.mark.parametrize("malformed_receipt", [False, True])
+def test_memory_profile_entrypoint_uses_same_verified_locked_runtime(
+    monkeypatch, tmp_path, malformed_receipt
+):
     import importlib.util
     import json
     from contextlib import contextmanager
@@ -159,7 +162,7 @@ def test_memory_profile_entrypoint_uses_same_verified_locked_runtime(monkeypatch
         assert environment["PYO3_PYTHON"] == selected["PYO3_PYTHON"]
         assert arguments[arguments.index("--package") + 1] == "rdflib-turbo-native"
         calls.append("profile")
-        return "\n".join(
+        result = "\n".join(
             "MEMORY_PHASE " + json.dumps({"phase": phase})
             for phase in (
                 "setup",
@@ -170,6 +173,7 @@ def test_memory_profile_entrypoint_uses_same_verified_locked_runtime(monkeypatch
                 "released",
             )
         )
+        return result + ('\nMEMORY_SEMANTICS {"guard":true}unexpected' if malformed_receipt else "")
 
     monkeypatch.setattr(module, "locked_python_environment", locked, raising=False)
     monkeypatch.setattr(module, "run", run)
@@ -190,5 +194,14 @@ def test_memory_profile_entrypoint_uses_same_verified_locked_runtime(monkeypatch
             str(authority),
         ],
     )
-    module.main()
+    if malformed_receipt:
+        with pytest.raises(json.JSONDecodeError):
+            module.main()
+        assert (
+            (tmp_path / "report.log")
+            .read_text()
+            .endswith('MEMORY_SEMANTICS {"guard":true}unexpected')
+        )
+    else:
+        module.main()
     assert calls == ["enter", "profile", "verify-after"]

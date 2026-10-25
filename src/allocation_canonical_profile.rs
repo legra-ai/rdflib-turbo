@@ -33,7 +33,7 @@ fixture = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fixture)
 inputs = json.loads(Path(os.environ['MEMORY_SOURCE_INPUTS']).read_text())
 result = fixture.execute(native, phase, inputs, os.environ['MEMORY_DATA'], os.environ['MEMORY_SHAPES'], os.environ['MEMORY_INFERENCE'])
-print('MEMORY_SEMANTICS ' + json.dumps(result, sort_keys=True))
+print('MEMORY_SEMANTICS ' + json.dumps(result, sort_keys=True), flush=True)
 "#,
         )
         .unwrap();
