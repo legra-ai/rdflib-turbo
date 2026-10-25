@@ -249,7 +249,10 @@ fn expand_inner(
         }
         #[cfg(all(test, feature = "allocation-profiling"))]
         trace::mark("schedule_before", trace_round, additions.trace_counts());
+        #[cfg(not(all(test, feature = "allocation-profiling")))]
         schedule.apply(data, &mut additions)?;
+        #[cfg(all(test, feature = "allocation-profiling"))]
+        schedule.apply_traced(data, &mut additions, trace_round)?;
         #[cfg(all(test, feature = "allocation-profiling"))]
         trace::mark("schedule_after", trace_round, additions.trace_counts());
         apply_rules(data, &queries, &mut additions, false)?;

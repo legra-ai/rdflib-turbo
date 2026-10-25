@@ -58,9 +58,49 @@ impl Schedule {
     }
 
     pub(super) fn apply(&self, data: &impl Graph, pending: &mut Pending) -> Result<()> {
-        for clause in &self.clauses {
+        self.apply_inner(
+            data,
+            pending,
+            #[cfg(all(test, feature = "allocation-profiling"))]
+            0,
+        )
+    }
+
+    #[cfg(all(test, feature = "allocation-profiling"))]
+    pub(super) fn apply_traced(
+        &self,
+        data: &impl Graph,
+        pending: &mut Pending,
+        round: usize,
+    ) -> Result<()> {
+        self.apply_inner(data, pending, round)
+    }
+
+    fn apply_inner(
+        &self,
+        data: &impl Graph,
+        pending: &mut Pending,
+        #[cfg(all(test, feature = "allocation-profiling"))] round: usize,
+    ) -> Result<()> {
+        for (ordinal, clause) in self.clauses.iter().enumerate() {
+            #[cfg(not(all(test, feature = "allocation-profiling")))]
+            let _ = ordinal;
             if self.bootstrap || clause.wildcard || clause.reads & self.dirty != 0 {
+                #[cfg(all(test, feature = "allocation-profiling"))]
+                crate::allocation_tests::trace::mark_clause(
+                    "clause_before",
+                    round,
+                    ordinal,
+                    pending.trace_counts(),
+                );
                 apply_rules(data, std::slice::from_ref(&clause.query), pending, false)?;
+                #[cfg(all(test, feature = "allocation-profiling"))]
+                crate::allocation_tests::trace::mark_clause(
+                    "clause_after",
+                    round,
+                    ordinal,
+                    pending.trace_counts(),
+                );
             }
         }
         Ok(())
@@ -78,3 +118,7 @@ impl Schedule {
         self.bootstrap = false;
     }
 }
+
+#[cfg(all(test, feature = "allocation-profiling"))]
+#[path = "scheduling_trace_tests.rs"]
+mod trace_tests;

@@ -31,6 +31,7 @@ impl Drop for Guard {
 struct Snapshot<'a> {
     event: &'a str,
     round: usize,
+    clause_ordinal: Option<usize>,
     owned_heads: usize,
     native_heads: usize,
     live_bytes: usize,
@@ -43,6 +44,7 @@ fn snapshot(event: &'static str, round: usize, heads: (usize, usize)) -> Snapsho
     Snapshot {
         event,
         round,
+        clause_ordinal: None,
         owned_heads: heads.0,
         native_heads: heads.1,
         live_bytes: LIVE.load(Relaxed),
@@ -61,19 +63,50 @@ fn emit_into(
     if !ENABLED.load(Relaxed) {
         return Ok(());
     }
+    emit_snapshot(writer, &snapshot(event, round, heads))
+}
+
+fn emit_clause_into(
+    writer: &mut impl Write,
+    event: &'static str,
+    round: usize,
+    ordinal: usize,
+    heads: (usize, usize),
+) -> io::Result<()> {
+    if !ENABLED.load(Relaxed) {
+        return Ok(());
+    }
+    let mut record = snapshot(event, round, heads);
+    record.clause_ordinal = Some(ordinal);
+    emit_snapshot(writer, &record)
+}
+
+fn emit_snapshot(writer: &mut impl Write, record: &Snapshot<'_>) -> io::Result<()> {
     assert!(
-        event.len() <= 48,
+        record.event.len() <= 48,
         "allocation trace label exceeds its fixed bound"
     );
-    let record = snapshot(event, round, heads);
-    // bounded: nine scalar/static fields, a <=48-byte label and <=20 decimal digits/usize.
+    // bounded: nine scalar/static fields, <=48-byte label and <=20 decimal digits/usize.
     let mut bytes = [0; 512];
     let mut output = Cursor::new(bytes.as_mut_slice());
-    serde_json::to_writer(&mut output, &record).map_err(io::Error::other)?;
+    serde_json::to_writer(&mut output, record).map_err(io::Error::other)?;
     let size = output.position() as usize;
     writer.write_all(b"MEMORY_TRACE ")?;
     writer.write_all(&bytes[..size])?;
     writer.write_all(b"\n")
+}
+
+pub(crate) fn mark_clause(
+    event: &'static str,
+    round: usize,
+    ordinal: usize,
+    heads: (usize, usize),
+) {
+    if !ENABLED.load(Relaxed) {
+        return;
+    }
+    emit_clause_into(&mut io::stdout().lock(), event, round, ordinal, heads)
+        .expect("write indexed allocation trace");
 }
 
 pub(crate) fn mark(event: &'static str, round: usize, heads: (usize, usize)) {
@@ -111,6 +144,7 @@ mod tests {
         let before = counters();
         emit_into(&mut output, "inactive", 4, (5, 6)).unwrap();
         mark("inactive-stdout", 4, (5, 6));
+        emit_clause_into(&mut output, "inactive-clause", 4, 12, (5, 6)).unwrap();
         let after = counters();
         assert_eq!(before, after);
         assert_eq!(output.position(), 0);
@@ -178,5 +212,49 @@ mod tests {
         mark("semantic-replay", 0, (0, 0));
         assert_eq!(counters(), before);
         assert_eq!(output.position(), 0);
+    }
+    #[test]
+    #[ignore = "exact isolated allocator process required"]
+    fn indexed_trace_retains_actual_round_and_catalogue_ordinal_without_allocating() {
+        let _guard = Guard::enable();
+        let mut bytes = [0; 512];
+        let mut output = Cursor::new(bytes.as_mut_slice());
+        let before = counters();
+        emit_clause_into(&mut output, "clause_before", 7, 12, (5, 6)).unwrap();
+        assert_eq!(counters(), before);
+        let size = output.position() as usize;
+        let text = std::str::from_utf8(&bytes[..size]).unwrap();
+        let record: Snapshot<'_> =
+            serde_json::from_str(text.strip_prefix("MEMORY_TRACE ").unwrap().trim_end()).unwrap();
+        assert_eq!((record.round, record.clause_ordinal), (7, Some(12)));
+        assert_eq!((record.owned_heads, record.native_heads), (5, 6));
+    }
+
+    #[test]
+    #[ignore = "exact isolated allocator process required"]
+    fn largest_scalar_snapshot_fits_the_fixed_buffer_without_allocating() {
+        let _guard = Guard::enable();
+        let expected = Snapshot {
+            event: "123456789012345678901234567890123456789012345678",
+            round: usize::MAX,
+            clause_ordinal: Some(usize::MAX),
+            owned_heads: usize::MAX,
+            native_heads: usize::MAX,
+            live_bytes: usize::MAX,
+            peak_bytes: usize::MAX,
+            allocated_bytes: usize::MAX,
+            allocation_calls: usize::MAX,
+        };
+        let mut bytes = [0; 512];
+        let mut output = Cursor::new(bytes.as_mut_slice());
+        let before = counters();
+        emit_snapshot(&mut output, &expected).unwrap();
+        assert_eq!(counters(), before);
+        let size = output.position() as usize;
+        assert!(size > 0, "maximum-width trace emitted no snapshot");
+        let text = std::str::from_utf8(&bytes[..size]).unwrap();
+        let record: Snapshot<'_> =
+            serde_json::from_str(text.strip_prefix("MEMORY_TRACE ").unwrap().trim_end()).unwrap();
+        assert_eq!(record, expected);
     }
 }

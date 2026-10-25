@@ -7,6 +7,8 @@ use super::Pending;
 use super::backend::Graph;
 use super::diagnostic_datatypes::{LexicalContext, PythonNumericValue, parse_numeric};
 use super::shared::CompiledRule;
+#[cfg(all(test, feature = "allocation-profiling"))]
+use crate::allocation_tests::trace;
 use crate::{Error, Result};
 
 fn value_key(literal: &Literal, context: &LexicalContext) -> Option<Term> {
@@ -46,6 +48,8 @@ pub(super) fn value_query(context: LexicalContext) -> Result<PreparedSparqlQuery
 pub(super) fn substitute(data: &mut impl Graph, context: &LexicalContext) -> Result<()> {
     // Equality involving Decimal and float signals FloatOperation even when
     // their exact keys differ. Scan scalar categories, never literal pairs.
+    #[cfg(all(test, feature = "allocation-profiling"))]
+    trace::mark("literal_scalar_scan_before", 0, (0, 0));
     let mut decimal = false;
     let mut float = false;
     let mut signaling_nan = false;
@@ -84,7 +88,14 @@ pub(super) fn substitute(data: &mut impl Graph, context: &LexicalContext) -> Res
             ));
         }
     }
-    let triples = data.inference_heads(value_query(context.clone())?)?;
+    #[cfg(all(test, feature = "allocation-profiling"))]
+    trace::mark("literal_scalar_scan_after", 0, (0, 0));
+    let query = value_query(context.clone())?;
+    #[cfg(all(test, feature = "allocation-profiling"))]
+    trace::mark("literal_query_prepared", 0, (0, 0));
+    let triples = data.inference_heads(query)?;
+    #[cfg(all(test, feature = "allocation-profiling"))]
+    trace::mark("literal_query_started", 0, (0, 0));
     let mut additions = Pending::default();
     for triple in triples {
         let triple = triple?;
@@ -99,8 +110,12 @@ pub(super) fn substitute(data: &mut impl Graph, context: &LexicalContext) -> Res
         // Retain immutable query evaluation and only distinct destination delta.
         additions.publish(data, quad)?;
     }
+    #[cfg(all(test, feature = "allocation-profiling"))]
+    trace::mark("literal_collection_done", 0, additions.trace_counts());
     for quad in additions.into_heads() {
         data.insert_head(quad)?;
     }
+    #[cfg(all(test, feature = "allocation-profiling"))]
+    trace::mark("literal_publication_done", 0, (0, 0));
     Ok(())
 }
