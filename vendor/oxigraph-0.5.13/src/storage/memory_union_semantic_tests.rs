@@ -99,10 +99,8 @@ impl Hash for CollisionTerm {
     }
 }
 
-#[test]
-fn compact_cache_checks_full_term_identity_even_when_all_term_hashes_collide() {
-    // bounded: seven explicit canonical term roles with the same lexical word.
-    let values: [crate::model::Term; 7] = [
+pub(super) fn canonical_role_values() -> [crate::model::Term; 7] {
+    [
         NamedNode::new_unchecked("urn:same").into(),
         crate::model::BlankNode::new_unchecked("urn:same").into(),
         Literal::new_simple_literal("urn:same").into(),
@@ -118,7 +116,12 @@ fn compact_cache_checks_full_term_identity_even_when_all_term_hashes_collide() {
         Literal::new_language_tagged_literal("urn:same", "fr")
             .unwrap()
             .into(),
-    ];
+    ]
+}
+
+#[test]
+fn compact_cache_checks_full_term_identity_even_when_all_term_hashes_collide() {
+    let values = canonical_role_values();
     let store = Store::new().unwrap();
     let mut cache = Compact {
         terms: FxHashMap::default(),

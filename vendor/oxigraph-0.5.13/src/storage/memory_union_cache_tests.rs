@@ -203,6 +203,7 @@ fn profile_native_union_and_exact_cache_allocations() {
                 "UNION_CAPACITY {{\"triples\":{rows},\"triple_capacity\":{triple_capacity},\"distinct_terms\":{term_count},\"dictionary_capacity\":{term_capacity}}}"
             );
         }
+        "lease" | "lease-hash" => leases::profile(&reader, rows, arm == "lease-hash"),
         _ => panic!("invalid cache attribution arm"),
     }
     assert_eq!(store.len().unwrap(), rows * contexts);
@@ -271,3 +272,6 @@ fn query_local_ids_never_become_cross_owner_term_identity() {
 
 #[path = "memory_union_semantic_tests.rs"]
 mod semantics;
+
+#[path = "memory_union_lease_tests.rs"]
+mod leases;
