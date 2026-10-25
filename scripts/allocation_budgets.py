@@ -5,9 +5,10 @@ import sys
 
 from .native_coverage import embedded_python_environment, run
 
-# bounded: these twenty regression budgets each require an isolated test process.
+# bounded: these twenty-one regression budgets each require an isolated test process.
 TESTS = (
     "allocation_tests::inference_heap_budget",
+    "inference::pending_retirement_tests::consumed_generalized_frontier_releases_storage_before_iteration_finishes",
     "allocation_tests::named_inference_does_not_clone_source_lexical_storage",
     "inference::staged::allocation_tests::logical_membership_borrows_source_lexical",
     "inference::scoped::boolean_tests::scoped_boolean_probes_do_not_clone_bound_lexical_terms",

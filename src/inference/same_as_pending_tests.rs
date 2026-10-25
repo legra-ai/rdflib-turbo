@@ -13,7 +13,10 @@ fn duplicate_new_head_checks_storage_only_once() {
     let mut pending = Pending::default();
     pending.push(&measured, quad.clone()).unwrap();
     pending.push(&measured, quad.clone()).unwrap();
-    assert_eq!(pending.0, HashSet::from([quad]));
+    assert_eq!(
+        pending.into_iter().collect::<HashSet<_>>(),
+        HashSet::from([quad])
+    );
     assert_eq!(
         measured.work.get(),
         1,
@@ -47,10 +50,10 @@ fn equality_ring_round_work_is_recorded_until_complete() {
             eprintln!(
                 "ring_size={size} round={round} facts={} new={} work={}",
                 data.len(),
-                pending.0.len(),
+                pending.len(),
                 measured.work.get()
             );
-            if pending.0.is_empty() {
+            if pending.is_empty() {
                 assert_eq!(data.len(), size * size);
                 break;
             }
@@ -58,7 +61,7 @@ fn equality_ring_round_work_is_recorded_until_complete() {
                 round < 15,
                 "bounded ring did not reach its equality closure"
             );
-            for quad in pending.0 {
+            for quad in pending {
                 assert!(!data.contains(&quad));
                 data.insert(quad.as_ref());
             }
@@ -113,9 +116,12 @@ fn failed_probe_does_not_mark_head_pending_or_hide_retry() {
     let mut pending = Pending::default();
     let error = pending.push(&data, quad.clone()).unwrap_err();
     assert_eq!(error.to_string(), "first probe failed");
-    assert!(pending.0.is_empty());
+    assert!(pending.is_empty());
     pending.push(&data, quad.clone()).unwrap();
     pending.push(&data, quad.clone()).unwrap();
-    assert_eq!(pending.0, HashSet::from([quad]));
+    assert_eq!(
+        pending.into_iter().collect::<HashSet<_>>(),
+        HashSet::from([quad])
+    );
     assert_eq!(data.0.get(), 2);
 }

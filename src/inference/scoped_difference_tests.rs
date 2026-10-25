@@ -91,14 +91,17 @@ fn sparse_common_predecessors_keep_terminal_terms_and_scoped_visibility() {
                 expected.is_subset(&generalized),
                 "strict public CONSTRUCT control"
             );
-            assert_eq!(actual.0, generalized);
-            assert!(actual.0.contains(&GeneralizedQuad::new(
+            assert_eq!(
+                (&actual).into_iter().cloned().collect::<HashSet<_>>(),
+                generalized
+            );
+            assert!(actual.contains(&GeneralizedQuad::new(
                 terminal.clone(),
                 predicate.clone(),
                 Literal::new_simple_literal("literal"),
                 GraphName::DefaultGraph
             )));
-            assert!(!actual.0.contains(&GeneralizedQuad::new(
+            assert!(!actual.contains(&GeneralizedQuad::new(
                 iri("b"),
                 predicate.clone(),
                 iri("z"),

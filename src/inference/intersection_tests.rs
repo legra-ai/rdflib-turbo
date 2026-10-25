@@ -117,7 +117,6 @@ fn current(data: &GeneralizedDataset) -> (HashSet<Triple>, u64) {
     intersections::additions(&measured, &mut additions).unwrap();
     // bounded: synthetic fixtures produce at most 65 distinct type additions.
     let triples = additions
-        .0
         .into_iter()
         .map(|quad| {
             Triple::new(

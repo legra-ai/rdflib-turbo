@@ -91,11 +91,11 @@ fn late_grouped_query_failure_keeps_pending_private_and_rolls_back_prior_writes(
         );
         assert_eq!(source.calls.get(), 2);
         assert_eq!(
-            pending.0.len(),
+            pending.len(),
             2,
             "first grouped body must emit both heads before failure"
         );
-        for quad in &pending.0 {
+        for quad in &pending {
             assert!(!journal.contains(quad.into()).unwrap());
         }
         assert!(journal.contains((&previous).into()).unwrap());

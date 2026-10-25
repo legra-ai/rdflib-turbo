@@ -362,8 +362,11 @@ fn bounded_equality_witnesses_never_read_destination_edges_in_the_same_round() {
         if !mixed {
             assert_eq!(expected, generalized, "ordinary strict-domain control");
         }
-        assert_eq!(actual.0, generalized);
-        assert!(!actual.0.contains(&GeneralizedQuad::new(
+        assert_eq!(
+            (&actual).into_iter().cloned().collect::<HashSet<_>>(),
+            generalized
+        );
+        assert!(!actual.contains(&GeneralizedQuad::new(
             nodes[0].clone(),
             iri(SAME),
             nodes[7].clone(),

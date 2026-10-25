@@ -34,11 +34,11 @@ fn failure_rolls_back(kernel: Kernel, input: &[(&str, &str, &str)], fault: Fault
         assert!(matches!(error, Error::Runtime(ref text) if text == FAILURE));
         if partial {
             assert!(
-                !pending.0.is_empty(),
+                !pending.is_empty(),
                 "fixture must fail after producing some pending output"
             );
         }
-        for quad in &pending.0 {
+        for quad in &pending {
             assert!(
                 !journal.contains(quad),
                 "pending result became visible before round completion"

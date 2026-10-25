@@ -29,11 +29,11 @@ fn nearly_closed_components_do_not_enumerate_existing_compositions() {
         };
         let mut pending = Pending::default();
         super::super::same_as::apply(&measured, &mut pending).unwrap();
-        assert_eq!(pending.0.len(), components * size);
+        assert_eq!(pending.len(), components * size);
         for component in 0..components {
             for index in 0..size {
                 let node = iri(&format!("c{component}n{index}"));
-                assert!(pending.0.contains(&GeneralizedQuad::new(
+                assert!(pending.contains(&GeneralizedQuad::new(
                     node.clone(),
                     same(),
                     node,
@@ -126,7 +126,7 @@ fn dense_and_sparse_rows_match_frozen_round_with_literals_and_disjoint_component
         let mut actual = Pending::default();
         apply_rules(&measured, &optimized, &mut actual, true).unwrap();
         assert_eq!(
-            actual.0,
+            actual.into_iter().collect::<HashSet<_>>(),
             reference(&data, &original),
             "mixed dense/sparse variant={variant}"
         );
@@ -159,7 +159,7 @@ fn half_connected_components_bound_missing_pair_work_to_their_output() {
         super::super::same_as::apply(&measured, &mut pending).unwrap();
         // This half-connected circulant's immutable R R and R^-1 R witnesses
         // together supply every absent pair; connected closure is not assumed.
-        assert_eq!(pending.0.len(), size * size / 2);
+        assert_eq!(pending.len(), size * size / 2);
         for left in 0..size {
             for right in 0..size {
                 let quad = GeneralizedQuad::new(
@@ -168,7 +168,7 @@ fn half_connected_components_bound_missing_pair_work_to_their_output() {
                     iri(&format!("ring{right}")),
                     GraphName::DefaultGraph,
                 );
-                assert!(data.contains(&quad) || pending.0.contains(&quad));
+                assert!(data.contains(&quad) || pending.contains(&quad));
             }
         }
         assert!(

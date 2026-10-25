@@ -144,11 +144,11 @@ pub(super) fn expand_configured<'a>(
                     GraphName::DefaultGraph,
                 );
                 if !data.contains_destination(typing.as_ref())? {
-                    additions.0.insert(typing);
+                    additions.insert(typing);
                 }
             }
         }
-        for quad in additions.0 {
+        for quad in additions {
             data.insert(quad)?;
         }
     }

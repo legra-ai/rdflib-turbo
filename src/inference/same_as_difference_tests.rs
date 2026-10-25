@@ -130,12 +130,12 @@ fn ring_composition_never_probes_already_present_heads() {
                 0,
                 "size={size} round={round} probed existing equality heads"
             );
-            if pending.0.is_empty() {
+            if pending.is_empty() {
                 assert_eq!(data.len(), size * size);
                 break;
             }
             assert!(round < 15);
-            for quad in pending.0 {
+            for quad in pending {
                 assert!(!data.contains(&quad));
                 data.insert(quad.as_ref());
             }
@@ -182,7 +182,7 @@ fn disjoint_closed_groups_do_not_repeat_incoming_row_reads() {
         reads.work.set(0);
         reads.incoming.set(0);
         rows.extend(&reads, &predicate, &mut pending).unwrap();
-        assert!(pending.0.is_empty());
+        assert!(pending.is_empty());
         // bounded: one outgoing read and one representative row per exact group.
         let budget = GROUPS * (1 + size);
         assert_eq!(reads.work.get(), budget, "closed group size={size}");

@@ -72,6 +72,11 @@ fn phase(name: &str, quads: usize) {
     CALLS.store(0, Relaxed);
 }
 
+/// Current requested Rust heap bytes for isolated allocation regressions.
+pub(crate) fn live_requested_bytes() -> usize {
+    LIVE.load(Relaxed)
+}
+
 /// Measure requested bytes for one synchronous operation in an isolated test.
 pub(crate) fn measure_allocated<T>(operation: impl FnOnce() -> T) -> (T, usize) {
     TOTAL.store(0, Relaxed);
