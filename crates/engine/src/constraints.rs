@@ -313,6 +313,15 @@ fn string(term: Term, name: &str) -> Result<String> {
     Err(Error::Invalid(format!("sh:{name} requires an xsd:string")))
 }
 
+fn pattern_text(term: Term) -> Result<String> {
+    // Core patterns also accept ordinary language-tagged text. Other string
+    // parameter roles retain their existing independent contracts.
+    match term {
+        Term::Literal(value) if value.language().is_some() => Ok(value.value().to_owned()),
+        value => string(value, "pattern"),
+    }
+}
+
 fn expression(text: &str) -> Result<Box<PreparedSparqlQuery>> {
     Ok(Box::new(
         SparqlEvaluator::new()
@@ -616,7 +625,7 @@ pub(crate) fn lower_one(
         C::MaxExclusive(value) => range(value, "MaxExclusiveConstraintComponent", "<")?,
         C::MaxInclusive(value) => range(value, "MaxInclusiveConstraintComponent", "<=")?,
         C::Pattern { pattern, flags } => {
-            let pattern = string(pattern, "pattern")?;
+            let pattern = pattern_text(pattern)?;
             let flags = flags
                 .map(|value| string(value, "flags"))
                 .transpose()?
