@@ -339,20 +339,28 @@ def test_candidate_declaration_must_match_its_independent_policy():
     module.verify_declaration({"authority": {"kind": "git", "revision": "d" * 40}}, selected)
 
 
-def test_prepare_explicitly_passes_independent_declaration_before_any_build(tmp_path, monkeypatch):
+@pytest.mark.parametrize("declaration", ["d" * 40, REVISION])
+def test_prepare_explicitly_passes_independent_declaration_before_any_build(
+    tmp_path, monkeypatch, declaration
+):
     module = helper()
     selected = {
         name: {"revision": char * 40}
         for name, char in (("facade", "a"), ("declaration", "d"), ("owlrl", "c"))
     }
+    selected["declaration"]["revision"] = declaration
     monkeypatch.setattr(module, "policy", lambda: selected)
     monkeypatch.setattr(module, "owner_input", lambda: {"revision": "b" * 40})
     checked = []
-    monkeypatch.setattr(module, "checkout", lambda peer, path: checked.append(peer["revision"]))
+    monkeypatch.setattr(
+        module, "checkout", lambda peer, path: checked.append((peer["revision"], path))
+    )
 
     def build(arguments):
-        assert checked == ["a" * 40, "d" * 40, "c" * 40]
-        assert arguments.declaration_revision == "d" * 40
+        assert [revision for revision, _ in checked] == [REVISION, declaration, "c" * 40]
+        assert len({path for _, path in checked}) == 3
+        assert arguments.facade_source != arguments.declaration_source
+        assert arguments.declaration_revision == declaration
         assert arguments.declaration_source.name == "candidate-facade-evidence-declaration-source"
         raise RuntimeError("all independent authorities checked")
 
