@@ -152,6 +152,97 @@ def test_profile_mapping_cannot_shrink_the_owned_denominator():
     module.verify_denominators(expected, expected)
 
 
+@pytest.mark.parametrize("same_sites", [False, True])
+def test_embedded_python_binds_only_selected_runtime_sites(monkeypatch, tmp_path, same_sites):
+    module = harness()
+    prefix = tmp_path / "selected-runtime"
+    purelib = tmp_path / "selected venv" / "purelib"
+    platlib = purelib if same_sites else tmp_path / "selected venv" / "platlib"
+    calls = []
+
+    def run(arguments, environment, *, capture=False):
+        calls.append(arguments)
+        if "get_path" in arguments[-1]:
+            return json.dumps(
+                {
+                    "purelib": str(purelib),
+                    "platlib": str(platlib),
+                    "rdflib": str(purelib / "rdflib/__init__.py"),
+                }
+            )
+        return str(prefix)
+
+    monkeypatch.setattr(module, "run", run)
+    original = {"PYTHONPATH": str(tmp_path / "untrusted-source"), "PYTHONNOUSERSITE": "0"}
+    configured = module.embedded_python_environment("/selected/python", original)
+    assert configured["PYTHONPATH"].split(module.os.pathsep) == list(
+        dict.fromkeys([str(purelib), str(platlib)])
+    )
+    assert configured["PYTHONNOUSERSITE"] == "1"
+    assert configured["PYTHONSAFEPATH"] == "1"
+    assert all(arguments[1] == "-I" for arguments in calls)
+    assert original == {"PYTHONPATH": str(tmp_path / "untrusted-source"), "PYTHONNOUSERSITE": "0"}
+
+
+def test_embedded_python_imports_rdflib_from_actual_selected_uv_environment(tmp_path):
+    import os
+    import subprocess
+    import sys
+
+    module = harness()
+    environment = dict(os.environ)
+    for name in ("VIRTUAL_ENV", "UV_PYTHON", "UV_PROJECT_ENVIRONMENT", "UV_PROJECT"):
+        environment.pop(name, None)
+    project = tmp_path / "isolated-project"
+    module.initialize_project(project, sys.executable, environment)
+    subprocess.run(
+        ["uv", "add", "--project", str(project), "--no-sync", "rdflib==7.6.0"],
+        env=environment,
+        check=True,
+    )
+    subprocess.run(
+        ["uv", "sync", "--project", str(project), "--locked", "--no-build"],
+        env=environment,
+        check=True,
+    )
+    selected = (
+        project / ".venv" / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+    )
+    base = subprocess.check_output(
+        [str(selected), "-I", "-c", "import sys; print(sys._base_executable)"],
+        env=environment,
+        text=True,
+    ).strip()
+    ambient = tmp_path / "ambient"
+    (ambient / "rdflib").mkdir(parents=True)
+    (ambient / "rdflib/__init__.py").write_text(
+        "raise RuntimeError('ambient rdflib source imported')"
+    )
+    inherited = {**environment, "PYTHONPATH": str(ambient)}
+    configured = module.embedded_python_environment(selected, inherited)
+    # The base distribution cannot discover a UV venv itself, as with embedded CPython.
+    actual = subprocess.check_output(
+        [base, "-B", "-c", "import rdflib; print(rdflib.__file__)"],
+        cwd=ambient,
+        env=configured,
+        text=True,
+    ).strip()
+    assert Path(actual).resolve().is_relative_to(project / ".venv")
+    assert configured["PYTHONPATH"] != inherited["PYTHONPATH"]
+    subprocess.run(
+        ["uv", "remove", "--project", str(project), "--no-sync", "rdflib"],
+        env=environment,
+        check=True,
+    )
+    subprocess.run(
+        ["uv", "sync", "--project", str(project), "--locked", "--no-build"],
+        env=environment,
+        check=True,
+    )
+    with pytest.raises(RuntimeError, match="rdflib"):
+        module.embedded_python_environment(selected, inherited)
+
+
 def test_embedded_python_uses_the_selected_interpreters_standard_library(monkeypatch, tmp_path):
     module = harness()
     calls = []
@@ -160,6 +251,14 @@ def test_embedded_python_uses_the_selected_interpreters_standard_library(monkeyp
 
     def run(arguments, environment, *, capture=False):
         calls.append((arguments, environment, capture))
+        if "get_path" in arguments[-1]:
+            return json.dumps(
+                {
+                    "purelib": str(prefix),
+                    "platlib": str(prefix),
+                    "rdflib": str(prefix / "rdflib/__init__.py"),
+                }
+            )
         return f"{prefix}\n"
 
     monkeypatch.setattr(module, "run", run)
@@ -190,7 +289,15 @@ def test_embedded_python_linux_loader_uses_the_selected_interpreters_library(
     monkeypatch.setattr(
         module,
         "run",
-        lambda args, env, capture=False: library if "sysconfig" in args[-1] else prefix,
+        lambda args, env, capture=False: (
+            json.dumps(
+                {"purelib": prefix, "platlib": prefix, "rdflib": prefix + "/rdflib/__init__.py"}
+            )
+            if "get_path" in args[-1]
+            else library
+            if "sysconfig" in args[-1]
+            else prefix
+        ),
     )
     original = {} if previous is None else {"LD_LIBRARY_PATH": previous}
     configured = module.embedded_python_environment(str(tmp_path / "python/bin/python"), original)
@@ -207,7 +314,17 @@ def test_embedded_python_rejects_an_invalid_library_directory(monkeypatch, tmp_p
         module,
         "run",
         lambda args, env, capture=False: (
-            "relative" if "sysconfig" in args[-1] else str(tmp_path / "python")
+            json.dumps(
+                {
+                    "purelib": str(tmp_path),
+                    "platlib": str(tmp_path),
+                    "rdflib": str(tmp_path / "rdflib/__init__.py"),
+                }
+            )
+            if "get_path" in args[-1]
+            else "relative"
+            if "sysconfig" in args[-1]
+            else str(tmp_path / "python")
         ),
     )
     with pytest.raises(RuntimeError, match="absolute library directory"):

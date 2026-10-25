@@ -84,13 +84,47 @@ def run(arguments, environment=None, *, capture=False):
 
 
 def embedded_python_environment(python, environment):
-    """An embedded interpreter needs its selected distribution's standard library."""
+    """Bind embedded CPython to the selected runtime and its installed dependencies."""
     prefix = run(
         [python, "-I", "-c", "import sys; print(sys.base_prefix)"], environment, capture=True
     ).strip()
     if not Path(prefix).is_absolute():
         raise RuntimeError("Python did not report an absolute runtime prefix")
-    configured = {**environment, "PYTHONHOME": prefix}
+    installed = json.loads(
+        run(
+            [
+                python,
+                "-I",
+                "-c",
+                "import json, sysconfig, rdflib; "
+                "print(json.dumps({'purelib': sysconfig.get_path('purelib'), "
+                "'platlib': sysconfig.get_path('platlib'), 'rdflib': rdflib.__file__}))",
+            ],
+            environment,
+            capture=True,
+        )
+    )
+    sites = []
+    for name in ("purelib", "platlib"):
+        value = installed.get(name)
+        if not isinstance(value, str) or not value or not Path(value).is_absolute():
+            raise RuntimeError(f"Python did not report an absolute {name} directory")
+        if value not in sites:
+            sites.append(value)
+    origin = installed.get("rdflib")
+    if (
+        not isinstance(origin, str)
+        or not Path(origin).is_absolute()
+        or not any(Path(origin).resolve().is_relative_to(Path(site).resolve()) for site in sites)
+    ):
+        raise RuntimeError("Selected Python imported rdflib outside its installed site directories")
+    configured = {
+        **environment,
+        "PYTHONHOME": prefix,
+        "PYTHONPATH": os.pathsep.join(sites),
+        "PYTHONNOUSERSITE": "1",
+        "PYTHONSAFEPATH": "1",
+    }
     if sys.platform == "linux":
         library = run(
             [python, "-I", "-c", "import sysconfig; print(sysconfig.get_config_var('LIBDIR'))"],
