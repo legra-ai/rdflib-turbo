@@ -13,7 +13,9 @@ static PEAK: AtomicUsize = AtomicUsize::new(0);
 
 fn observe_peak(live: usize) {
     let _ = TRACKING.try_with(|tracking| {
-        if tracking.get() { PEAK.fetch_max(live, Relaxed); }
+        if tracking.get() {
+            PEAK.fetch_max(live, Relaxed);
+        }
     });
 }
 
@@ -111,12 +113,21 @@ struct RequestedHeap {
 }
 
 fn measure_requested_heap(operation: impl FnOnce()) -> RequestedHeap {
-    assert!(!TRACKING.with(Cell::get), "Requested heap measurements must not nest");
+    assert!(
+        !TRACKING.with(Cell::get),
+        "Requested heap measurements must not nest"
+    );
     let live_before = LIVE.load(Relaxed);
     // Only the explicit isolated measurement entry resets highwater; live is never reset.
     PEAK.store(live_before, Relaxed);
     let (calls, allocated) = measure_allocations(operation);
-    RequestedHeap { live_before, live_after: LIVE.load(Relaxed), peak: PEAK.load(Relaxed), calls, allocated }
+    RequestedHeap {
+        live_before,
+        live_after: LIVE.load(Relaxed),
+        peak: PEAK.load(Relaxed),
+        calls,
+        allocated,
+    }
 }
 
 #[test]
@@ -156,9 +167,15 @@ fn requested_heap_tracks_retained_allocation_and_reallocation() {
         std::hint::black_box(&bytes);
     });
     // reserve_exact takes additional elements relative to length, not existing capacity.
-    assert_eq!(allocation.live_after, allocation.live_before + bytes.capacity() - original_capacity);
+    assert_eq!(
+        allocation.live_after,
+        allocation.live_before + bytes.capacity() - original_capacity
+    );
     assert!(allocation.peak >= allocation.live_after);
-    assert_eq!((allocation.calls, allocation.allocated), (1, bytes.capacity()));
+    assert_eq!(
+        (allocation.calls, allocation.allocated),
+        (1, bytes.capacity())
+    );
     drop(bytes);
 }
 
@@ -223,8 +240,16 @@ fn profile_actual_storage_type_layouts() {
         };
     }
     layout!(EncodedTerm);
+    layout!(spareval::InternalQuad<EncodedTerm>);
+    layout!((EncodedTerm, EncodedTerm, EncodedTerm));
+    layout!((EncodedTerm, usize));
+    layout!([usize; 3]);
     layout!(EncodedGraphName);
     layout!(EncodedQuad);
     layout!(QuadListNode);
     layout!(VersionRange);
 }
+
+#[cfg(feature = "exact-term-storage")]
+#[path = "memory_union_cache_tests.rs"]
+mod union_cache;
