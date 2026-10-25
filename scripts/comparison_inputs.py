@@ -49,6 +49,16 @@ def normalized_manifest(original, archived):
     expected = copy.deepcopy(original)
     if "readme" not in expected["package"] and archived["package"].get("readme") == "README.md":
         expected["package"]["readme"] = "README.md"
+    if expected == archived:
+        return
+    workspace = expected.get("workspace", {})
+    members = workspace.get("members")
+    if members is not None:
+        # Maturin keeps the root package implicit in the packaged workspace.
+        # A distinct default selection is authoritative and must remain exact.
+        if workspace.get("default-members") == members:
+            del workspace["default-members"]
+        workspace["members"] = [member for member in members if member != "."]
     if expected != archived:
         raise ValueError("Unexpected Cargo manifest normalization")
 
@@ -58,7 +68,16 @@ def audit_tree(source, extracted, names):
     for name in names:
         path = extracted / name
         required = name.startswith(
-            ("src/", "python/", "vendor/", "build_support/", "tests/", "scripts/", ".github/")
+            (
+                "src/",
+                "python/",
+                "vendor/",
+                "crates/",
+                "build_support/",
+                "tests/",
+                "scripts/",
+                ".github/",
+            )
         )
         required |= name in (
             "Cargo.toml",

@@ -1,0 +1,79 @@
+[package]
+name = "rdflib-turbo-native"
+version = "0.2.0-alpha.19"
+edition = "2024"
+rust-version = "1.99.1"
+license = "MIT OR Apache-2.0"
+description = "Native exact-term RDF dataset runtime for Python"
+repository = "https://github.com/legra-ai/rdflib-turbo"
+authors = ["DataRoad Inc, Delaware, USA, trading as Legra"]
+publish = false
+
+[package.metadata.version-info]
+pre_bump_hooks = ["uv run --no-project python scripts/sync_version.py {{version}}"]
+additional_files = ["pyproject.toml", "uv.lock"]
+
+[lib]
+name = "_native"
+crate-type = ["cdylib"]
+
+[features]
+# Test-binary allocation accounting; never enable in published wheels.
+allocation-profiling = []
+# The Python wheels include this capability; Store() still defaults to memory.
+persistence = ["oxigraph/rocksdb"]
+
+[dependencies]
+shacl-bindings = { package = "pyshacl-turbo-python", path = "crates/python" }
+datalog-structural-model = "=3.0.0"
+rdf-reasoning = "=2.0.0"
+pyshacl-turbo-engine = { path = "crates/engine" }
+serde = { version = "1", features = ["derive"] }
+oxigraph = { version = "=0.5.13", default-features = false, features = ["exact-term-storage"] }
+oxrdf = { version = "=0.3.5", features = ["rdf-10-string-identity"] }
+pyo3 = { version = "=0.30.1" }
+serde_json = "1"
+oxilangtag = "=0.1.6"
+spargebra = "=0.4.8"
+sparopt = "=0.3.9"
+spareval = { version = "=0.2.9", features = ["exact-custom-function-terms", "exact-term-builtins", "rdf-set-union"] }
+thiserror = "2"
+roxmltree = "=0.21.2"
+
+[build-dependencies]
+pyo3-build-config = { version = "=0.30.1", features = ["resolve-config"] }
+serde = { version = "1", features = ["derive"] }
+toml = { version = "1.1", default-features = false, features = ["parse", "serde"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
+[patch.crates-io]
+oxrocksdb-sys = { path = "vendor/oxrocksdb-sys-0.5.13" }
+oxigraph = { path = "vendor/oxigraph-0.5.13" }
+fancy-regex = { path = "vendor/fancy-regex-0.20.0" }
+oxrdf = { path = "vendor/oxrdf-0.3.5" }
+sparopt = { path = "vendor/sparopt-0.3.9" }
+spareval = { path = "vendor/spareval-0.2.9" }
+spargebra = { path = "vendor/spargebra-0.4.8" }
+oxsdatatypes = { path = "vendor/oxsdatatypes-0.2.4" }
+
+[workspace]
+members = [".", "crates/engine", "crates/python"]
+default-members = [".", "crates/engine", "crates/python"]
+exclude = ["vendor/*", "tests/build-metadata", "tests/store-contract"]
+resolver = "2"
+
+[workspace.package]
+version = "0.7.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+rust-version = "1.99.1"
+authors = ["DataRoad Inc, Delaware, USA, trading as Legra"]
+repository = "https://github.com/legra-ai/rdflib-turbo"
+
+[workspace.dependencies]
+oxigraph = { version = "=0.5.13", default-features = false, features = ["exact-term-storage"] }
+thiserror = "2"
+pyo3 = { version = "=0.30.1" }
