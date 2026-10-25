@@ -95,7 +95,9 @@ pub(crate) enum Constraint {
     Datatype(NamedNode),
     NodeKind(String),
     Pattern(crate::pattern::Pattern),
-    Expression {
+    Range {
+        bound: Term,
+        operator: crate::ComparisonOperator,
         component: &'static str,
         query: Box<PreparedSparqlQuery>,
     },
@@ -111,6 +113,7 @@ pub(crate) enum Constraint {
         kind: &'static str,
         predicate: NamedNode,
         query: Option<Box<PreparedSparqlQuery>>,
+        operator: Option<crate::ComparisonOperator>,
     },
     Logical {
         kind: &'static str,
@@ -570,7 +573,9 @@ pub(crate) fn lower_one(
             .ok_or_else(|| Error::Invalid(format!("Unknown shape {n}")))
     };
     let range = |value: Term, component, operator| -> Result<Constraint> {
-        Ok(Constraint::Expression {
+        Ok(Constraint::Range {
+            bound: value.clone(),
+            operator: crate::ComparisonOperator::parse(operator),
             component,
             query: expression(&format!("?value {operator} {value}"))?,
         })
@@ -587,6 +592,7 @@ pub(crate) fn lower_one(
             ));
         }
         Ok(Constraint::Pair {
+            operator: operator.map(crate::ComparisonOperator::parse),
             kind,
             predicate,
             query: operator

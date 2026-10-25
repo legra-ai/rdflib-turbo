@@ -474,6 +474,7 @@ impl PyCompiledShapes {
                         allow_warnings,
                         abort_on_first,
                         namespaces,
+                        comparison: pyshacl_turbo_engine::CoreComparisonPolicy::NativeSparql,
                         focus_nodes: focus_nodes
                             .into_iter()
                             .map(|s| NamedNode::new(s).map(Term::from))

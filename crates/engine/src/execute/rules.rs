@@ -42,6 +42,7 @@ impl CompiledShapes {
             ));
         }
         let mut evaluation = Evaluation::new(options.max_validation_depth);
+        evaluation.comparison = options.comparison.clone();
         for &index in &self.execution_order {
             let shape = &self.shapes[index];
             if !options.use_shapes.is_empty() && !options.use_shapes.contains(&shape.node) {

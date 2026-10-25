@@ -106,7 +106,7 @@ impl CompiledShapes {
                 | Constraint::Datatype(_)
                 | Constraint::NodeKind(_)
                 | Constraint::Pattern(_)
-                | Constraint::Expression { .. }
+                | Constraint::Range { .. }
                 | Constraint::Length { .. }
                 | Constraint::LanguageIn(_)
                 | Constraint::UniqueLang

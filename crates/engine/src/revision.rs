@@ -77,6 +77,7 @@ pub const SOURCES: &[(&str, &[u8])] = &[
     ("sparql_regex.rs", include_bytes!("sparql_regex.rs")),
     ("structural.rs", include_bytes!("structural.rs")),
     ("value.rs", include_bytes!("value.rs")),
+    ("value/comparison.rs", include_bytes!("value/comparison.rs")),
 ];
 
 fn update_source(digest: &mut Sha256, source: &[u8]) {

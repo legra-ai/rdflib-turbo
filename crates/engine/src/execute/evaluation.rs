@@ -12,6 +12,7 @@ impl Evaluation {
             max_depth,
             warnings: Vec::new(),
             batch: None,
+            comparison: crate::CoreComparisonPolicy::default(),
         }
     }
 

@@ -86,9 +86,22 @@ impl CompiledShapes {
                     }
                 }
             }
-            Constraint::Expression { component, query } => {
+            Constraint::Range {
+                bound,
+                operator,
+                component,
+                query,
+            } => {
                 for value in values {
-                    if !crate::value::expression(query, data, value, None)? {
+                    if !crate::value::compare(
+                        &evaluation.comparison,
+                        crate::ComparisonRole::Range,
+                        *operator,
+                        query,
+                        data,
+                        value,
+                        bound,
+                    )? {
                         results.push(violation(component, Some(value)));
                     }
                 }

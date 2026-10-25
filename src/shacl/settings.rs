@@ -107,6 +107,7 @@ impl Settings {
             focus_nodes: nodes(self.focus_nodes)?,
             use_shapes: nodes(self.use_shapes)?,
             namespaces: self.data_namespaces,
+            comparison: pyshacl_turbo_engine::CoreComparisonPolicy::NativeSparql,
         })
     }
 }

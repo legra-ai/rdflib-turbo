@@ -58,9 +58,16 @@ pub use query_graph::QueryGraph;
 pub use regex_policy::{RegexClass, RegexClasses, RegexLexicalResolver, RegexPolicy};
 pub use revision::fingerprint as engine_fingerprint;
 pub use shapes_source::IndexedShapesSource;
+pub use value::comparison::{
+    ComparisonFailure, ComparisonOperator, ComparisonRole, ComparisonSignal, CoreComparisonPolicy,
+    FiniteNumber, NumericComparisonContext, NumericKind, NumericOperand, NumericValue,
+    ValueComparisonPolicy, compare_numeric, numeric_kind,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error(transparent)]
+    Comparison(#[from] ComparisonFailure),
     #[error("SHACL validation failure: {0}")]
     ValidationFailure(String),
     #[error("{message}\nFor reference, see {link}")]

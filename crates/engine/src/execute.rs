@@ -26,6 +26,7 @@ pub struct Options {
     pub focus_nodes: Vec<Term>,
     pub use_shapes: Vec<Term>,
     pub namespaces: Vec<(String, String)>,
+    pub comparison: crate::CoreComparisonPolicy,
 }
 
 impl Default for Options {
@@ -40,6 +41,7 @@ impl Default for Options {
             focus_nodes: Vec::new(),
             use_shapes: Vec::new(),
             namespaces: Vec::new(),
+            comparison: crate::CoreComparisonPolicy::default(),
         }
     }
 }
@@ -78,6 +80,7 @@ struct Evaluation {
     max_depth: usize,
     warnings: Vec<String>,
     batch: Option<EvaluationBatch>,
+    comparison: crate::CoreComparisonPolicy,
 }
 
 #[derive(Clone, Copy)]

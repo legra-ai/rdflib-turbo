@@ -20,12 +20,21 @@ impl CompiledShapes {
                 kind,
                 predicate,
                 query,
+                operator,
             } => {
                 let others = objects(data, focus, predicate)?;
                 if let Some(query) = query {
                     for value in values {
                         for other in &others {
-                            if !crate::value::expression(query, data, value, Some(other))? {
+                            if !crate::value::compare(
+                                &evaluation.comparison,
+                                crate::ComparisonRole::PropertyPair,
+                                operator.expect("Ordering pair has operator"),
+                                query,
+                                data,
+                                value,
+                                other,
+                            )? {
                                 results.push(violation(kind, Some(value)));
                             }
                         }
