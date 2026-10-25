@@ -184,7 +184,15 @@ def test_missing_explicit_wheel_fails_before_any_native_command(tmp_path, monkey
     monkeypatch.setattr(
         module.sys,
         "argv",
-        ["native_coverage.py", "--output", str(tmp_path / "out"), "--shacl-source", str(source)],
+        [
+            "native_coverage.py",
+            "--output",
+            str(tmp_path / "out"),
+            "--shacl-source",
+            str(source),
+            "--yaml-authority",
+            str(tmp_path / "yaml-inputs.json"),
+        ],
     )
     monkeypatch.setattr(
         module, "run", lambda *args, **kwargs: pytest.fail("native command before required wheel")

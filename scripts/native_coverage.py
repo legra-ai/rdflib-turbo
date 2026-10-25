@@ -649,8 +649,6 @@ def main():
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     os.chdir(root)
-    yaml_authority = args.yaml_authority.resolve(strict=True)
-    yaml_inputs = yaml_checker().verify(root, yaml_authority)
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     manifest = tomllib.loads((root / "pyproject.toml").read_text())
@@ -701,6 +699,8 @@ def main():
             owlrl, args.owlrl_archive, args.owlrl_sha256, project="owlrl-turbo"
         )
     owlrl_inputs = freeze_owl_inputs(owlrl, owlrl_wheel) if owlrl else None
+    yaml_authority = args.yaml_authority.resolve(strict=True)
+    yaml_inputs = yaml_checker().verify(root, yaml_authority)
     environment = dict(os.environ)
     environment.pop("PYTHONPATH", None)
     environment.pop("VIRTUAL_ENV", None)
