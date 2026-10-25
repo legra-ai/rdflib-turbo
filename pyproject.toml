@@ -35,7 +35,7 @@ editable-profile = "release"
 features = ["pyo3/extension-module", "persistence"]
 python-source = "python"
 module-name = "rdflib_turbo._native"
-include = [{path = ".cargo/config.toml", format = "sdist"}, {path = "uv.lock", format = "sdist"}, {path = "build_support/**/*", format = "sdist"}, {path = "vendor/**/*", format = "sdist"}, {path = "tests/**/*", format = "sdist"}, {path = "docs/**/*", format = "sdist"}, {path = "scripts/**/*", format = "sdist"}, {path = ".github/**/*", format = "sdist"}, {path = "rust-toolchain.toml", format = "sdist"}]
+include = [{path = "tools/**/*", format = "sdist"}, {path = ".cargo/config.toml", format = "sdist"}, {path = "uv.lock", format = "sdist"}, {path = "build_support/**/*", format = "sdist"}, {path = "vendor/**/*", format = "sdist"}, {path = "tests/**/*", format = "sdist"}, {path = "docs/**/*", format = "sdist"}, {path = "scripts/**/*", format = "sdist"}, {path = ".github/**/*", format = "sdist"}, {path = "rust-toolchain.toml", format = "sdist"}]
 exclude = ["**/target/**/*", "**/__pycache__/**/*", "docs/plans/**", "docs/parity-evidence/**"]
 
 # Apply the same SDK minimum to user source builds and wheel tags, not just CI.

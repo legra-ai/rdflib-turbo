@@ -104,7 +104,7 @@ jobs:
           cache-key: vendor-${{ hashFiles('vendor/**') }}
       - run: uv build --sdist --out-dir dist -C 'maturin.build-args=--locked'
       - run: uv run --no-project python scripts/audit_sdist.py dist/*.tar.gz
-      - run: uv run --locked --only-group packaging twine check --strict dist/*
+      - run: uv --project tools/packaging run --locked --only-group packaging twine check --strict dist/*
       - uses: actions/upload-artifact@v7
         with:
           name: release-sdist
@@ -195,7 +195,7 @@ jobs:
           for python in ${{ matrix.python-versions }}; do
             uv build --wheel --python "$python" --out-dir dist -C 'maturin.build-args=--locked --target ${{ matrix.target }} --compatibility pypi' source-build || exit 1
           done
-      - run: uv run --locked --only-group packaging twine check --strict dist/*
+      - run: uv --project tools/packaging run --locked --only-group packaging twine check --strict dist/*
       - name: Test the installed wheel without source-tree imports
         run: uv run --no-project python scripts/test_wheel.py --python-versions ${{ matrix.python-versions }} --shacl-wheel "$SHACL_WHEEL" --owlrl-wheel "$OWLRL_WHEEL" --yaml-authority "$YAML_AUTHORITY"
       - uses: actions/upload-artifact@v7
