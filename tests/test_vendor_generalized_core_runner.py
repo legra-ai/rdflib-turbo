@@ -7,6 +7,18 @@ from types import SimpleNamespace
 
 import pytest
 
+# bounded: two full-SPO prefix work and graph/lifetime contracts.
+FULL_SPO = (
+    "dataset::pattern::work_tests::full_spo_membership_does_not_visit_the_subject_fanout_per_candidate",
+    "dataset::pattern::work_tests::full_spo_unscoped_keeps_every_graph_and_temporary_pattern_lifetime",
+)
+
+# bounded: two paired-prefix work and semantic contracts.
+PAIRED_PREFIX = (
+    "dataset::pattern::work_tests::pair_prefixes_visit_only_matching_physical_rows",
+    "dataset::pattern::work_tests::pair_prefixes_keep_legacy_order_graphs_and_temporary_pattern_lifetimes",
+)
+
 # bounded: three streaming-removal contracts required in both RDF profiles.
 STREAM_REMOVAL = (
     "dataset::generalized_remove_tests::generalized_streaming_removal_preserves_first_arcs_and_current_insertions_on_rollback",
@@ -45,7 +57,7 @@ ORIGINAL = (
     "dataset::scoped_pattern_tests::pattern_encodes_each_supplied_component_once_for_every_mask",
 )
 
-COMPLETE = STREAM_REMOVAL + ORIGINAL + CORE
+COMPLETE = PAIRED_PREFIX + FULL_SPO + STREAM_REMOVAL + ORIGINAL + CORE
 
 
 @pytest.fixture

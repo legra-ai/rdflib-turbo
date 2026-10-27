@@ -30,7 +30,7 @@ jobs:
           ref: ${{ inputs.revision || github.sha }}
       - uses: actions/setup-python@v7
         with:
-          python-version: '3.13'
+          python-version: '3.13.16'
       - uses: astral-sh/setup-uv@v10.3.2
         with:
           version: "0.13.5"
@@ -41,14 +41,14 @@ jobs:
           cache-key: vendor-${{ hashFiles('vendor/**') }}
       - name: Prepare one facade cohort for this standalone coverage run
         if: inputs['facade-artifact'] == ''
-        run: uv run --no-project --python 3.13 python -B scripts/ci_facade.py prepare --output "$RUNNER_TEMP/candidate-facade-evidence"
+        run: uv run --no-project --python 3.13.16 python -B scripts/ci_facade.py prepare --output "$RUNNER_TEMP/candidate-facade-evidence"
       - uses: actions/download-artifact@v8
         if: inputs['facade-artifact'] != ''
         with:
           name: ${{ inputs['facade-artifact'] }}
           path: ${{ runner.temp }}/candidate-facade-evidence
       - name: Verify the facade cohort and arrange exact source peers
-        run: uv run --no-project --python 3.13 python -B scripts/ci_facade.py consume --input "$RUNNER_TEMP/candidate-facade-evidence" --environment-file "$GITHUB_ENV"
+        run: uv run --no-project --python 3.13.16 python -B scripts/ci_facade.py consume --input "$RUNNER_TEMP/candidate-facade-evidence" --environment-file "$GITHUB_ENV"
       - run: cargo install cargo-llvm-cov --version 0.9.1 --locked
       - run: uv run --no-project python scripts/native_coverage.py --shacl-source "$SHACL_SOURCE" --shacl-wheel "$SHACL_WHEEL" --shacl-candidate-receipt "$SHACL_CANDIDATE_RECEIPT" --shacl-base-revision "$SHACL_BASE_REVISION" --owlrl-source "$OWLRL_SOURCE" --owlrl-wheel "$OWLRL_WHEEL" --yaml-authority "$YAML_AUTHORITY" --owlrl-archive "$OWLRL_ARCHIVE" --owlrl-sha256 "$OWLRL_SHA256"
       - uses: actions/upload-artifact@v7

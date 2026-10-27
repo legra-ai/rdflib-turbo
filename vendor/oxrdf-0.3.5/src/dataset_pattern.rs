@@ -1,6 +1,11 @@
 //! Select native graph-scoped indexes before decoding matched statements.
 use super::*;
+#[cfg(test)]
+use std::cell::Cell;
 use std::iter::empty;
+#[cfg(test)]
+#[path = "dataset_unscoped_work_tests.rs"]
+mod work_tests;
 
 // bounded: four encoded filter terms, independent of the number of stored quads.
 struct Pattern {
@@ -36,16 +41,139 @@ impl Pattern {
             },
         })
     }
-    fn iter<'a>(self, data: &'a Dataset) -> Box<dyn Iterator<Item = QuadRef<'a>> + 'a> {
+    fn iter<'a>(
+        self,
+        data: &'a Dataset,
+        #[cfg(test)] examined: Option<&'a Cell<usize>>,
+    ) -> Box<dyn Iterator<Item = QuadRef<'a>> + 'a> {
         if let Some(graph) = self.graph {
             return self.scoped(data, graph);
+        }
+        if let (Some(subject), Some(predicate), Some(object)) =
+            (self.subject, self.predicate, self.object.as_ref())
+        {
+            // Exact SPO membership spans only its graph placements. Starting at
+            // the full prefix avoids decoding a shared subject's unrelated rows.
+            let start = SpogKey::from_tuple((
+                subject,
+                predicate,
+                object.clone(),
+                InternedGraphName::first(),
+            ));
+            let object = self.object.expect("matched bound object");
+            return Box::new(
+                data.spog
+                    .range(start..)
+                    .take_while(move |q| {
+                        #[cfg(test)]
+                        if let Some(examined) = examined {
+                            examined.set(examined.get() + 1);
+                        }
+                        let (s, p, o, _) = q.parts();
+                        s == subject && *p == predicate && o == &object
+                    })
+                    .map(move |q| data.decode_spog(q.parts())),
+            );
+        }
+        if let (Some(subject), Some(predicate), None) =
+            (self.subject, self.predicate, self.object.as_ref())
+        {
+            // The existing SP prefix retains the legacy filtered row order.
+            return Box::new(
+                data.spog
+                    .range(
+                        SpogKey::from_tuple((
+                            subject,
+                            predicate,
+                            InternedTerm::first(),
+                            InternedGraphName::first(),
+                        ))
+                            ..SpogKey::from_tuple((
+                                subject,
+                                predicate.next(),
+                                InternedTerm::first(),
+                                InternedGraphName::first(),
+                            )),
+                    )
+                    .map(move |q| {
+                        #[cfg(test)]
+                        if let Some(examined) = examined {
+                            examined.set(examined.get() + 1);
+                        }
+                        data.decode_spog(q.parts())
+                    }),
+            );
+        }
+        if let (Some(subject), None, Some(object)) =
+            (self.subject, self.predicate, self.object.as_ref())
+        {
+            // The existing SO prefix retains the legacy filtered row order.
+            return Box::new(
+                data.ospg
+                    .range(
+                        OspgKey::from_tuple((
+                            object.clone(),
+                            subject,
+                            InternedNamedNode::first(),
+                            InternedGraphName::first(),
+                        ))
+                            ..OspgKey::from_tuple((
+                                object.clone(),
+                                subject.next(),
+                                InternedNamedNode::first(),
+                                InternedGraphName::first(),
+                            )),
+                    )
+                    .map(move |q| {
+                        #[cfg(test)]
+                        if let Some(examined) = examined {
+                            examined.set(examined.get() + 1);
+                        }
+                        data.decode_spog(q.parts())
+                    }),
+            );
+        }
+        if let (None, Some(predicate), Some(object)) =
+            (self.subject, self.predicate, self.object.as_ref())
+        {
+            // The existing PO prefix retains the legacy filtered row order.
+            return Box::new(
+                data.posg
+                    .range(
+                        PosgKey::from_tuple((
+                            predicate,
+                            object.clone(),
+                            InternedNamedOrBlankNode::first(),
+                            InternedGraphName::first(),
+                        ))
+                            ..PosgKey::from_tuple((
+                                predicate,
+                                object.next(),
+                                InternedNamedOrBlankNode::first(),
+                                InternedGraphName::first(),
+                            )),
+                    )
+                    .map(move |q| {
+                        #[cfg(test)]
+                        if let Some(examined) = examined {
+                            examined.set(examined.get() + 1);
+                        }
+                        data.decode_spog(q.parts())
+                    }),
+            );
         }
         let predicate = self.predicate.map(|p| p.decode_from(&data.interner));
         if let Some(subject) = self.subject {
             let object = self.object.as_ref().map(|o| o.decode_from(&data.interner));
             Box::new(
                 data.interned_quads_for_subject(&subject)
-                    .map(move |q| data.decode_spog(q))
+                    .map(move |q| {
+                        #[cfg(test)]
+                        if let Some(examined) = examined {
+                            examined.set(examined.get() + 1);
+                        }
+                        data.decode_spog(q)
+                    })
                     .filter(move |q| {
                         predicate.is_none_or(|p| p == q.predicate)
                             && object.is_none_or(|o| o == q.object)
@@ -54,14 +182,23 @@ impl Pattern {
         } else if let Some(object) = self.object {
             Box::new(
                 data.interned_quads_for_object(&object)
-                    .map(move |q| data.decode_spog(q))
+                    .map(move |q| {
+                        #[cfg(test)]
+                        if let Some(examined) = examined {
+                            examined.set(examined.get() + 1);
+                        }
+                        data.decode_spog(q)
+                    })
                     .filter(move |q| predicate.is_none_or(|p| p == q.predicate)),
             )
         } else if let Some(predicate) = self.predicate {
-            Box::new(
-                data.interned_quads_for_predicate(predicate)
-                    .map(move |q| data.decode_spog(q)),
-            )
+            Box::new(data.interned_quads_for_predicate(predicate).map(move |q| {
+                #[cfg(test)]
+                if let Some(examined) = examined {
+                    examined.set(examined.get() + 1);
+                }
+                data.decode_spog(q)
+            }))
         } else {
             Box::new(data.iter())
         }
@@ -146,7 +283,11 @@ impl Dataset {
     ) -> impl Iterator<Item = QuadRef<'a>> + use<'a> {
         let iter: Box<dyn Iterator<Item = QuadRef<'a>> + 'a> =
             match Pattern::new(self, subject, predicate, object, graph_name) {
-                Some(pattern) => pattern.iter(self),
+                Some(pattern) => pattern.iter(
+                    self,
+                    #[cfg(test)]
+                    None,
+                ),
                 None => Box::new(empty()),
             };
         iter
