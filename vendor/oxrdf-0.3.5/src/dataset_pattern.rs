@@ -75,6 +75,54 @@ impl Pattern {
                     .map(move |q| data.decode_spog(q.parts())),
             );
         }
+        if let (Some(subject), Some(predicate), None) =
+            (self.subject, self.predicate, self.object.as_ref())
+        {
+            // The existing SP prefix retains the legacy filtered row order.
+            return Box::new(
+                data.spog
+                    .range(SpogKey::from_tuple((subject, predicate, InternedTerm::first(), InternedGraphName::first()))..SpogKey::from_tuple((subject, predicate.next(), InternedTerm::first(), InternedGraphName::first())))
+                    .map(move |q| {
+                        #[cfg(test)]
+                        if let Some(examined) = examined {
+                            examined.set(examined.get() + 1);
+                        }
+                        data.decode_spog(q.parts())
+                    }),
+            );
+        }
+        if let (Some(subject), None, Some(object)) =
+            (self.subject, self.predicate, self.object.as_ref())
+        {
+            // The existing SO prefix retains the legacy filtered row order.
+            return Box::new(
+                data.ospg
+                    .range(OspgKey::from_tuple((object.clone(), subject, InternedNamedNode::first(), InternedGraphName::first()))..OspgKey::from_tuple((object.clone(), subject.next(), InternedNamedNode::first(), InternedGraphName::first())))
+                    .map(move |q| {
+                        #[cfg(test)]
+                        if let Some(examined) = examined {
+                            examined.set(examined.get() + 1);
+                        }
+                        data.decode_spog(q.parts())
+                    }),
+            );
+        }
+        if let (None, Some(predicate), Some(object)) =
+            (self.subject, self.predicate, self.object.as_ref())
+        {
+            // The existing PO prefix retains the legacy filtered row order.
+            return Box::new(
+                data.posg
+                    .range(PosgKey::from_tuple((predicate, object.clone(), InternedNamedOrBlankNode::first(), InternedGraphName::first()))..PosgKey::from_tuple((predicate, object.next(), InternedNamedOrBlankNode::first(), InternedGraphName::first())))
+                    .map(move |q| {
+                        #[cfg(test)]
+                        if let Some(examined) = examined {
+                            examined.set(examined.get() + 1);
+                        }
+                        data.decode_spog(q.parts())
+                    }),
+            );
+        }
         let predicate = self.predicate.map(|p| p.decode_from(&data.interner));
         if let Some(subject) = self.subject {
             let object = self.object.as_ref().map(|o| o.decode_from(&data.interner));
