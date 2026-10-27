@@ -132,3 +132,7 @@ pub(crate) fn borrowed_quad(quad: GeneralizedQuadRef<'_>) -> InternalQuad<TermCo
         },
     }
 }
+
+#[cfg(test)]
+#[path = "query_borrowed_views_tests.rs"]
+mod borrowed_view_tests;
