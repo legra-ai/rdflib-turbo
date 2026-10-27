@@ -66,7 +66,7 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
       - id: release
-        uses: legra-ai/github-actions/.github/actions/prepare-cargo-release@7188f5c63b8dc3512d9a88f3c02f7249ce2e3e5f
+        uses: legra-ai/github-actions/.github/actions/prepare-cargo-release@cf631c4de1faa1b0635d6dae2211c952d736e3c7
         with:
           token: ${{ steps.writer.outputs.token }}
           tag-format: pep440
@@ -313,7 +313,7 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
-      - uses: legra-ai/github-actions/.github/actions/tag-tested-release@12819667e09f7500e43c24eb3a6824b46591649f
+      - uses: legra-ai/github-actions/.github/actions/tag-tested-release@cf631c4de1faa1b0635d6dae2211c952d736e3c7
         with:
           version: ${{ needs.prepare.outputs.cargo-version }}
           revision: ${{ needs.prepare.outputs.revision }}
