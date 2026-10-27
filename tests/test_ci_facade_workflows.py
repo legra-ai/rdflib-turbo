@@ -86,3 +86,14 @@ def test_downloaded_source_archive_stays_outside_the_frozen_provider_checkout():
     assert "--python 3.13" in wheels
     assert "tar -" not in wheels
     assert "path: source-dist" not in download
+
+
+def test_facade_preparation_launchers_use_the_yaml_authority_exact_interpreter():
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+    prepare = job(workflow, "prepare", "sdist")
+    native = (ROOT / ".github/workflows/native-coverage.yml").read_text()
+    for launcher in (prepare, native):
+        assert "python-version: '3.13.16'" in launcher
+        calls = [line for line in launcher.splitlines() if "scripts/ci_facade.py prepare" in line]
+        assert len(calls) == 1
+        assert "--python 3.13.16 python -B" in calls[0]
