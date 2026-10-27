@@ -272,4 +272,43 @@ fn pair_prefixes_keep_legacy_order_graphs_and_temporary_pattern_lifetimes() {
             );
         }
     }
+    assert_known_absent_pair_prefixes_decode_nothing();
+}
+
+fn assert_known_absent_pair_prefixes_decode_nothing() {
+    let subject = NamedNodeRef::new_unchecked("urn:absent:s");
+    let other_subject = NamedNodeRef::new_unchecked("urn:absent:t");
+    let predicate = NamedNodeRef::new_unchecked("urn:absent:p");
+    let other_predicate = NamedNodeRef::new_unchecked("urn:absent:q");
+    let third_predicate = NamedNodeRef::new_unchecked("urn:absent:r");
+    let object = Literal::new_simple_literal("o");
+    let other_object = Literal::new_simple_literal("u");
+    let third_object = Literal::new_simple_literal("v");
+    let mut data = Dataset::new();
+    for graph in [
+        GraphNameRef::DefaultGraph,
+        NamedNodeRef::new_unchecked("urn:absent:graph").into(),
+        BlankNodeRef::new_unchecked("absent-graph").into(),
+    ] {
+        for (s, p, o) in [
+            (subject, predicate, object.as_ref()),
+            (subject, other_predicate, other_object.as_ref()),
+            (other_subject, third_predicate, third_object.as_ref()),
+        ] {
+            data.insert(QuadRef::new(s, p, o, graph));
+        }
+    }
+    for (role, s, p, o) in [
+        ("SP", Some(subject.into()), Some(third_predicate), None),
+        ("SO", Some(subject.into()), None, Some(third_object.as_ref().into())),
+        ("PO", None, Some(other_predicate), Some(third_object.as_ref().into())),
+    ] {
+        let decoded = Cell::new(0);
+        let count = Pattern::new(&data, s, p, o, None)
+            .expect("every requested term exists in the dictionary")
+            .iter(&data, Some(&decoded))
+            .count();
+        assert_eq!(count, 0, "absent {role} pair");
+        assert_eq!(decoded.get(), 0, "absent {role} decoded unrelated rows");
+    }
 }
