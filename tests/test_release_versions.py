@@ -80,6 +80,20 @@ def test_version_outputs_refuse_a_different_prepared_version(tmp_path):
         load("release_version").validated_versions(tmp_path, "0.2.0-alpha.3")
 
 
+def test_prepared_version_uses_root_package_not_independent_workspace(tmp_path):
+    (tmp_path / "Cargo.toml").write_text(
+        '[package]\nversion = "0.2.0-alpha.19"\n[workspace.package]\nversion = "0.7.0"\n'
+    )
+    (tmp_path / "pyproject.toml").write_text('[project]\nversion = "0.2.0a19"\n')
+    release = load("release_version")
+    assert release.validated_versions(tmp_path, "0.2.0-alpha.19") == (
+        "0.2.0-alpha.19",
+        "0.2.0a19",
+    )
+    with pytest.raises(ValueError, match="prepared version"):
+        release.validated_versions(tmp_path, "0.7.0")
+
+
 def _assert_shared_release_action_pins(workflow):
     for action in ["prepare-cargo-release", "tag-tested-release"]:
         revisions = re.findall(
