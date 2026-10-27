@@ -7,6 +7,8 @@ from scripts.vendor_memory_tests import patch_arguments
 
 # bounded: critical storage, ownership and ordering regression test names.
 REQUIRED_TESTS = (
+    "dataset::pattern::work_tests::full_spo_membership_does_not_visit_the_subject_fanout_per_candidate",
+    "dataset::pattern::work_tests::full_spo_unscoped_keeps_every_graph_and_temporary_pattern_lifetime",
     "dataset::generalized_remove_tests::generalized_streaming_removal_preserves_first_arcs_and_current_insertions_on_rollback",
     "dataset::generalized_remove_tests::generalized_streaming_removal_keeps_exact_graph_kinds_and_all_pattern_masks",
     "dataset::generalized_remove_tests::generalized_streaming_removal_absence_keeps_additive_fast_path_and_unwind_restores_words",
