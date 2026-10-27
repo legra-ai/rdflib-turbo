@@ -81,7 +81,20 @@ impl Pattern {
             // The existing SP prefix retains the legacy filtered row order.
             return Box::new(
                 data.spog
-                    .range(SpogKey::from_tuple((subject, predicate, InternedTerm::first(), InternedGraphName::first()))..SpogKey::from_tuple((subject, predicate.next(), InternedTerm::first(), InternedGraphName::first())))
+                    .range(
+                        SpogKey::from_tuple((
+                            subject,
+                            predicate,
+                            InternedTerm::first(),
+                            InternedGraphName::first(),
+                        ))
+                            ..SpogKey::from_tuple((
+                                subject,
+                                predicate.next(),
+                                InternedTerm::first(),
+                                InternedGraphName::first(),
+                            )),
+                    )
                     .map(move |q| {
                         #[cfg(test)]
                         if let Some(examined) = examined {
@@ -97,7 +110,20 @@ impl Pattern {
             // The existing SO prefix retains the legacy filtered row order.
             return Box::new(
                 data.ospg
-                    .range(OspgKey::from_tuple((object.clone(), subject, InternedNamedNode::first(), InternedGraphName::first()))..OspgKey::from_tuple((object.clone(), subject.next(), InternedNamedNode::first(), InternedGraphName::first())))
+                    .range(
+                        OspgKey::from_tuple((
+                            object.clone(),
+                            subject,
+                            InternedNamedNode::first(),
+                            InternedGraphName::first(),
+                        ))
+                            ..OspgKey::from_tuple((
+                                object.clone(),
+                                subject.next(),
+                                InternedNamedNode::first(),
+                                InternedGraphName::first(),
+                            )),
+                    )
                     .map(move |q| {
                         #[cfg(test)]
                         if let Some(examined) = examined {
@@ -113,7 +139,20 @@ impl Pattern {
             // The existing PO prefix retains the legacy filtered row order.
             return Box::new(
                 data.posg
-                    .range(PosgKey::from_tuple((predicate, object.clone(), InternedNamedOrBlankNode::first(), InternedGraphName::first()))..PosgKey::from_tuple((predicate, object.next(), InternedNamedOrBlankNode::first(), InternedGraphName::first())))
+                    .range(
+                        PosgKey::from_tuple((
+                            predicate,
+                            object.clone(),
+                            InternedNamedOrBlankNode::first(),
+                            InternedGraphName::first(),
+                        ))
+                            ..PosgKey::from_tuple((
+                                predicate,
+                                object.next(),
+                                InternedNamedOrBlankNode::first(),
+                                InternedGraphName::first(),
+                            )),
+                    )
                     .map(move |q| {
                         #[cfg(test)]
                         if let Some(examined) = examined {
