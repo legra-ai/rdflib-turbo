@@ -1,6 +1,7 @@
 //! Borrowed indexed reads shared by dataset and transaction-backed traversal.
 use oxigraph::model::*;
 use oxigraph::store::{ReadSnapshot, Transaction};
+use spareval::{InternalQuad, TermCow};
 
 use crate::{Error, Result};
 
@@ -24,6 +25,20 @@ pub trait GraphRead {
         object: Option<TermRef<'_>>,
         graph: Option<GraphNameRef<'_>>,
     ) -> impl Iterator<Item = Result<GeneralizedQuad>> + use<'a, Self>;
+
+    /// Stream query rows, borrowing dictionary words where the source permits it.
+    /// The physical pattern, stable-first and error contracts equal `matching_quads`.
+    /// Rows borrow the source, never the caller's temporary pattern references.
+    fn matching_query_quads<'a>(
+        &'a self,
+        subject: Option<TermRef<'_>>,
+        predicate: Option<TermRef<'_>>,
+        object: Option<TermRef<'_>>,
+        graph: Option<GraphNameRef<'_>>,
+    ) -> impl Iterator<Item = Result<InternalQuad<TermCow<'a>>>> + use<'a, Self> {
+        self.matching_quads(subject, predicate, object, graph)
+            .map(|quad| quad.map(crate::query_graph::owned_quad))
+    }
 
     /// Stream each named graph exactly once, including empty backend graphs.
     /// Iteration must not materialize the set of graph names.
@@ -58,6 +73,30 @@ impl GraphRead for Dataset {
         Box::new(
             self.quads_for_pattern(subject, predicate, object, graph)
                 .map(|quad| Ok(GeneralizedQuad::from(quad.into_owned()))),
+        )
+    }
+
+    fn matching_query_quads<'a>(
+        &'a self,
+        subject: Option<TermRef<'_>>,
+        predicate: Option<TermRef<'_>>,
+        object: Option<TermRef<'_>>,
+        graph: Option<GraphNameRef<'_>>,
+    ) -> impl Iterator<Item = Result<InternalQuad<TermCow<'a>>>> + use<'a> {
+        let subject: Option<NamedOrBlankNodeRef<'_>> = match subject {
+            Some(TermRef::NamedNode(node)) => Some(node.into()),
+            Some(TermRef::BlankNode(node)) => Some(node.into()),
+            Some(_) => return Box::new(std::iter::empty()) as Box<dyn Iterator<Item = _>>,
+            None => None,
+        };
+        let predicate = match predicate {
+            Some(TermRef::NamedNode(node)) => Some(node),
+            Some(_) => return Box::new(std::iter::empty()),
+            None => None,
+        };
+        Box::new(
+            self.quads_for_pattern(subject, predicate, object, graph)
+                .map(|quad| Ok(crate::query_graph::borrowed_quad(quad.into()))),
         )
     }
 

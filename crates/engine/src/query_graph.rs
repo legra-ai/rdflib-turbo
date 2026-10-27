@@ -2,7 +2,7 @@
 use std::collections::HashMap;
 
 use oxigraph::model::*;
-use spareval::{InternalQuad, QueryableDataset, ScopedCustomFunction};
+use spareval::{InternalQuad, QueryableDataset, ScopedCustomFunction, TermCow};
 
 use crate::{Error, GraphRead, Result};
 
@@ -17,10 +17,10 @@ pub struct QueryGraph<'a, G: GraphRead + ?Sized> {
 }
 
 impl<'a, G: GraphRead + ?Sized> QueryGraph<'a, G> {
-    fn subject(term: &Term) -> Option<NamedOrBlankNodeRef<'_>> {
+    fn subject(term: TermRef<'_>) -> Option<NamedOrBlankNodeRef<'_>> {
         match term {
-            Term::NamedNode(node) => Some(node.as_ref().into()),
-            Term::BlankNode(node) => Some(node.as_ref().into()),
+            TermRef::NamedNode(node) => Some(node.into()),
+            TermRef::BlankNode(node) => Some(node.into()),
             _ => None,
         }
     }
@@ -41,7 +41,7 @@ impl<'a, G: GraphRead + ?Sized> QueryGraph<'a, G> {
 }
 
 impl<'a, G: GraphRead + ?Sized + 'a> QueryableDataset<'a> for QueryGraph<'a, G> {
-    type InternalTerm = Term;
+    type InternalTerm = TermCow<'a>;
     type Error = Error;
 
     fn scoped_custom_function(&self, name: &NamedNode) -> Option<ScopedCustomFunction<'a>> {
@@ -50,15 +50,15 @@ impl<'a, G: GraphRead + ?Sized + 'a> QueryableDataset<'a> for QueryGraph<'a, G> 
 
     fn internal_quads_for_pattern(
         &self,
-        subject: Option<&Term>,
-        predicate: Option<&Term>,
-        object: Option<&Term>,
-        graph_name: Option<Option<&Term>>,
-    ) -> impl Iterator<Item = Result<InternalQuad<Term>>> + use<'a, G> {
-        let subject = subject.map(Term::as_ref);
-        let predicate = predicate.map(Term::as_ref);
+        subject: Option<&TermCow<'a>>,
+        predicate: Option<&TermCow<'a>>,
+        object: Option<&TermCow<'a>>,
+        graph_name: Option<Option<&TermCow<'a>>>,
+    ) -> impl Iterator<Item = Result<InternalQuad<TermCow<'a>>>> + use<'a, G> {
+        let subject = subject.map(TermRef::from);
+        let predicate = predicate.map(TermRef::from);
         let graph = match graph_name {
-            Some(Some(term)) => match Self::subject(term) {
+            Some(Some(term)) => match Self::subject(TermRef::from(term)) {
                 Some(value) => Some(GraphNameRef::from(value)),
                 None => return Box::new(std::iter::empty()) as Box<dyn Iterator<Item = _>>,
             },
@@ -70,47 +70,65 @@ impl<'a, G: GraphRead + ?Sized + 'a> QueryableDataset<'a> for QueryGraph<'a, G> 
         let named_only = graph_name.is_none();
         Box::new(
             self.source
-                .matching_quads(subject, predicate, object.map(Term::as_ref), graph)
+                .matching_query_quads(subject, predicate, object.map(TermRef::from), graph)
                 .filter(move |quad| {
                     !named_only
                         || match quad {
-                            Ok(q) => !q.graph_name.is_default_graph(),
+                            Ok(quad) => quad.graph_name.is_some(),
                             Err(_) => true,
                         }
-                })
-                .map(|quad| {
-                    quad.map(|quad| InternalQuad {
-                        subject: quad.subject,
-                        predicate: quad.predicate,
-                        object: quad.object,
-                        graph_name: match quad.graph_name {
-                            GraphName::NamedNode(node) => Some(node.into()),
-                            GraphName::BlankNode(node) => Some(node.into()),
-                            GraphName::DefaultGraph => None,
-                        },
-                    })
                 }),
         )
     }
 
-    fn internal_named_graphs(&self) -> impl Iterator<Item = Result<Term>> + use<'a, G> {
+    fn internal_named_graphs(&self) -> impl Iterator<Item = Result<TermCow<'a>>> + use<'a, G> {
         self.source
             .named_graphs()
-            .map(|graph| graph.map(Into::into))
+            .map(|graph| graph.map(|graph| Term::from(graph).into()))
     }
 
-    fn contains_internal_graph_name(&self, graph: &Term) -> Result<bool> {
-        match Self::subject(graph) {
+    fn contains_internal_graph_name(&self, graph: &TermCow<'a>) -> Result<bool> {
+        match Self::subject(TermRef::from(graph)) {
             Some(graph) => self.source.contains_named_graph(&graph.into_owned()),
             None => Ok(false),
         }
     }
 
-    fn internalize_term(&self, term: Term) -> Result<Term> {
-        Ok(term)
+    fn internalize_term(&self, term: Term) -> Result<TermCow<'a>> {
+        Ok(term.into())
     }
 
-    fn externalize_term(&self, term: Term) -> Result<Term> {
-        Ok(term)
+    fn externalize_term(&self, term: TermCow<'a>) -> Result<Term> {
+        Ok(term.into())
+    }
+}
+
+#[cfg(test)]
+#[path = "query_borrowed_tests.rs"]
+mod borrowed_tests;
+
+pub(crate) fn owned_quad(quad: GeneralizedQuad) -> InternalQuad<TermCow<'static>> {
+    InternalQuad {
+        subject: quad.subject.into(),
+        predicate: quad.predicate.into(),
+        object: quad.object.into(),
+        graph_name: match quad.graph_name {
+            GraphName::NamedNode(node) => Some(Term::from(node).into()),
+            GraphName::BlankNode(node) => Some(Term::from(node).into()),
+            GraphName::DefaultGraph => None,
+        },
+    }
+}
+
+pub(crate) fn borrowed_quad(quad: GeneralizedQuadRef<'_>) -> InternalQuad<TermCow<'_>> {
+    InternalQuad {
+        subject: quad.subject.into(),
+        predicate: quad.predicate.into(),
+        object: quad.object.into(),
+        graph_name: match quad.graph_name {
+            GraphNameRef::NamedNode(node) => Some(TermRef::from(node).into()),
+            GraphNameRef::BlankNode(node) => Some(TermRef::from(node).into()),
+            GraphNameRef::DefaultGraph => None,
+        },
     }
 }

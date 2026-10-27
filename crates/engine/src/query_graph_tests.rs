@@ -157,12 +157,17 @@ fn indexed_patterns_own_temporary_filters_and_preserve_exact_terms() {
     assert_eq!(adapter.internal_named_graphs().count(), 2);
     assert!(
         adapter
-            .contains_internal_graph_name(&blank.clone().into())
+            .contains_internal_graph_name(&adapter.internalize_term(blank.clone().into()).unwrap())
             .unwrap()
     );
     assert_eq!(
         adapter
-            .internal_quads_for_pattern(None, None, None, Some(Some(&blank.into())))
+            .internal_quads_for_pattern(
+                None,
+                None,
+                None,
+                Some(Some(&adapter.internalize_term(blank.into()).unwrap()))
+            )
             .count(),
         2
     );
@@ -182,7 +187,9 @@ fn indexed_patterns_own_temporary_filters_and_preserve_exact_terms() {
 fn invalid_pattern_term_kinds_cannot_match() {
     let dataset = Dataset::new();
     let adapter = QueryGraph::new(&dataset);
-    let invalid = Term::from(Literal::new_simple_literal("invalid"));
+    let invalid = adapter
+        .internalize_term(Literal::new_simple_literal("invalid").into())
+        .unwrap();
     assert_eq!(
         adapter
             .internal_quads_for_pattern(Some(&invalid), None, None, Some(None))
@@ -266,13 +273,14 @@ fn reads_and_graph_metadata_are_lazy_and_errors_survive_query_evaluation() {
         graphs
             .next()
             .unwrap()
-            .unwrap_err()
+            .err()
+            .unwrap()
             .to_string()
             .contains("graph tail read failed")
     );
     assert!(
         adapter
-            .contains_internal_graph_name(&node("g").into())
+            .contains_internal_graph_name(&adapter.internalize_term(node("g").into()).unwrap())
             .unwrap_err()
             .to_string()
             .contains("existence read failed")
