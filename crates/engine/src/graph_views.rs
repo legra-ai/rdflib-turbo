@@ -1,5 +1,9 @@
 //! Borrowed logical dataset views; neither view materializes the base relation.
 use oxigraph::model::*;
+use spareval::{InternalQuad, TermCow};
+
+#[path = "graph_query_views.rs"]
+mod query;
 
 use crate::{Error, GraphRead, Result};
 
@@ -94,6 +98,16 @@ impl<'source, G: GraphRead + ?Sized> GraphRead for UnionGraph<'source, G> {
         Self::matching_source(self.source, subject, predicate, object, graph)
     }
 
+    fn matching_query_quads<'a>(
+        &'a self,
+        subject: Option<TermRef<'_>>,
+        predicate: Option<TermRef<'_>>,
+        object: Option<TermRef<'_>>,
+        graph: Option<GraphNameRef<'_>>,
+    ) -> impl Iterator<Item = Result<InternalQuad<TermCow<'a>>>> + use<'a, 'source, G> {
+        Self::query_source(self.source, subject, predicate, object, graph)
+    }
+
     fn named_graphs(&self) -> impl Iterator<Item = Result<NamedOrBlankNode>> + '_ {
         self.source.named_graphs()
     }
@@ -171,6 +185,16 @@ impl<'source, G: GraphRead + ?Sized, S: GraphRead + ?Sized> GraphRead
         matches
     }
 
+    fn matching_query_quads<'a>(
+        &'a self,
+        subject: Option<TermRef<'_>>,
+        predicate: Option<TermRef<'_>>,
+        object: Option<TermRef<'_>>,
+        graph: Option<GraphNameRef<'_>>,
+    ) -> impl Iterator<Item = Result<InternalQuad<TermCow<'a>>>> + use<'a, 'source, G, S> {
+        self.query_source(subject, predicate, object, graph)
+    }
+
     fn named_graphs(&self) -> impl Iterator<Item = Result<NamedOrBlankNode>> + '_ {
         self.source
             .named_graphs()
@@ -235,6 +259,23 @@ impl<'source, G: GraphRead + ?Sized> GraphRead for ScopedGraph<'source, G> {
         graph: Option<GraphNameRef<'_>>,
     ) -> impl Iterator<Item = Result<GeneralizedQuad>> + use<'a, 'source, G> {
         Self::matching_source(
+            self.source,
+            self.graph.as_ref(),
+            subject,
+            predicate,
+            object,
+            graph,
+        )
+    }
+
+    fn matching_query_quads<'a>(
+        &'a self,
+        subject: Option<TermRef<'_>>,
+        predicate: Option<TermRef<'_>>,
+        object: Option<TermRef<'_>>,
+        graph: Option<GraphNameRef<'_>>,
+    ) -> impl Iterator<Item = Result<InternalQuad<TermCow<'a>>>> + use<'a, 'source, G> {
+        Self::query_source(
             self.source,
             self.graph.as_ref(),
             subject,

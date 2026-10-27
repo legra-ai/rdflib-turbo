@@ -60,6 +60,10 @@ pub const SOURCES: &[(&str, &[u8])] = &[
     ("functions.rs", include_bytes!("functions.rs")),
     ("functions/query.rs", include_bytes!("functions/query.rs")),
     ("graph.rs", include_bytes!("graph.rs")),
+    (
+        "graph_query_views.rs",
+        include_bytes!("graph_query_views.rs"),
+    ),
     ("graph_read.rs", include_bytes!("graph_read.rs")),
     (
         "graph_read_generalized.rs",

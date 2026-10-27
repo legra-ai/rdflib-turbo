@@ -27,7 +27,9 @@ mod prepared_algebra;
 pub use crate::construct_projection::InferenceProjection;
 #[cfg(feature = "sparql-12")]
 pub use crate::dataset::ExpressionTriple;
-pub use crate::dataset::{ExpressionTerm, InternalQuad, QueryableDataset, ScopedCustomFunction};
+pub use crate::dataset::{
+    ExpressionTerm, InternalQuad, QueryableDataset, ScopedCustomFunction, TermCow,
+};
 pub use crate::error::QueryEvaluationError;
 pub use crate::eval::{CancellationToken, ConstructTerm as InferenceTerm};
 use crate::eval::{EvalNodeWithStats, SimpleEvaluator, Timer};

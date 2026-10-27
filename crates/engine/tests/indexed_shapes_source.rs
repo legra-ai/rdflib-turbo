@@ -172,12 +172,21 @@ fn selected_shapes_pin_full_terms_and_do_not_expose_other_contexts() {
         // Bound generalized positions must reach storage, rather than becoming
         // an empty answer in the SPARQL dataset adapter.
         let row = query
-            .internal_quads_for_pattern(Some(&subject), Some(&predicate), Some(&object), Some(None))
+            .internal_quads_for_pattern(
+                Some(&query.internalize_term(subject.clone()).unwrap()),
+                Some(&query.internalize_term(predicate.clone()).unwrap()),
+                Some(&query.internalize_term(object.clone()).unwrap()),
+                Some(None),
+            )
             .next()
             .unwrap()
             .unwrap();
         assert_eq!(
-            (row.subject, row.predicate, row.object),
+            (
+                query.externalize_term(row.subject).unwrap(),
+                query.externalize_term(row.predicate).unwrap(),
+                query.externalize_term(row.object).unwrap(),
+            ),
             (subject, predicate, object)
         );
     }
