@@ -176,6 +176,14 @@ def declaration_peer(manifest):
     return ROOT.parent / "pyshacl-turbo"
 
 
+def prepare_declaration():
+    """Arrange the locked source dependency before release hooks invoke uv."""
+    selected = policy()["declaration"]
+    peer = declaration_peer(owner_manifest())
+    checkout(selected, peer)
+    return load("build_facade_candidate").freeze(peer, selected["revision"], "pyshacl-turbo", run)
+
+
 def verify_declaration(record, selected):
     authority = record.get("authority", {})
     if authority.get("kind") != "git" or authority.get("revision") != selected["revision"]:
@@ -240,13 +248,16 @@ def write_environment(destination, values):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("prepare-declaration")
     prepare_parser = commands.add_parser("prepare")
     prepare_parser.add_argument("--output", type=Path, required=True)
     consume_parser = commands.add_parser("consume")
     consume_parser.add_argument("--input", type=Path, required=True)
     consume_parser.add_argument("--environment-file", type=Path, required=True)
     args = parser.parse_args()
-    if args.command == "prepare":
+    if args.command == "prepare-declaration":
+        print(json.dumps(prepare_declaration(), sort_keys=True))
+    elif args.command == "prepare":
         print(prepare(args.output))
     else:
         write_environment(args.environment_file, consume(args.input))

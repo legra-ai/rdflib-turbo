@@ -65,6 +65,8 @@ jobs:
           private-key: ${{ secrets.RELEASE_WRITER_APP_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
+      - name: Arrange the immutable declaration used by the release lock
+        run: uv run --no-project --python 3.13.16 python -B scripts/ci_facade.py prepare-declaration
       - id: release
         uses: legra-ai/github-actions/.github/actions/prepare-cargo-release@fa33151dee2d92ee71027596452668491871f3c3
         with:
