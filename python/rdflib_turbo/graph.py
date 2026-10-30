@@ -341,6 +341,10 @@ class Graph(
                     options = JsonLdOptions(
                         rdf_format, args, publicID or input_source.getPublicId() or self.base
                     )
+                    # RDFLib's Turtle/TriG parser accesses the manager while
+                    # resolving its base, even when the document has no prefixes.
+                    if options.format in {"turtle", "ttl", "trig"}:
+                        _ = self.namespace_manager
                     if options.parse_plugin(input_source, self):
                         return self
                     stream = input_source.getCharacterStream() or input_source.getByteStream()
@@ -366,6 +370,13 @@ class Graph(
                 raise
         else:
             with self.transaction() as graph:
+                # Dataset parsing uses its default Graph's policy, independently
+                # of a manager assigned to the Dataset itself. Keep initialization
+                # lazy in the stage so line formats do not publish extra bindings.
+                target = self.default_graph if isinstance(self, StoreDataset) else self
+                if target.__dict__["_Graph__namespace_manager"] is None:
+                    graph.namespace_manager = None
+                    graph._bind_namespaces = target._bind_namespaces
                 graph.parse(source, publicID, format, location, file, data, **args)
         return self
 
