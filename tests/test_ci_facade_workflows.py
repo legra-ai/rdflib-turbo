@@ -12,7 +12,7 @@ def job(document, name, following):
 def test_prepare_creates_one_nonrelease_evidence_artifact():
     workflow = (ROOT / ".github/workflows/ci.yml").read_text()
     prepare = job(workflow, "prepare", "sdist")
-    assert prepare.count("scripts/ci_facade.py prepare") == 1
+    assert prepare.count("scripts/ci_facade.py prepare ") == 1
     assert "name: candidate-facade-evidence" in prepare
     assert "path: ${{ runner.temp }}/candidate-facade-evidence" in prepare
     assert "release-wheel" not in prepare
@@ -38,7 +38,7 @@ def test_coverage_reuses_main_artifact_and_has_an_explicit_standalone_preparatio
     assert "facade-artifact:" in native
     assert "if: inputs['facade-artifact'] == ''" in native
     assert "if: inputs['facade-artifact'] != ''" in native
-    assert native.count("scripts/ci_facade.py prepare") == 1
+    assert native.count("scripts/ci_facade.py prepare ") == 1
     consume = next(line for line in native.splitlines() if "scripts/ci_facade.py consume" in line)
     assert "--owlrl" not in consume
     collector = next(line for line in native.splitlines() if "scripts/native_coverage.py" in line)
@@ -94,6 +94,11 @@ def test_facade_preparation_launchers_use_the_yaml_authority_exact_interpreter()
     native = (ROOT / ".github/workflows/native-coverage.yml").read_text()
     for launcher in (prepare, native):
         assert "python-version: '3.13.16'" in launcher
-        calls = [line for line in launcher.splitlines() if "scripts/ci_facade.py prepare" in line]
+        calls = [line for line in launcher.splitlines() if "scripts/ci_facade.py prepare " in line]
         assert len(calls) == 1
         assert "--python 3.13.16 python -B" in calls[0]
+    declaration = [
+        line for line in prepare.splitlines() if "ci_facade.py prepare-declaration" in line
+    ]
+    assert len(declaration) == 1
+    assert "--python 3.13.16 python -B" in declaration[0]
