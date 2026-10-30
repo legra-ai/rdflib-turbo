@@ -6,6 +6,67 @@ fn rules() -> CompiledShapes {
 }
 
 #[test]
+fn unique_language_reports_keep_original_default_and_custom_messages() {
+    // Original pySHACL 0.40.1 emits one message per repeated language;
+    // explicit sh:message terms retain their language and replace the default.
+    for (values, count) in [
+        ("\"HI\"@en, \"Hi\"@en", 1),
+        ("\"HI\"@en, \"Hi\"@en, \"BONJOUR\"@fr, \"Bonjour\"@fr", 2),
+    ] {
+        for custom in [false, true] {
+            let suffix = if custom {
+                "; sh:message \"Provided message\"@en"
+            } else {
+                ""
+            };
+            let shapes = crate::IndexedShapesSource::parse_graph(
+                &format!(
+                    "@prefix sh:<http://www.w3.org/ns/shacl#>. <urn:S> a sh:PropertyShape; sh:targetNode <urn:s>; sh:path <urn:p>; sh:uniqueLang true {suffix}."
+                ),
+                RdfFormat::Turtle,
+                None,
+            )
+            .unwrap();
+            let mut data = parse(
+                &format!("<urn:s> <urn:p> {values}."),
+                RdfFormat::Turtle,
+                None,
+            )
+            .unwrap();
+            let report = CompiledShapes::compile(shapes, false)
+                .unwrap()
+                .validate(&mut data, Options::default())
+                .unwrap();
+            assert!(!report.conforms);
+            let message = if custom {
+                Literal::new_language_tagged_literal("Provided message", "en").unwrap()
+            } else {
+                Literal::new_simple_literal("More than one String shares the same Language")
+            };
+            let messages: Vec<_> = report
+                .graph
+                .iter()
+                .filter(|quad| quad.predicate == iri(SH, "resultMessage").as_ref())
+                .map(|quad| quad.object.to_string())
+                .collect();
+            assert_eq!(messages, vec![message.to_string(); count]);
+            assert_eq!(report.graph.len(), 2 + 8 * count);
+            let description = format!(
+                "Constraint Violation in UniqueLangConstraintComponent ({SH}UniqueLangConstraintComponent):\n\tSeverity: sh:Violation\n\tSource Shape: <urn:S>\n\tFocus Node: <urn:s>\n\tResult Path: <urn:p>\n\tMessage: {}\n",
+                message.value()
+            );
+            assert_eq!(
+                report.text,
+                format!(
+                    "Validation Report\nConforms: False\nResults ({count}):\n{}",
+                    description.repeat(count)
+                )
+            );
+        }
+    }
+}
+
+#[test]
 fn numeric_role_reports_retain_the_exact_operator_bound_and_pair_predicate() {
     let mut data = parse(
         "@prefix xsd:<http://www.w3.org/2001/XMLSchema#>. <urn:s> <urn:p> \"1.0\"^^xsd:double; <urn:q> \"0.9\"^^xsd:decimal.",

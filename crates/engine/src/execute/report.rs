@@ -198,6 +198,9 @@ impl CompiledShapes {
                             )
                         }
                     }
+                    "UniqueLangConstraintComponent" => {
+                        "More than one String shares the same Language".to_owned()
+                    }
                     "ClassConstraintComponent" => {
                         let mut classes = values(&self.graph, &shape.node, "class")?
                             .iter()
