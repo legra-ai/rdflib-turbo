@@ -19,6 +19,38 @@ def helper():
     return module
 
 
+def test_release_declaration_uses_the_independent_pinned_source(tmp_path, monkeypatch):
+    module = helper()
+    selected = {"repository": "https://github.com/legra-ai/pyshacl-turbo", "revision": REVISION}
+    destination = tmp_path / "pyshacl-turbo"
+    calls = []
+    monkeypatch.setattr(module, "policy", lambda: {"declaration": selected})
+    monkeypatch.setattr(module, "owner_manifest", lambda: {"original": True})
+    monkeypatch.setattr(module, "declaration_peer", lambda manifest: destination)
+    monkeypatch.setattr(module, "checkout", lambda source, path: calls.append((source, path)))
+
+    def freeze(path, revision, project, run):
+        assert calls == [(selected, destination)]
+        assert (path, revision, project, run) == (
+            destination,
+            REVISION,
+            "pyshacl-turbo",
+            module.run,
+        )
+        return {"revision": revision}
+
+    monkeypatch.setattr(module, "load", lambda name: SimpleNamespace(freeze=freeze))
+    assert module.prepare_declaration() == {"revision": REVISION}
+
+
+def test_release_arranges_declared_sources_before_the_version_bump():
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+    preparation = workflow[workflow.index("  prepare:") : workflow.index("  sdist:")]
+    assert preparation.index("ci_facade.py prepare-declaration") < preparation.index(
+        "- id: release"
+    )
+
+
 def test_policy_requires_the_public_repository_and_an_immutable_revision(tmp_path):
     policy = tmp_path / "policy.json"
     document = {
