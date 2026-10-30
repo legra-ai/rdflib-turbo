@@ -66,7 +66,7 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
       - id: release
-        uses: legra-ai/github-actions/.github/actions/prepare-cargo-release@fa33151dee2d92ee71027596452668491871f3c3
+        uses: legra-ai/github-actions/.github/actions/prepare-cargo-release@5c494a21a1df770e526e069ddf0dac0c0797e374
         with:
           token: ${{ steps.writer.outputs.token }}
           tag-format: pep440
