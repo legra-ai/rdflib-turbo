@@ -27,6 +27,12 @@ impl CompiledShapes {
         display: &crate::display::Display<'_, impl GraphRead + ?Sized, impl GraphRead + ?Sized>,
     ) -> Result<()> {
         let shape = &self.shapes[violation.shape];
+        let parameterized_sparql = violation.messages.is_some()
+            && violation.source_constraint.is_none()
+            && shape.constraints.iter().any(|constraint| {
+                matches!(constraint, Constraint::Sparql(query)
+                    if query.component.as_ref() == Some(&violation.component))
+            });
         let result: Term = BlankNode::default().into();
         add(report, parent, iri(SH, edge), result.clone())?;
         for (predicate, object) in [
@@ -277,7 +283,9 @@ impl CompiledShapes {
             .as_str()
             .strip_prefix(SH)
             .unwrap_or(violation.component.as_str());
-        let title = if [
+        let title = if parameterized_sparql {
+            "ConstraintComponent"
+        } else if [
             "QualifiedMinCountConstraintComponent",
             "QualifiedMaxCountConstraintComponent",
         ]

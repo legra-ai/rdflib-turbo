@@ -80,9 +80,16 @@ impl CompiledShapes {
                         } else {
                             result.source_constraint = Some(query.node.clone());
                         }
-                        if !row.messages.is_empty() || query.component.is_none() {
-                            result.messages = Some(row.messages);
-                        }
+                        result.messages = Some(
+                            if row.messages.is_empty() && query.component.is_some() {
+                                vec![Literal::new_simple_literal(
+                                    "Parameterised SHACL Query generated constraint validation reports.",
+                                )
+                                .into()]
+                            } else {
+                                row.messages
+                            },
+                        );
                         results.push(result);
                     }
                 }
