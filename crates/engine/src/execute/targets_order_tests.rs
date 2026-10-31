@@ -30,7 +30,7 @@ fn identifier_prefixes_delimiters_and_mixed_terms_keep_display_order() {
     }
     let mut expected = nodes.clone();
     expected.sort_by_key(ToString::to_string);
-    sort_focus_nodes(&mut nodes);
+    nodes.sort_by(focus_node_order);
     assert_eq!(nodes, expected);
 }
 
@@ -56,7 +56,24 @@ fn literal_and_identifier_subsets_keep_the_previous_display_order() {
             .collect();
         let mut expected = nodes.clone();
         expected.sort_by_key(ToString::to_string);
-        sort_focus_nodes(&mut nodes);
+        nodes.sort_by(focus_node_order);
         assert_eq!(nodes, expected);
     }
+}
+
+#[test]
+fn literal_formatter_retains_the_original_complete_unicode_snapshot() {
+    use sha2::{Digest, Sha256};
+    // bounded: every Unicode scalar, independent of caller data size.
+    let value: String = (0..=0x10_FFFF).filter_map(char::from_u32).collect();
+    let text = Literal::new_simple_literal(value).to_string();
+    let digest: String = Sha256::digest(text.as_bytes())
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    println!("ORIGINAL_LITERAL_UNICODE_SHA256 {digest}");
+    assert_eq!(
+        digest,
+        "7d442e99ad6d1dac47c34ff2a3195f3dbfb6ec9db1580e4091d11fc96e661709"
+    );
 }

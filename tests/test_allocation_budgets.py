@@ -72,6 +72,7 @@ def test_failed_budget_stops_remaining_processes(budgets, monkeypatch):
         "allocation_tests::focus_order::focus_identifier_ordering_has_linear_payload_allocation",
         "allocation_tests::focus_order::targeting_index_shape_order_has_linear_payload_allocation",
         "allocation_tests::focus_order::focus_literal_ordering_has_linear_payload_allocation",
+        "allocation_tests::focus_order::focus_literal_ordering_has_bounded_scratch_peak",
     ),
 )
 def test_new_memory_regressions_run_as_isolated_required_budgets(budgets, monkeypatch, required):

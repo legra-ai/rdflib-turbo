@@ -67,11 +67,13 @@ impl Literal {
     pub fn new_typed_literal(value: impl Into<String>, datatype: impl Into<NamedNode>) -> Self {
         let value = value.into();
         let datatype = datatype.into();
-        Self(if !cfg!(feature = "rdf-10-string-identity") && datatype == xsd::STRING {
-            LiteralContent::String(value)
-        } else {
-            LiteralContent::TypedLiteral { value, datatype }
-        })
+        Self(
+            if !cfg!(feature = "rdf-10-string-identity") && datatype == xsd::STRING {
+                LiteralContent::String(value)
+            } else {
+                LiteralContent::TypedLiteral { value, datatype }
+            },
+        )
     }
 
     /// Builds an RDF [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string).
@@ -576,11 +578,13 @@ impl<'a> LiteralRef<'a> {
     #[inline]
     pub fn new_typed_literal(value: &'a str, datatype: impl Into<NamedNodeRef<'a>>) -> Self {
         let datatype = datatype.into();
-        LiteralRef(if !cfg!(feature = "rdf-10-string-identity") && datatype == xsd::STRING {
-            LiteralRefContent::String(value)
-        } else {
-            LiteralRefContent::TypedLiteral { value, datatype }
-        })
+        LiteralRef(
+            if !cfg!(feature = "rdf-10-string-identity") && datatype == xsd::STRING {
+                LiteralRefContent::String(value)
+            } else {
+                LiteralRefContent::TypedLiteral { value, datatype }
+            },
+        )
     }
 
     /// Builds an RDF [language-tagged string](https://www.w3.org/TR/rdf11-concepts/#dfn-language-tagged-string).
@@ -733,29 +737,65 @@ impl<'a> LiteralRef<'a> {
     }
 }
 
-impl fmt::Display for LiteralRef<'_> {
+impl<'a> LiteralRef<'a> {
+    /// Compares the exact RDF display representations without allocating formatted keys.
+    ///
+    /// This has the same order as comparing `self.to_string()` and `other.to_string()`.
     #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    pub fn cmp_display(self, other: Self) -> std::cmp::Ordering {
+        self.display_characters().cmp(other.display_characters())
+    }
+
+    #[inline]
+    fn display_parts(self) -> (&'a str, &'static str, &'a str, &'static str) {
         match self.0 {
-            LiteralRefContent::String(value) => print_quoted_str(value, f),
+            LiteralRefContent::String(value) => (value, "", "", ""),
             LiteralRefContent::LanguageTaggedString { value, language } => {
-                print_quoted_str(value, f)?;
-                write!(f, "@{language}")
+                (value, "@", language, "")
             }
             #[cfg(feature = "rdf-12")]
             LiteralRefContent::DirectionalLanguageTaggedString {
                 value,
                 language,
                 direction,
-            } => {
-                print_quoted_str(value, f)?;
-                write!(f, "@{language}--{direction}")
-            }
+            } => (
+                value,
+                "@",
+                language,
+                match direction {
+                    BaseDirection::Ltr => "--ltr",
+                    BaseDirection::Rtl => "--rtl",
+                },
+            ),
             LiteralRefContent::TypedLiteral { value, datatype } => {
-                print_quoted_str(value, f)?;
-                write!(f, "^^{datatype}")
+                (value, "^^<", datatype.as_str(), ">")
             }
         }
+    }
+
+    #[inline]
+    fn display_characters(self) -> impl Iterator<Item = char> + 'a {
+        let (value, prefix, suffix, ending) = self.display_parts();
+        std::iter::once('"')
+            .chain(value.chars().flat_map(escaped_characters))
+            .chain(std::iter::once('"'))
+            .chain(prefix.chars())
+            .chain(suffix.chars())
+            .chain(ending.chars())
+    }
+}
+
+impl fmt::Display for LiteralRef<'_> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (value, prefix, suffix, ending) = self.display_parts();
+        print_quoted_str(value, f)?;
+        if !prefix.is_empty() {
+            f.write_str(prefix)?;
+            f.write_str(suffix)?;
+            f.write_str(ending)?;
+        }
+        Ok(())
     }
 }
 
@@ -798,21 +838,71 @@ impl PartialEq<LiteralRef<'_>> for Literal {
 pub fn print_quoted_str(string: &str, f: &mut impl Write) -> fmt::Result {
     f.write_char('"')?;
     for c in string.chars() {
-        match c {
-            '\u{8}' => f.write_str("\\b"),
-            '\t' => f.write_str("\\t"),
-            '\n' => f.write_str("\\n"),
-            '\u{C}' => f.write_str("\\f"),
-            '\r' => f.write_str("\\r"),
-            '"' => f.write_str("\\\""),
-            '\\' => f.write_str("\\\\"),
-            '\0'..='\u{1F}' | '\u{7F}' | '\u{FFFE}' | '\u{FFFF}' => {
-                write!(f, "\\u{:04X}", u32::from(c))
+        match quoted_character_escape(c) {
+            QuotedCharacter::Plain(c) => f.write_char(c)?,
+            QuotedCharacter::Short(escape) => f.write_str(escape)?,
+            QuotedCharacter::Unicode(digits) => {
+                f.write_str("\\u")?;
+                for digit in digits {
+                    f.write_char(digit)?;
+                }
             }
-            _ => f.write_char(c),
-        }?;
+        }
     }
     f.write_char('"')
+}
+
+enum QuotedCharacter {
+    Plain(char),
+    Short(&'static str),
+    Unicode([char; 4]),
+}
+
+#[inline]
+fn quoted_character_escape(c: char) -> QuotedCharacter {
+    match c {
+        '\u{8}' => QuotedCharacter::Short("\\b"),
+        '\t' => QuotedCharacter::Short("\\t"),
+        '\n' => QuotedCharacter::Short("\\n"),
+        '\u{C}' => QuotedCharacter::Short("\\f"),
+        '\r' => QuotedCharacter::Short("\\r"),
+        '"' => QuotedCharacter::Short("\\\""),
+        '\\' => QuotedCharacter::Short("\\\\"),
+        '\0'..='\u{1F}' | '\u{7F}' | '\u{FFFE}' | '\u{FFFF}' => {
+            const HEX: &[u8; 16] = b"0123456789ABCDEF";
+            let codepoint = c as usize;
+            QuotedCharacter::Unicode([
+                char::from(HEX[(codepoint >> 12) & 15]),
+                char::from(HEX[(codepoint >> 8) & 15]),
+                char::from(HEX[(codepoint >> 4) & 15]),
+                char::from(HEX[codepoint & 15]),
+            ])
+        }
+        _ => QuotedCharacter::Plain(c),
+    }
+}
+
+#[inline]
+fn escaped_characters(c: char) -> impl Iterator<Item = char> {
+    // bounded: one RDF escape has at most six characters.
+    let mut buffer = ['\0'; 6];
+    let length = match quoted_character_escape(c) {
+        QuotedCharacter::Plain(c) => {
+            buffer[0] = c;
+            1
+        }
+        QuotedCharacter::Short(escape) => {
+            let bytes = escape.as_bytes();
+            buffer[0] = char::from(bytes[0]);
+            buffer[1] = char::from(bytes[1]);
+            2
+        }
+        QuotedCharacter::Unicode(digits) => {
+            buffer = ['\\', 'u', digits[0], digits[1], digits[2], digits[3]];
+            6
+        }
+    };
+    buffer.into_iter().take(length)
 }
 
 /// A [directional language-tagged string](https://www.w3.org/TR/rdf12-concepts/#dfn-dir-lang-string) [base-direction](https://www.w3.org/TR/rdf12-concepts/#dfn-base-direction)
@@ -981,7 +1071,10 @@ mod tests {
         assert!(typed.has_explicit_datatype());
         assert_eq!(typed, LiteralRef::new_typed_literal("foo", xsd::STRING));
         assert_eq!(plain.to_string(), "\"foo\"");
-        assert_eq!(typed.to_string(), "\"foo\"^^<http://www.w3.org/2001/XMLSchema#string>");
+        assert_eq!(
+            typed.to_string(),
+            "\"foo\"^^<http://www.w3.org/2001/XMLSchema#string>"
+        );
     }
 
     #[test]

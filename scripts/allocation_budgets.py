@@ -12,6 +12,7 @@ TESTS = (
     "allocation_tests::focus_order::focus_identifier_ordering_has_linear_payload_allocation",
     "allocation_tests::focus_order::targeting_index_shape_order_has_linear_payload_allocation",
     "allocation_tests::focus_order::focus_literal_ordering_has_linear_payload_allocation",
+    "allocation_tests::focus_order::focus_literal_ordering_has_bounded_scratch_peak",
     "allocation_tests::current_thread::direct_scope_isolation_controls",
     "allocation_tests::report_overlap::report_render_does_not_retain_target_cache_width",
     "allocation_tests::inference_heap_budget",

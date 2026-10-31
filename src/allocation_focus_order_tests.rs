@@ -129,3 +129,55 @@ fn focus_literal_ordering_has_linear_payload_allocation() {
         "Focus discovery repeatedly rendered literal payloads: {allocated} >= {budget}"
     );
 }
+
+#[test]
+#[ignore = "isolated requested-allocation peak budget"]
+fn focus_literal_ordering_has_bounded_scratch_peak() {
+    const NODES: usize = 256;
+    const WIDTH: usize = 2048;
+    let store = Store::new().unwrap();
+    let predicate = NamedNode::new_unchecked("urn:values");
+    let payload = "x".repeat(WIDTH);
+    let mut expected = Vec::new();
+    let mut writer = store.start_transaction().unwrap();
+    for index in 0..NODES {
+        let value = Literal::new_simple_literal(format!("value:{index}:{payload}"));
+        expected.push(Term::from(value.clone()));
+        writer.insert(&Quad::new(
+            NamedNode::new_unchecked("urn:subject"),
+            predicate.clone(),
+            value,
+            GraphName::DefaultGraph,
+        ));
+    }
+    writer.commit().unwrap();
+    let source = IndexedShapesSource::parse_graph(
+        "@prefix sh:<http://www.w3.org/ns/shacl#>. <urn:Shape> a sh:NodeShape; sh:targetObjectsOf <urn:values>.",
+        RdfFormat::Turtle,
+        None,
+    ).unwrap();
+    let program = CompiledShapes::compile(source, false).unwrap();
+    let reader = store.read_snapshot();
+    let ((actual, allocated), observed) = super::measure_requested(|| {
+        super::current_thread::measure_allocated(|| {
+            program
+                .shape_focus_nodes("<urn:Shape>", &reader, false)
+                .unwrap()
+        })
+    });
+    let peak = observed.peak - observed.live_before;
+    let peak_budget = NODES * WIDTH + 128 * 1024;
+    println!("LITERAL_FOCUS_PEAK {peak} BUDGET {peak_budget}");
+    assert!(
+        peak < peak_budget,
+        "Focus ordering retained a key for every literal: {peak} >= {peak_budget}"
+    );
+    expected.sort_by_key(ToString::to_string);
+    assert_eq!(actual, expected);
+    let budget = 5 * NODES * WIDTH;
+    println!("LITERAL_FOCUS_ORDER_ALLOCATED {allocated} BUDGET {budget}");
+    assert!(
+        allocated < budget,
+        "Focus discovery repeatedly rendered literal payloads: {allocated} >= {budget}"
+    );
+}

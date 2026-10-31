@@ -1,5 +1,4 @@
 use std::cmp::Ordering::{Greater, Less};
-use std::fmt::Write as _;
 
 use super::*;
 
@@ -47,7 +46,7 @@ impl CompiledShapes {
             }
         }
         for shapes in index.values_mut() {
-            sort_focus_nodes(shapes);
+            shapes.sort_by(focus_node_order);
         }
         Ok(index)
     }
@@ -110,7 +109,7 @@ impl CompiledShapes {
             }
         }
         let mut nodes: Vec<_> = nodes.into_iter().collect();
-        sort_focus_nodes(&mut nodes);
+        nodes.sort_by(focus_node_order);
         Ok(nodes)
     }
 
@@ -132,32 +131,6 @@ impl CompiledShapes {
     }
 }
 
-/// Cache formatted literal keys once while keeping identifier-only sorting allocation-free.
-fn sort_focus_nodes(nodes: &mut [Term]) {
-    if nodes.iter().any(|node| matches!(node, Term::Literal(_))) {
-        nodes.sort_by_cached_key(focus_display_key);
-    } else {
-        nodes.sort_by(focus_node_order);
-    }
-}
-
-/// Reserve the unescaped payload once; RDF's formatter retains authority over escaping.
-fn focus_display_key(node: &Term) -> String {
-    let capacity = match node {
-        Term::NamedNode(node) => node.as_str().len() + 2,
-        Term::BlankNode(node) => node.as_str().len() + 2,
-        Term::Literal(literal) => {
-            literal.value().len()
-                + literal.datatype().as_str().len()
-                + literal.language().map_or(0, str::len)
-                + 8
-        }
-    };
-    let mut key = String::with_capacity(capacity);
-    write!(&mut key, "{node}").expect("Formatting into a String is infallible");
-    key
-}
-
 /// Compare the existing RDF display keys without repeatedly rendering identifiers.
 fn focus_node_order(left: &Term, right: &Term) -> std::cmp::Ordering {
     match (left, right) {
@@ -169,7 +142,7 @@ fn focus_node_order(left: &Term, right: &Term) -> std::cmp::Ordering {
                 .cmp(right.as_str().bytes().chain(std::iter::once(b'>')))
         }
         (Term::BlankNode(left), Term::BlankNode(right)) => left.as_str().cmp(right.as_str()),
-        (Term::Literal(left), Term::Literal(right)) => left.to_string().cmp(&right.to_string()),
+        (Term::Literal(left), Term::Literal(right)) => left.as_ref().cmp_display(right.as_ref()),
         // The display prefixes are respectively a quote, '<', and '_:'.
         (Term::Literal(_), _) | (Term::NamedNode(_), Term::BlankNode(_)) => Less,
         (_, Term::Literal(_)) | (Term::BlankNode(_), Term::NamedNode(_)) => Greater,
