@@ -321,6 +321,17 @@ class Graph(
     def parse(
         self, source=None, publicID=None, format=None, location=None, file=None, data=None, **args
     ):
+        if isinstance(self, Graph) and type(self) is not Graph:
+            # A caller-defined sink owns insertion callbacks and their ordering.
+            # Parsing through a new base Graph would bypass that actual owner.
+            try:
+                return RDFLibGraph.parse(
+                    self, source, publicID, format, location, file, data, **args
+                )
+            except BaseException:
+                if isinstance(self.store.backend, Transaction):
+                    self.store.backend._native.rollback()
+                raise
         if isinstance(self.store.backend, Transaction):
             try:
                 input_source = create_input_source(
