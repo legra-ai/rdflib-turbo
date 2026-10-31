@@ -16,6 +16,10 @@ use crate::{Error, GraphRead, Result, UnionGraph};
 mod coverage_tests;
 
 #[cfg(test)]
+#[path = "node_message_tests.rs"]
+mod node_message_tests;
+
+#[cfg(test)]
 mod report_message_tests;
 
 #[derive(Clone, Debug)]

@@ -239,7 +239,7 @@ impl CompiledShapes {
                     "NodeConstraintComponent" => {
                         let mut nodes = values(&self.graph, &shape.node, "node")?
                             .iter()
-                            .map(|n| display.term(n, true).map(|term| format!("'{term}'")))
+                            .map(|n| display.term(n, true))
                             .collect::<Result<Vec<_>>>()?;
                         nodes.sort();
                         if nodes.len() == 1 {
@@ -249,8 +249,8 @@ impl CompiledShapes {
                             )
                         } else {
                             format!(
-                                "Value must conform to every Shape in ({})",
-                                nodes.join(", ")
+                                "Value must conform to every Shape in ('{}'). See details for more information.",
+                                nodes.join("', '")
                             )
                         }
                     }
