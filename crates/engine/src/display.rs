@@ -108,16 +108,31 @@ impl<G: GraphRead + ?Sized, S: GraphRead + ?Sized> Display<'_, G, S> {
         }
     }
 
+    fn boolean_value(literal: &Literal) -> Option<&'static str> {
+        if literal.datatype().as_str().strip_prefix(XSD) != Some("boolean") {
+            return None;
+        }
+        match literal.value() {
+            "true" | "1" => Some("True"),
+            "false" | "0" => Some("False"),
+            _ => None,
+        }
+    }
+
+    pub fn message(&self, term: &Term) -> String {
+        match term {
+            Term::Literal(literal) => Self::boolean_value(literal)
+                .map_or_else(|| literal.value().to_owned(), str::to_owned),
+            _ => term.to_string(),
+        }
+    }
+
     fn literal(literal: &Literal, namespaces: &[(String, String)]) -> String {
         // Human-readable pySHACL descriptions contain raw lexical text, rather
         // than N-Triples escapes. RDF serialization keeps its separate formatter.
         let mut value = format!("\"{}\"", literal.value());
         let scalar = match literal.datatype().as_str().strip_prefix(XSD) {
-            Some("boolean") => match literal.value() {
-                "true" | "1" => Some("True".into()),
-                "false" | "0" => Some("False".into()),
-                _ => None,
-            },
+            Some("boolean") => Self::boolean_value(literal).map(str::to_owned),
             Some(
                 "integer" | "long" | "int" | "short" | "byte" | "unsignedLong" | "unsignedInt"
                 | "unsignedShort" | "unsignedByte" | "nonNegativeInteger" | "positiveInteger"

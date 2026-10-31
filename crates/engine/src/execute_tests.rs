@@ -67,6 +67,54 @@ fn unique_language_reports_keep_original_default_and_custom_messages() {
 }
 
 #[test]
+fn boolean_shape_messages_render_values_without_changing_rdf_terms() {
+    let mut data = parse(
+        "<urn:s> <urn:p> \"HI\"@en, \"Hi\"@en.",
+        RdfFormat::Turtle,
+        None,
+    )
+    .unwrap();
+    for (lexical, datatype, printed) in [
+        ("true", "boolean", "True"),
+        ("1", "boolean", "True"),
+        ("false", "boolean", "False"),
+        ("0", "boolean", "False"),
+        ("true", "string", "true"),
+        ("false", "string", "false"),
+    ] {
+        let shapes = crate::IndexedShapesSource::parse_graph(
+            &format!(
+                "@prefix sh:<http://www.w3.org/ns/shacl#>. <urn:S> a sh:PropertyShape; sh:targetNode <urn:s>; sh:path <urn:p>; sh:uniqueLang true; sh:message \"{lexical}\"^^<{XSD}{datatype}>."
+            ),
+            RdfFormat::Turtle,
+            None,
+        )
+        .unwrap();
+        let report = CompiledShapes::compile(shapes, false)
+            .unwrap()
+            .validate(&mut data, Options::default())
+            .unwrap();
+        assert!(!report.conforms);
+        assert_eq!(report.graph.len(), 10);
+        let messages: Vec<_> = report
+            .graph
+            .iter()
+            .filter(|quad| quad.predicate == iri(SH, "resultMessage").as_ref())
+            .map(|quad| quad.object.to_string())
+            .collect();
+        assert_eq!(
+            messages,
+            [Literal::new_typed_literal(lexical, iri(XSD, datatype)).to_string()]
+        );
+        assert!(
+            report.text.ends_with(&format!("\tMessage: {printed}\n")),
+            "{}",
+            report.text
+        );
+    }
+}
+
+#[test]
 fn numeric_role_reports_retain_the_exact_operator_bound_and_pair_predicate() {
     let mut data = parse(
         "@prefix xsd:<http://www.w3.org/2001/XMLSchema#>. <urn:s> <urn:p> \"1.0\"^^xsd:double; <urn:q> \"0.9\"^^xsd:decimal.",
