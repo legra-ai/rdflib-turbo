@@ -67,7 +67,7 @@ fn unique_language_reports_keep_original_default_and_custom_messages() {
 }
 
 #[test]
-fn boolean_shape_messages_render_values_without_changing_rdf_terms() {
+fn scalar_shape_messages_render_values_without_changing_rdf_terms() {
     let mut data = parse(
         "<urn:s> <urn:p> \"HI\"@en, \"Hi\"@en.",
         RdfFormat::Turtle,
@@ -79,6 +79,16 @@ fn boolean_shape_messages_render_values_without_changing_rdf_terms() {
         ("1", "boolean", "True"),
         ("false", "boolean", "False"),
         ("0", "boolean", "False"),
+        ("003", "integer", "3"),
+        ("+003", "integer", "3"),
+        ("-0", "integer", "0"),
+        (
+            "999999999999999999999999999999999999",
+            "integer",
+            "999999999999999999999999999999999999",
+        ),
+        ("003", "int", "3"),
+        ("003", "string", "003"),
         ("true", "string", "true"),
         ("false", "string", "false"),
     ] {

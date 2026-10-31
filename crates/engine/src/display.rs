@@ -119,10 +119,27 @@ impl<G: GraphRead + ?Sized, S: GraphRead + ?Sized> Display<'_, G, S> {
         }
     }
 
+    fn integer_value(literal: &Literal) -> Option<String> {
+        match literal.datatype().as_str().strip_prefix(XSD) {
+            Some(
+                "integer" | "long" | "int" | "short" | "byte" | "unsignedLong" | "unsignedInt"
+                | "unsignedShort" | "unsignedByte" | "nonNegativeInteger" | "positiveInteger"
+                | "nonPositiveInteger" | "negativeInteger",
+            ) => literal
+                .value()
+                .parse::<BigInt>()
+                .ok()
+                .map(|value| value.to_string()),
+            _ => None,
+        }
+    }
+
     pub fn message(&self, term: &Term) -> String {
         match term {
             Term::Literal(literal) => Self::boolean_value(literal)
-                .map_or_else(|| literal.value().to_owned(), str::to_owned),
+                .map(str::to_owned)
+                .or_else(|| Self::integer_value(literal))
+                .unwrap_or_else(|| literal.value().to_owned()),
             _ => term.to_string(),
         }
     }
@@ -133,21 +150,12 @@ impl<G: GraphRead + ?Sized, S: GraphRead + ?Sized> Display<'_, G, S> {
         let mut value = format!("\"{}\"", literal.value());
         let scalar = match literal.datatype().as_str().strip_prefix(XSD) {
             Some("boolean") => Self::boolean_value(literal).map(str::to_owned),
-            Some(
-                "integer" | "long" | "int" | "short" | "byte" | "unsignedLong" | "unsignedInt"
-                | "unsignedShort" | "unsignedByte" | "nonNegativeInteger" | "positiveInteger"
-                | "nonPositiveInteger" | "negativeInteger",
-            ) => literal
-                .value()
-                .parse::<BigInt>()
-                .ok()
-                .map(|value| value.to_string()),
             Some("decimal") => literal
                 .value()
                 .parse::<BigDecimal>()
                 .ok()
                 .map(|value| value.to_string()),
-            _ => None,
+            _ => Self::integer_value(literal),
         };
         if let Some(scalar) = scalar.filter(|scalar| scalar != literal.value()) {
             value.push_str(&format!(" = {scalar}"));
