@@ -198,9 +198,6 @@ impl CompiledShapes {
                             )
                         }
                     }
-                    "ExpressionConstraintComponent" => {
-                        "Expression evaluation generated constraint did not return true.".to_owned()
-                    }
                     "UniqueLangConstraintComponent" => {
                         "More than one String shares the same Language".to_owned()
                     }
@@ -267,6 +264,9 @@ impl CompiledShapes {
                             "Node {focus} must not conform to shape {}",
                             nodes.join(", ")
                         )
+                    }
+                    "ExpressionConstraintComponent" => {
+                        "Expression evaluation generated constraint did not return true.".to_owned()
                     }
                     _ => format!("{component} violated at {focus}"),
                 }
