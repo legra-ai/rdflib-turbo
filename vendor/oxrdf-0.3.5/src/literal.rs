@@ -743,7 +743,9 @@ impl<'a> LiteralRef<'a> {
     /// This has the same order as comparing `self.to_string()` and `other.to_string()`.
     #[inline]
     pub fn cmp_display(self, other: Self) -> std::cmp::Ordering {
-        self.display_characters().cmp(other.display_characters())
+        let prefix = common_lexical_prefix(self.value(), other.value());
+        self.display_characters_from(prefix)
+            .cmp(other.display_characters_from(prefix))
     }
 
     #[inline]
@@ -774,15 +776,37 @@ impl<'a> LiteralRef<'a> {
     }
 
     #[inline]
-    fn display_characters(self) -> impl Iterator<Item = char> + 'a {
+    fn display_characters_from(self, prefix_length: usize) -> impl Iterator<Item = char> + 'a {
         let (value, prefix, suffix, ending) = self.display_parts();
-        std::iter::once('"')
-            .chain(value.chars().flat_map(escaped_characters))
+        // Equal raw Unicode prefixes have equal escapes; their common opening quote is skipped too.
+        value[prefix_length..]
+            .chars()
+            .flat_map(escaped_characters)
             .chain(std::iter::once('"'))
             .chain(prefix.chars())
             .chain(suffix.chars())
             .chain(ending.chars())
     }
+}
+
+#[inline]
+fn common_lexical_prefix(left: &str, right: &str) -> usize {
+    let limit = left.len().min(right.len());
+    let mut matched = 0;
+    // Compare equal bytes in fixed chunks before entering the escaped character streams.
+    while limit - matched >= 64 {
+        if left.as_bytes()[matched..matched + 64] != right.as_bytes()[matched..matched + 64] {
+            break;
+        }
+        matched += 64;
+    }
+    while matched < limit && left.as_bytes()[matched] == right.as_bytes()[matched] {
+        matched += 1;
+    }
+    while !left.is_char_boundary(matched) || !right.is_char_boundary(matched) {
+        matched -= 1;
+    }
+    matched
 }
 
 impl fmt::Display for LiteralRef<'_> {
@@ -852,6 +876,11 @@ pub fn print_quoted_str(string: &str, f: &mut impl Write) -> fmt::Result {
     f.write_char('"')
 }
 
+#[cfg(test)]
+std::thread_local! {
+    static DISPLAY_ESCAPE_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 enum QuotedCharacter {
     Plain(char),
     Short(&'static str),
@@ -884,6 +913,8 @@ fn quoted_character_escape(c: char) -> QuotedCharacter {
 
 #[inline]
 fn escaped_characters(c: char) -> impl Iterator<Item = char> {
+    #[cfg(test)]
+    DISPLAY_ESCAPE_CALLS.with(|calls| calls.set(calls.get() + 1));
     // bounded: one RDF escape has at most six characters.
     let mut buffer = ['\0'; 6];
     let length = match quoted_character_escape(c) {
@@ -1039,11 +1070,45 @@ mod tests {
     use super::*;
 
     #[test]
+    fn display_comparison_skips_long_shared_lexical_prefixes() {
+        let prefix = "x".repeat(16_384);
+        let left = Literal::new_simple_literal(format!("{prefix}a"));
+        let right = Literal::new_simple_literal(format!("{prefix}b"));
+        DISPLAY_ESCAPE_CALLS.with(|calls| calls.set(0));
+        assert_eq!(
+            left.as_ref().cmp_display(right.as_ref()),
+            std::cmp::Ordering::Less
+        );
+        let visits = DISPLAY_ESCAPE_CALLS.with(std::cell::Cell::get);
+        println!("DISPLAY_ESCAPE_VISITS {visits}");
+        assert!(
+            visits < 32,
+            "Repeatedly escaped shared literal prefix: {visits}"
+        );
+    }
+
+    #[test]
     fn display_comparison_preserves_escaping_prefixes_and_literal_kinds() {
         let mut values = Vec::new();
         for value in [
-            "", "word", "word!", "word ", "word\n", "\\n", "é", "\0", "\u{7F}", "\u{FFFE}",
-            "\u{FFFF}", "😀",
+            "",
+            "word",
+            "word!",
+            "word ",
+            "word\n",
+            "\\n",
+            "é",
+            "\0",
+            "\u{7F}",
+            "\u{FFFE}",
+            "\u{FFFF}",
+            "😀",
+            "prefixé",
+            "prefixê",
+            "prefix\u{800}",
+            "prefix\u{801}",
+            "prefix\u{10000}",
+            "prefix\u{10001}",
         ] {
             values.push(Literal::new_simple_literal(value));
             for datatype in [

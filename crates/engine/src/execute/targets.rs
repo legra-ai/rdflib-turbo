@@ -136,10 +136,23 @@ fn focus_node_order(left: &Term, right: &Term) -> std::cmp::Ordering {
     match (left, right) {
         (Term::NamedNode(left), Term::NamedNode(right)) => {
             // Include the virtual closing delimiter: <urn:a0> sorts before <urn:a>.
-            left.as_str()
-                .bytes()
-                .chain(std::iter::once(b'>'))
-                .cmp(right.as_str().bytes().chain(std::iter::once(b'>')))
+            let left = left.as_str().as_bytes();
+            let right = right.as_str().as_bytes();
+            let common = left.len().min(right.len());
+            match left[..common].cmp(&right[..common]) {
+                std::cmp::Ordering::Equal => match left.len().cmp(&right.len()) {
+                    Less => match b'>'.cmp(&right[common]) {
+                        std::cmp::Ordering::Equal => Less,
+                        ordering => ordering,
+                    },
+                    Greater => match left[common].cmp(&b'>') {
+                        std::cmp::Ordering::Equal => Greater,
+                        ordering => ordering,
+                    },
+                    std::cmp::Ordering::Equal => std::cmp::Ordering::Equal,
+                },
+                ordering => ordering,
+            }
         }
         (Term::BlankNode(left), Term::BlankNode(right)) => left.as_str().cmp(right.as_str()),
         (Term::Literal(left), Term::Literal(right)) => left.as_ref().cmp_display(right.as_ref()),

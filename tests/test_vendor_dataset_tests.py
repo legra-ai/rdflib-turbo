@@ -87,3 +87,28 @@ def test_generalized_equality_is_a_mandatory_dataset_regression(runner):
 )
 def test_streaming_removal_is_a_mandatory_dataset_regression(runner, name):
     assert f"dataset::generalized_remove_tests::{name}" in runner.REQUIRED_TESTS
+
+
+@pytest.mark.parametrize(
+    "required",
+    (
+        "literal::tests::display_comparison_preserves_escaping_prefixes_and_literal_kinds",
+        "literal::tests::display_comparison_skips_long_shared_lexical_prefixes",
+    ),
+)
+def test_missing_literal_regression_stops_before_any_execution(
+    runner, monkeypatch, tmp_path, required
+):
+    (tmp_path / "Cargo.toml").write_text("[patch.crates-io]\n")
+    calls = []
+
+    def cargo(arguments, **kwargs):
+        calls.append(arguments)
+        return SimpleNamespace(
+            stdout="\n".join(f"{name}: test" for name in runner.REQUIRED_TESTS if name != required)
+        )
+
+    monkeypatch.setattr(runner.subprocess, "run", cargo)
+    with pytest.raises(RuntimeError, match=required):
+        runner.run(tmp_path)
+    assert len(calls) == 1
