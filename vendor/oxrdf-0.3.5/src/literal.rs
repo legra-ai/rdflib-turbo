@@ -812,14 +812,26 @@ fn common_lexical_prefix(left: &str, right: &str) -> usize {
 impl fmt::Display for LiteralRef<'_> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let (value, prefix, suffix, ending) = self.display_parts();
-        print_quoted_str(value, f)?;
-        if !prefix.is_empty() {
-            f.write_str(prefix)?;
-            f.write_str(suffix)?;
-            f.write_str(ending)?;
+        match self.0 {
+            LiteralRefContent::String(value) => print_quoted_str(value, f),
+            LiteralRefContent::LanguageTaggedString { value, language } => {
+                print_quoted_str(value, f)?;
+                write!(f, "@{language}")
+            }
+            #[cfg(feature = "rdf-12")]
+            LiteralRefContent::DirectionalLanguageTaggedString {
+                value,
+                language,
+                direction,
+            } => {
+                print_quoted_str(value, f)?;
+                write!(f, "@{language}--{direction}")
+            }
+            LiteralRefContent::TypedLiteral { value, datatype } => {
+                print_quoted_str(value, f)?;
+                write!(f, "^^{datatype}")
+            }
         }
-        Ok(())
     }
 }
 
@@ -858,20 +870,66 @@ impl PartialEq<LiteralRef<'_>> for Literal {
     }
 }
 
+// Share the escape authority without constructing an intermediate enum in the formatter loop.
+macro_rules! quoted_character_escape {
+    ($value:expr, $plain:ident => $plain_body:expr, $short:ident => $short_body:expr, $unicode:ident => $unicode_body:expr $(,)?) => {
+        match $value {
+            '\u{8}' => {
+                let $short = "\\b";
+                $short_body
+            }
+            '\t' => {
+                let $short = "\\t";
+                $short_body
+            }
+            '\n' => {
+                let $short = "\\n";
+                $short_body
+            }
+            '\u{C}' => {
+                let $short = "\\f";
+                $short_body
+            }
+            '\r' => {
+                let $short = "\\r";
+                $short_body
+            }
+            '"' => {
+                let $short = "\\\"";
+                $short_body
+            }
+            '\\' => {
+                let $short = "\\\\";
+                $short_body
+            }
+            codepoint @ ('\0'..='\u{1F}' | '\u{7F}' | '\u{FFFE}' | '\u{FFFF}') => {
+                let $unicode = codepoint;
+                $unicode_body
+            }
+            character => {
+                let $plain = character;
+                $plain_body
+            }
+        }
+    };
+}
+
 #[inline]
 pub fn print_quoted_str(string: &str, f: &mut impl Write) -> fmt::Result {
     f.write_char('"')?;
     for c in string.chars() {
-        match quoted_character_escape(c) {
-            QuotedCharacter::Plain(c) => f.write_char(c)?,
-            QuotedCharacter::Short(escape) => f.write_str(escape)?,
-            QuotedCharacter::Unicode(digits) => {
+        quoted_character_escape!(
+            c,
+            character => f.write_char(character),
+            escape => f.write_str(escape),
+            codepoint => {
                 f.write_str("\\u")?;
-                for digit in digits {
+                for digit in unicode_escape_digits(codepoint) {
                     f.write_char(digit)?;
                 }
+                Ok(())
             }
-        }
+        )?;
     }
     f.write_char('"')
 }
@@ -881,34 +939,16 @@ std::thread_local! {
     static DISPLAY_ESCAPE_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
-enum QuotedCharacter {
-    Plain(char),
-    Short(&'static str),
-    Unicode([char; 4]),
-}
-
 #[inline]
-fn quoted_character_escape(c: char) -> QuotedCharacter {
-    match c {
-        '\u{8}' => QuotedCharacter::Short("\\b"),
-        '\t' => QuotedCharacter::Short("\\t"),
-        '\n' => QuotedCharacter::Short("\\n"),
-        '\u{C}' => QuotedCharacter::Short("\\f"),
-        '\r' => QuotedCharacter::Short("\\r"),
-        '"' => QuotedCharacter::Short("\\\""),
-        '\\' => QuotedCharacter::Short("\\\\"),
-        '\0'..='\u{1F}' | '\u{7F}' | '\u{FFFE}' | '\u{FFFF}' => {
-            const HEX: &[u8; 16] = b"0123456789ABCDEF";
-            let codepoint = c as usize;
-            QuotedCharacter::Unicode([
-                char::from(HEX[(codepoint >> 12) & 15]),
-                char::from(HEX[(codepoint >> 8) & 15]),
-                char::from(HEX[(codepoint >> 4) & 15]),
-                char::from(HEX[codepoint & 15]),
-            ])
-        }
-        _ => QuotedCharacter::Plain(c),
-    }
+fn unicode_escape_digits(c: char) -> [char; 4] {
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    let codepoint = c as usize;
+    [
+        char::from(HEX[(codepoint >> 12) & 15]),
+        char::from(HEX[(codepoint >> 8) & 15]),
+        char::from(HEX[(codepoint >> 4) & 15]),
+        char::from(HEX[codepoint & 15]),
+    ]
 }
 
 #[inline]
@@ -917,22 +957,21 @@ fn escaped_characters(c: char) -> impl Iterator<Item = char> {
     DISPLAY_ESCAPE_CALLS.with(|calls| calls.set(calls.get() + 1));
     // bounded: one RDF escape has at most six characters.
     let mut buffer = ['\0'; 6];
-    let length = match quoted_character_escape(c) {
-        QuotedCharacter::Plain(c) => {
-            buffer[0] = c;
-            1
-        }
-        QuotedCharacter::Short(escape) => {
+    let length = quoted_character_escape!(
+        c,
+        character => { buffer[0] = character; 1 },
+        escape => {
             let bytes = escape.as_bytes();
             buffer[0] = char::from(bytes[0]);
             buffer[1] = char::from(bytes[1]);
             2
-        }
-        QuotedCharacter::Unicode(digits) => {
+        },
+        codepoint => {
+            let digits = unicode_escape_digits(codepoint);
             buffer = ['\\', 'u', digits[0], digits[1], digits[2], digits[3]];
             6
         }
-    };
+    );
     buffer.into_iter().take(length)
 }
 
