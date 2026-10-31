@@ -64,8 +64,14 @@ def test_failed_budget_stops_remaining_processes(budgets, monkeypatch):
     assert len(calls) == 1
 
 
-def test_report_cache_retention_runs_as_an_isolated_required_budget(budgets, monkeypatch):
-    required = "allocation_tests::report_overlap::report_render_does_not_retain_target_cache_width"
+@pytest.mark.parametrize(
+    "required",
+    (
+        "allocation_tests::report_overlap::report_render_does_not_retain_target_cache_width",
+        "allocation_tests::current_thread::direct_scope_isolation_controls",
+    ),
+)
+def test_new_memory_regressions_run_as_isolated_required_budgets(budgets, monkeypatch, required):
     calls = []
 
     def run(arguments, environment, *, capture=False):

@@ -58,7 +58,7 @@ fn default_dataset_boolean_does_not_clone_bound_lexical_terms() {
     );
     let mut data = GeneralizedDataset::from_iter([&row]);
     let transaction = data.transaction();
-    let (present, allocated) = crate::allocation_tests::measure_allocated(|| {
+    let (present, allocated) = crate::allocation_tests::current_thread::measure_allocated(|| {
         Graph::contains(&transaction, (&row).into()).unwrap()
     });
     assert!(present);
@@ -90,7 +90,7 @@ fn transaction_destination_boolean_does_not_clone_bound_lexical_terms() {
         row.graph_name.clone(),
     );
     store.insert_generalized(&generalized).unwrap();
-    let (present, allocated) = crate::allocation_tests::measure_allocated(|| {
+    let (present, allocated) = crate::allocation_tests::current_thread::measure_allocated(|| {
         store.contains_generalized(&generalized).unwrap()
     });
     assert!(present);
@@ -99,7 +99,7 @@ fn transaction_destination_boolean_does_not_clone_bound_lexical_terms() {
         "Store generalized boolean allocated term payload"
     );
     let mut transaction = store.start_transaction().unwrap();
-    let (present, allocated) = crate::allocation_tests::measure_allocated(|| {
+    let (present, allocated) = crate::allocation_tests::current_thread::measure_allocated(|| {
         transaction.contains_generalized(&generalized).unwrap()
     });
     assert!(present);
@@ -113,7 +113,7 @@ fn transaction_destination_boolean_does_not_clone_bound_lexical_terms() {
         destination: row.graph_name.clone(),
     };
     assert!(data.contains_destination((&row).into()).unwrap());
-    let (present, allocated) = crate::allocation_tests::measure_allocated(|| {
+    let (present, allocated) = crate::allocation_tests::current_thread::measure_allocated(|| {
         data.contains_destination((&row).into()).unwrap()
     });
     assert!(present);

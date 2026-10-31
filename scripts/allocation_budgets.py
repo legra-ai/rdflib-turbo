@@ -9,6 +9,7 @@ from .native_coverage import locked_python_environment, run
 
 # bounded: this fixed regression inventory requires one isolated process per budget.
 TESTS = (
+    "allocation_tests::current_thread::direct_scope_isolation_controls",
     "allocation_tests::report_overlap::report_render_does_not_retain_target_cache_width",
     "allocation_tests::inference_heap_budget",
     "inference::pending_retirement_tests::consumed_generalized_frontier_releases_storage_before_iteration_finishes",

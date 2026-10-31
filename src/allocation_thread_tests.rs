@@ -44,6 +44,14 @@ pub(crate) fn measure_allocated<T>(operation: impl FnOnce() -> T) -> (T, usize) 
 }
 
 #[test]
+#[ignore = "allocation observer controls require isolated execution"]
+fn direct_scope_isolation_controls() {
+    direct_scope_excludes_foreign_thread_allocations();
+    direct_scope_counts_small_caller_allocations();
+    direct_scope_counts_full_lexical_clones();
+}
+
+#[test]
 fn direct_scope_excludes_foreign_thread_allocations() {
     let state = Arc::new(AtomicU8::new(0));
     let worker_state = Arc::clone(&state);
