@@ -1039,6 +1039,59 @@ mod tests {
     use super::*;
 
     #[test]
+    fn display_comparison_preserves_escaping_prefixes_and_literal_kinds() {
+        let mut values = Vec::new();
+        for value in [
+            "", "word", "word!", "word ", "word\n", "\\n", "é", "\0", "\u{7F}", "\u{FFFE}",
+            "\u{FFFF}", "😀",
+        ] {
+            values.push(Literal::new_simple_literal(value));
+            for datatype in [
+                xsd::STRING,
+                xsd::INTEGER,
+                NamedNodeRef::new_unchecked("urn:a"),
+                NamedNodeRef::new_unchecked("urn:a0"),
+            ] {
+                values.push(Literal::new_typed_literal(value, datatype));
+            }
+            for language in ["en", "en-US"] {
+                values.push(Literal::new_language_tagged_literal(value, language).unwrap());
+                #[cfg(feature = "rdf-12")]
+                for direction in [BaseDirection::Ltr, BaseDirection::Rtl] {
+                    values.push(
+                        Literal::new_directional_language_tagged_literal(
+                            value, language, direction,
+                        )
+                        .unwrap(),
+                    );
+                }
+            }
+        }
+        for left in &values {
+            for right in &values {
+                assert_eq!(
+                    left.as_ref().cmp_display(right.as_ref()),
+                    left.to_string().cmp(&right.to_string()),
+                    "{left} versus {right}"
+                );
+            }
+        }
+        assert_eq!(
+            Literal::new_language_tagged_literal("word\n", "en")
+                .unwrap()
+                .to_string(),
+            "\"word\\n\"@en"
+        );
+        #[cfg(feature = "rdf-12")]
+        assert_eq!(
+            Literal::new_directional_language_tagged_literal("word\n", "en", BaseDirection::Ltr)
+                .unwrap()
+                .to_string(),
+            "\"word\\n\"@en--ltr"
+        );
+    }
+
+    #[test]
     #[cfg(not(feature = "rdf-10-string-identity"))]
     fn test_simple_literal_equality() {
         assert_eq!(
