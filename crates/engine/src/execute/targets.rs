@@ -1,3 +1,5 @@
+use std::cmp::Ordering::{Greater, Less};
+
 use super::*;
 
 impl CompiledShapes {
@@ -107,7 +109,7 @@ impl CompiledShapes {
             }
         }
         let mut nodes: Vec<_> = nodes.into_iter().collect();
-        nodes.sort_by_key(ToString::to_string);
+        nodes.sort_by(focus_node_order);
         Ok(nodes)
     }
 
@@ -128,3 +130,25 @@ impl CompiledShapes {
         Ok(nodes)
     }
 }
+
+/// Compare the existing RDF display keys without repeatedly rendering identifiers.
+fn focus_node_order(left: &Term, right: &Term) -> std::cmp::Ordering {
+    match (left, right) {
+        (Term::NamedNode(left), Term::NamedNode(right)) => {
+            // Include the virtual closing delimiter: <urn:a0> sorts before <urn:a>.
+            left.as_str()
+                .bytes()
+                .chain(std::iter::once(b'>'))
+                .cmp(right.as_str().bytes().chain(std::iter::once(b'>')))
+        }
+        (Term::BlankNode(left), Term::BlankNode(right)) => left.as_str().cmp(right.as_str()),
+        (Term::Literal(left), Term::Literal(right)) => left.to_string().cmp(&right.to_string()),
+        // The display prefixes are respectively a quote, '<', and '_:'.
+        (Term::Literal(_), _) | (Term::NamedNode(_), Term::BlankNode(_)) => Less,
+        (_, Term::Literal(_)) | (Term::BlankNode(_), Term::NamedNode(_)) => Greater,
+    }
+}
+
+#[cfg(test)]
+#[path = "targets_order_tests.rs"]
+mod order_tests;

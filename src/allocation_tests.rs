@@ -12,6 +12,8 @@ use super::*;
 mod canonical;
 #[path = "allocation_thread_tests.rs"]
 pub(crate) mod current_thread;
+#[path = "allocation_focus_order_tests.rs"]
+mod focus_order;
 #[path = "allocation_report_overlap_tests.rs"]
 mod report_overlap;
 #[path = "allocation_trace_tests.rs"]

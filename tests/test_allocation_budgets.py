@@ -69,6 +69,7 @@ def test_failed_budget_stops_remaining_processes(budgets, monkeypatch):
     (
         "allocation_tests::report_overlap::report_render_does_not_retain_target_cache_width",
         "allocation_tests::current_thread::direct_scope_isolation_controls",
+        "allocation_tests::focus_order::focus_identifier_ordering_has_linear_payload_allocation",
     ),
 )
 def test_new_memory_regressions_run_as_isolated_required_budgets(budgets, monkeypatch, required):
