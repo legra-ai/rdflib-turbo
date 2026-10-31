@@ -134,11 +134,47 @@ impl<G: GraphRead + ?Sized, S: GraphRead + ?Sized> Display<'_, G, S> {
         }
     }
 
+    fn decimal_message(literal: &Literal) -> Option<String> {
+        if literal.datatype().as_str().strip_prefix(XSD) != Some("decimal") {
+            return None;
+        }
+        let value = literal.value().parse::<BigDecimal>().ok()?;
+        let (coefficient, scale) = value.as_bigint_and_exponent();
+        let signed = coefficient.to_string();
+        let digits = signed.strip_prefix('-').unwrap_or(&signed);
+        let point = digits.len() as i128 - i128::from(scale);
+        let adjusted = point - 1;
+        // Python Decimal retains coefficient scale and signed zero. Its fixed
+        // notation permits at most five zeros before the significant digits.
+        let rendered = if scale < 0 || adjusted < -6 {
+            let fraction = if digits.len() > 1 {
+                format!(".{}", &digits[1..])
+            } else {
+                String::new()
+            };
+            format!("{}{fraction}E{adjusted:+}", &digits[..1])
+        } else if point <= 0 {
+            let zeros = usize::try_from(-point).expect("fixed decimal padding is bounded by five");
+            format!("0.{}{digits}", "0".repeat(zeros))
+        } else if scale == 0 {
+            digits.to_owned()
+        } else {
+            let point = usize::try_from(point).expect("decimal split is within its coefficient");
+            format!("{}.{}", &digits[..point], &digits[point..])
+        };
+        Some(if literal.value().starts_with('-') {
+            format!("-{rendered}")
+        } else {
+            rendered
+        })
+    }
+
     pub fn message(&self, term: &Term) -> String {
         match term {
             Term::Literal(literal) => Self::boolean_value(literal)
                 .map(str::to_owned)
                 .or_else(|| Self::integer_value(literal))
+                .or_else(|| Self::decimal_message(literal))
                 .unwrap_or_else(|| literal.value().to_owned()),
             _ => term.to_string(),
         }
