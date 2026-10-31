@@ -22,6 +22,10 @@ mod node_message_tests;
 #[cfg(test)]
 mod report_message_tests;
 
+#[cfg(test)]
+#[path = "node_kind_message_tests.rs"]
+mod node_kind_message_tests;
+
 #[derive(Clone, Debug)]
 pub struct Options {
     pub iterate_rules: bool,

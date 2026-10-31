@@ -213,6 +213,20 @@ impl CompiledShapes {
                             format!("Value class is not in classes ({})", classes.join(", "))
                         }
                     }
+                    "NodeKindConstraintComponent" => {
+                        let kind = shape
+                            .constraints
+                            .iter()
+                            .find_map(|constraint| {
+                                if let Constraint::NodeKind(kind) = constraint {
+                                    Some(kind)
+                                } else {
+                                    None
+                                }
+                            })
+                            .expect("node kind violation requires a compiled node kind constraint");
+                        format!("Value is not of Node Kind {}", display.iri(&iri(SH, kind)))
+                    }
                     "DatatypeConstraintComponent" => {
                         let datatype = shape
                             .constraints
