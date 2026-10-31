@@ -198,6 +198,9 @@ impl CompiledShapes {
                             )
                         }
                     }
+                    "ExpressionConstraintComponent" => {
+                        "Expression evaluation generated constraint did not return true.".to_owned()
+                    }
                     "UniqueLangConstraintComponent" => {
                         "More than one String shares the same Language".to_owned()
                     }
