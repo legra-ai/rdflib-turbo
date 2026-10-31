@@ -1,6 +1,7 @@
 """The maintained vendor runner executes the full-Term dataset regressions."""
 
 import importlib
+import re
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
@@ -57,7 +58,14 @@ ORIGINAL = (
     "dataset::scoped_pattern_tests::pattern_encodes_each_supplied_component_once_for_every_mask",
 )
 
-COMPLETE = PAIRED_PREFIX + FULL_SPO + STREAM_REMOVAL + ORIGINAL + CORE
+# bounded: exact display-order and formatter-work contracts shared by both profiles.
+LITERAL_DISPLAY = (
+    "literal::tests::quoted_plain_spans_use_bounded_writer_calls",
+    "literal::tests::display_comparison_preserves_escaping_prefixes_and_literal_kinds",
+    "literal::tests::display_comparison_skips_long_shared_lexical_prefixes",
+)
+
+COMPLETE = LITERAL_DISPLAY + PAIRED_PREFIX + FULL_SPO + STREAM_REMOVAL + ORIGINAL + CORE
 
 
 @pytest.fixture
@@ -109,7 +117,7 @@ def test_every_missing_core_contract_stops_before_execution(
         return SimpleNamespace(stdout="\n".join(f"{name}: test" for name in names))
 
     monkeypatch.setattr(runner.subprocess, "run", cargo)
-    with pytest.raises(RuntimeError, match="Missing native dataset regressions"):
+    with pytest.raises(RuntimeError, match=re.escape(missing)):
         runner.run(tmp_path)
     assert len(calls) == (3 if extended else 1)
 
