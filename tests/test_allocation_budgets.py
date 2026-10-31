@@ -64,6 +64,29 @@ def test_failed_budget_stops_remaining_processes(budgets, monkeypatch):
     assert len(calls) == 1
 
 
+def test_report_cache_retention_runs_as_an_isolated_required_budget(budgets, monkeypatch):
+    required = "allocation_tests::report_overlap::report_render_does_not_retain_target_cache_width"
+    calls = []
+
+    def run(arguments, environment, *, capture=False):
+        if capture:
+            return "\n".join(f"{test}: test" for test in (*budgets.TESTS, required))
+        calls.append(arguments)
+
+    monkeypatch.setattr(budgets, "run", run)
+    budgets.run_budgets({})
+    selected = [arguments for arguments in calls if required in arguments]
+    assert len(selected) == 1
+    assert selected[0][-6:] == [
+        required,
+        "--",
+        "--ignored",
+        "--exact",
+        "--nocapture",
+        "--test-threads=1",
+    ]
+
+
 def test_native_boolean_membership_budget_is_required(budgets):
     assert "store::read_input_tests::native_boolean_membership_avoids_result_rows" in budgets.TESTS
 
