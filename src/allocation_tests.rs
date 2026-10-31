@@ -10,16 +10,25 @@ use super::*;
 
 #[path = "allocation_canonical_profile_tests.rs"]
 mod canonical;
+#[path = "allocation_report_overlap_tests.rs"]
+mod report_overlap;
 #[path = "allocation_trace_tests.rs"]
 pub(crate) mod trace;
 
 struct CountingAllocator;
+// Exact cache-ID payload requests for the isolated report regression (test-only).
+const REPORT_CACHE_PAYLOAD_SIZE: usize = 270;
+static REPORT_CACHE_PAYLOAD_LIVE: AtomicUsize = AtomicUsize::new(0);
+
 static LIVE: AtomicUsize = AtomicUsize::new(0);
 static PEAK: AtomicUsize = AtomicUsize::new(0);
 static TOTAL: AtomicUsize = AtomicUsize::new(0);
 static CALLS: AtomicUsize = AtomicUsize::new(0);
 
 fn allocated(size: usize) {
+    if size == REPORT_CACHE_PAYLOAD_SIZE {
+        REPORT_CACHE_PAYLOAD_LIVE.fetch_add(1, Relaxed);
+    }
     let live = LIVE.fetch_add(size, Relaxed) + size;
     PEAK.fetch_max(live, Relaxed);
     TOTAL.fetch_add(size, Relaxed);
@@ -44,6 +53,9 @@ unsafe impl GlobalAlloc for CountingAllocator {
     }
 
     unsafe fn dealloc(&self, pointer: *mut u8, layout: Layout) {
+        if layout.size() == REPORT_CACHE_PAYLOAD_SIZE {
+            REPORT_CACHE_PAYLOAD_LIVE.fetch_sub(1, Relaxed);
+        }
         LIVE.fetch_sub(layout.size(), Relaxed);
         unsafe { System.dealloc(pointer, layout) };
     }
@@ -51,6 +63,9 @@ unsafe impl GlobalAlloc for CountingAllocator {
     unsafe fn realloc(&self, pointer: *mut u8, layout: Layout, size: usize) -> *mut u8 {
         let next = unsafe { System.realloc(pointer, layout, size) };
         if !next.is_null() {
+            if layout.size() == REPORT_CACHE_PAYLOAD_SIZE {
+                REPORT_CACHE_PAYLOAD_LIVE.fetch_sub(1, Relaxed);
+            }
             LIVE.fetch_sub(layout.size(), Relaxed);
             allocated(size);
         }

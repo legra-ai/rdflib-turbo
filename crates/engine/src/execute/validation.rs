@@ -60,6 +60,8 @@ impl CompiledShapes {
             (options.allow_warnings && severity == &iri(SH, "Warning"))
                 || ((options.allow_infos || options.allow_warnings) && severity == &iri(SH, "Info"))
         });
+        let recursion_warnings = std::mem::take(&mut evaluation.warnings);
+        drop(evaluation);
         let mut report = Dataset::new();
         let root: Term = BlankNode::default().into();
         add(
@@ -117,7 +119,7 @@ impl CompiledShapes {
             conforms,
             graph: report,
             text,
-            recursion_warnings: evaluation.warnings,
+            recursion_warnings,
         })
     }
 }
