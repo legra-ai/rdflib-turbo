@@ -30,6 +30,33 @@ fn identifier_prefixes_delimiters_and_mixed_terms_keep_display_order() {
     }
     let mut expected = nodes.clone();
     expected.sort_by_key(ToString::to_string);
-    nodes.sort_by(focus_node_order);
+    sort_focus_nodes(&mut nodes);
     assert_eq!(nodes, expected);
+}
+
+#[test]
+fn literal_and_identifier_subsets_keep_the_previous_display_order() {
+    let terms = [
+        Term::from(NamedNode::new_unchecked("urn:a")),
+        Term::from(NamedNode::new_unchecked("urn:a0")),
+        Term::from(BlankNode::new_unchecked("a")),
+        Term::from(Literal::new_simple_literal("line\n")),
+        Term::from(Literal::new_simple_literal("line\t")),
+        Literal::new_language_tagged_literal("é", "en")
+            .unwrap()
+            .into(),
+        Literal::new_typed_literal("é", iri(XSD, "integer")).into(),
+    ];
+    for mask in 0..(1 << terms.len()) {
+        let mut nodes: Vec<_> = terms
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| mask & (1 << index) != 0)
+            .map(|(_, term)| term.clone())
+            .collect();
+        let mut expected = nodes.clone();
+        expected.sort_by_key(ToString::to_string);
+        sort_focus_nodes(&mut nodes);
+        assert_eq!(nodes, expected);
+    }
 }

@@ -86,3 +86,46 @@ fn targeting_index_shape_order_has_linear_payload_allocation() {
         "Targeting index repeatedly rendered shape identifiers: {allocated} >= {budget}"
     );
 }
+
+#[test]
+#[ignore = "isolated requested-allocation budget"]
+fn focus_literal_ordering_has_linear_payload_allocation() {
+    const NODES: usize = 256;
+    const WIDTH: usize = 2048;
+    let store = Store::new().unwrap();
+    let predicate = NamedNode::new_unchecked("urn:values");
+    let payload = "x".repeat(WIDTH);
+    let mut expected = Vec::new();
+    let mut writer = store.start_transaction().unwrap();
+    for index in 0..NODES {
+        let value = Literal::new_simple_literal(format!("value:{index}:{payload}"));
+        expected.push(Term::from(value.clone()));
+        writer.insert(&Quad::new(
+            NamedNode::new_unchecked("urn:subject"),
+            predicate.clone(),
+            value,
+            GraphName::DefaultGraph,
+        ));
+    }
+    writer.commit().unwrap();
+    let source = IndexedShapesSource::parse_graph(
+        "@prefix sh:<http://www.w3.org/ns/shacl#>. <urn:Shape> a sh:NodeShape; sh:targetObjectsOf <urn:values>.",
+        RdfFormat::Turtle,
+        None,
+    ).unwrap();
+    let program = CompiledShapes::compile(source, false).unwrap();
+    let reader = store.read_snapshot();
+    let (actual, allocated) = super::current_thread::measure_allocated(|| {
+        program
+            .shape_focus_nodes("<urn:Shape>", &reader, false)
+            .unwrap()
+    });
+    expected.sort_by_key(ToString::to_string);
+    assert_eq!(actual, expected);
+    let budget = 5 * NODES * WIDTH;
+    println!("LITERAL_FOCUS_ORDER_ALLOCATED {allocated} BUDGET {budget}");
+    assert!(
+        allocated < budget,
+        "Focus discovery repeatedly rendered literal payloads: {allocated} >= {budget}"
+    );
+}

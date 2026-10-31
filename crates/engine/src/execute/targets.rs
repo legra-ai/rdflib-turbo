@@ -1,4 +1,5 @@
 use std::cmp::Ordering::{Greater, Less};
+use std::fmt::Write as _;
 
 use super::*;
 
@@ -46,7 +47,7 @@ impl CompiledShapes {
             }
         }
         for shapes in index.values_mut() {
-            shapes.sort_by(focus_node_order);
+            sort_focus_nodes(shapes);
         }
         Ok(index)
     }
@@ -109,7 +110,7 @@ impl CompiledShapes {
             }
         }
         let mut nodes: Vec<_> = nodes.into_iter().collect();
-        nodes.sort_by(focus_node_order);
+        sort_focus_nodes(&mut nodes);
         Ok(nodes)
     }
 
@@ -129,6 +130,32 @@ impl CompiledShapes {
         }
         Ok(nodes)
     }
+}
+
+/// Cache formatted literal keys once while keeping identifier-only sorting allocation-free.
+fn sort_focus_nodes(nodes: &mut [Term]) {
+    if nodes.iter().any(|node| matches!(node, Term::Literal(_))) {
+        nodes.sort_by_cached_key(focus_display_key);
+    } else {
+        nodes.sort_by(focus_node_order);
+    }
+}
+
+/// Reserve the unescaped payload once; RDF's formatter retains authority over escaping.
+fn focus_display_key(node: &Term) -> String {
+    let capacity = match node {
+        Term::NamedNode(node) => node.as_str().len() + 2,
+        Term::BlankNode(node) => node.as_str().len() + 2,
+        Term::Literal(literal) => {
+            literal.value().len()
+                + literal.datatype().as_str().len()
+                + literal.language().map_or(0, str::len)
+                + 8
+        }
+    };
+    let mut key = String::with_capacity(capacity);
+    write!(&mut key, "{node}").expect("Formatting into a String is infallible");
+    key
 }
 
 /// Compare the existing RDF display keys without repeatedly rendering identifiers.
