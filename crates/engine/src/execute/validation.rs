@@ -97,7 +97,7 @@ impl CompiledShapes {
         };
         let mut clones = ReportClones::default();
         let mut descriptions = Vec::new();
-        for violation in &violations {
+        for violation in violations {
             let mut description = String::new();
             self.write_result(
                 &mut report,

@@ -16,6 +16,8 @@ pub(crate) mod current_thread;
 mod focus_order;
 #[path = "allocation_report_overlap_tests.rs"]
 mod report_overlap;
+#[path = "allocation_report_retirement_tests.rs"]
+mod report_retirement;
 #[path = "allocation_trace_tests.rs"]
 pub(crate) mod trace;
 

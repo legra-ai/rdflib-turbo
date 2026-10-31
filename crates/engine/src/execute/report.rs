@@ -20,7 +20,7 @@ impl CompiledShapes {
         report: &mut Dataset,
         parent: &Term,
         edge: &str,
-        violation: &Violation,
+        mut violation: Violation,
         data: &(impl GraphRead + ?Sized),
         text: &mut String,
         clones: &mut ReportClones,
@@ -64,11 +64,11 @@ impl CompiledShapes {
             )?;
             clones.copy(&self.graph, report, constraint)?;
         }
-        let messages = if let Some(messages) = &violation.messages {
-            messages.clone()
+        let messages = if let Some(messages) = violation.messages.take() {
+            messages
         } else if shape.messages.is_empty() {
             let message = if !violation.message.is_empty() {
-                violation.message.clone()
+                std::mem::take(&mut violation.message)
             } else if let Some(comparison) = &violation.comparison {
                 match comparison {
                     ComparisonMessage::Range { operator, bound } => {
@@ -322,7 +322,7 @@ impl CompiledShapes {
             add(report, &result, iri(SH, "resultMessage"), message)?;
         }
         let mut descriptions = Vec::new();
-        for detail in &violation.details {
+        for detail in violation.details {
             let mut description = String::new();
             self.write_result(
                 report,
