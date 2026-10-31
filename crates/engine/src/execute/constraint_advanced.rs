@@ -80,7 +80,7 @@ impl CompiledShapes {
                         } else {
                             result.source_constraint = Some(query.node.clone());
                         }
-                        if !row.messages.is_empty() {
+                        if !row.messages.is_empty() || query.component.is_none() {
                             result.messages = Some(row.messages);
                         }
                         results.push(result);
