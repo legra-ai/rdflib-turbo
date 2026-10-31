@@ -173,6 +173,9 @@ mod data_list;
 mod evaluation;
 mod report;
 mod rules;
+#[cfg(test)]
+#[path = "sparql_report_tests.rs"]
+mod sparql_report_tests;
 mod targets;
 mod validation;
 

@@ -36,8 +36,6 @@ mod shapes_policy;
 mod shapes_source;
 mod sparql;
 mod sparql_regex;
-#[cfg(test)]
-mod sparql_report_tests;
 mod structural;
 mod value;
 
