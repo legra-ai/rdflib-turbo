@@ -18,6 +18,10 @@ mod coverage_tests;
 #[cfg(test)]
 mod report_message_tests;
 
+#[cfg(test)]
+#[path = "language_message_tests.rs"]
+mod language_message_tests;
+
 #[derive(Clone, Debug)]
 pub struct Options {
     pub iterate_rules: bool,

@@ -198,6 +198,13 @@ impl CompiledShapes {
                             )
                         }
                     }
+                    "LanguageInConstraintComponent" => {
+                        let list = values(&self.graph, &shape.node, "languageIn")?
+                            .into_iter()
+                            .next()
+                            .expect("language violation requires its source language list");
+                        format!("String language is not in {}", display.term(&list, true)?)
+                    }
                     "UniqueLangConstraintComponent" => {
                         "More than one String shares the same Language".to_owned()
                     }
