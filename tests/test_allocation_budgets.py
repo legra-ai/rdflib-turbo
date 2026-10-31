@@ -101,6 +101,30 @@ def test_native_boolean_membership_budget_is_required(budgets):
     assert "store::read_input_tests::native_boolean_membership_avoids_result_rows" in budgets.TESTS
 
 
+@pytest.mark.parametrize(
+    "required",
+    (
+        "allocation_tests::report_retirement::direct_select_report_retires_owned_messages",
+        "allocation_tests::report_retirement::nested_select_report_retires_owned_messages",
+    ),
+)
+def test_owned_report_retirement_is_mandatory_and_missing_selection_fails(
+    budgets, monkeypatch, required
+):
+    assert required in budgets.TESTS
+    calls = []
+
+    def run(arguments, environment, *, capture=False):
+        calls.append(arguments)
+        assert capture, "A missing required budget must reject before any test runs"
+        return "\n".join(f"{test}: test" for test in budgets.TESTS if test != required)
+
+    monkeypatch.setattr(budgets, "run", run)
+    with pytest.raises(RuntimeError, match="Missing allocation budget"):
+        budgets.run_budgets({})
+    assert len(calls) == 1
+
+
 def test_borrowed_validation_view_budget_is_required(budgets):
     assert (
         "inference::borrowed_tests::borrowed_validation_view_does_not_clone_large_base_lexical_storage"

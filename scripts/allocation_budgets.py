@@ -36,6 +36,8 @@ TESTS = (
     "store::read::tests::exact_membership_allocates_only_one_result_row",
     "store::read_input_tests::native_boolean_membership_avoids_result_rows",
     "store::read_input_tests::native_raw_membership_avoids_rows_and_lexical_copies",
+    "allocation_tests::report_retirement::direct_select_report_retires_owned_messages",
+    "allocation_tests::report_retirement::nested_select_report_retires_owned_messages",
 )
 COMMAND = ["cargo", "test", "--locked", "--release", "--features", "allocation-profiling"]
 
