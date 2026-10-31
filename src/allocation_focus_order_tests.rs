@@ -49,3 +49,40 @@ fn focus_identifier_ordering_has_linear_payload_allocation() {
         "Focus discovery repeatedly rendered identifier payloads: {allocated} >= {budget}"
     );
 }
+
+#[test]
+#[ignore = "isolated requested-allocation budget"]
+fn targeting_index_shape_order_has_linear_payload_allocation() {
+    const SHAPES: usize = 256;
+    const WIDTH: usize = 2048;
+    let payload = "x".repeat(WIDTH);
+    let mut document = String::from("@prefix sh:<http://www.w3.org/ns/shacl#>.\n");
+    let mut expected = Vec::new();
+    for index in 0..SHAPES {
+        let shape = NamedNode::new_unchecked(format!("urn:shape:{index}:{payload}"));
+        document.push_str(&format!(
+            "{shape} a sh:NodeShape; sh:targetNode <urn:focus>.\n"
+        ));
+        expected.push(Term::from(shape));
+    }
+    let source = IndexedShapesSource::parse_graph(&document, RdfFormat::Turtle, None).unwrap();
+    let program = CompiledShapes::compile(source, false).unwrap();
+    let store = Store::new().unwrap();
+    let reader = store.read_snapshot();
+    let skip = std::collections::HashSet::new();
+    let (actual, allocated) = super::current_thread::measure_allocated(|| {
+        program.targeting_index(&reader, &skip).unwrap()
+    });
+    expected.sort_by_key(ToString::to_string);
+    assert_eq!(actual.len(), 1);
+    assert_eq!(
+        actual[&Term::from(NamedNode::new_unchecked("urn:focus"))],
+        expected
+    );
+    let budget = 4 * SHAPES * WIDTH;
+    println!("TARGET_INDEX_ORDER_ALLOCATED {allocated} BUDGET {budget}");
+    assert!(
+        allocated < budget,
+        "Targeting index repeatedly rendered shape identifiers: {allocated} >= {budget}"
+    );
+}

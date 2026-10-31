@@ -46,7 +46,7 @@ impl CompiledShapes {
             }
         }
         for shapes in index.values_mut() {
-            shapes.sort_by_key(ToString::to_string);
+            shapes.sort_by(focus_node_order);
         }
         Ok(index)
     }
