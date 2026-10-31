@@ -22,6 +22,10 @@ mod node_message_tests;
 #[cfg(test)]
 mod report_message_tests;
 
+#[cfg(test)]
+#[path = "node_kind_message_tests.rs"]
+mod node_kind_message_tests;
+
 #[derive(Clone, Debug)]
 pub struct Options {
     pub iterate_rules: bool,
@@ -177,6 +181,9 @@ mod data_list;
 mod evaluation;
 mod report;
 mod rules;
+#[cfg(test)]
+#[path = "sparql_report_tests.rs"]
+mod sparql_report_tests;
 mod targets;
 mod validation;
 
@@ -192,3 +199,7 @@ mod traversal_tests;
 #[cfg(test)]
 #[path = "execute_borrowed_tests.rs"]
 mod borrowed_tests;
+
+#[cfg(test)]
+#[path = "language_message_tests.rs"]
+mod language_message_tests;

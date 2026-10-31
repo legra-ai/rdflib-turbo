@@ -171,3 +171,75 @@ fn scalar_shape_messages_render_values_without_changing_rdf_terms() {
         );
     }
 }
+
+#[test]
+fn expression_reports_keep_original_default_custom_and_source_constraint_terms() {
+    // Pinned original pySHACL 0.40.1: the default is constant, and custom
+    // messages replace it. False-like source terms remain in the RDF report;
+    // their separate human-description truthiness frontier is not changed here.
+    for (expression, printed) in [
+        ("false", None),
+        ("0", None),
+        ("\"\"", None),
+        ("1", Some("Literal(\"1\", datatype=xsd:integer)")),
+        ("\"not-true\"", Some("Literal(\"not-true\")")),
+        ("<urn:not-true>", Some("<urn:not-true>")),
+    ] {
+        for custom in [false, true] {
+            let suffix = if custom {
+                "; sh:message \"custom expression\"@en"
+            } else {
+                ""
+            };
+            let shapes = crate::IndexedShapesSource::parse_graph(
+                &format!("@prefix sh:<{SH}>. <urn:S> sh:targetNode <urn:f>; sh:expression {expression}{suffix}."),
+                RdfFormat::Turtle,
+                None,
+            ).unwrap();
+            let mut data = Dataset::new();
+            let report = CompiledShapes::compile(shapes, true)
+                .unwrap()
+                .validate(&mut data, Options::default())
+                .unwrap();
+            assert!(!report.conforms);
+            assert!(data.is_empty());
+            let message = if custom {
+                "\"custom expression\"@en"
+            } else {
+                "\"Expression evaluation generated constraint did not return true.\""
+            };
+            let edge = report
+                .graph
+                .iter()
+                .find(|q| q.predicate == iri(SH, "result").as_ref())
+                .unwrap();
+            let expected = parse(&format!(
+                "@prefix sh:<{SH}>. @prefix rdf:<{RDF}>. {} a sh:ValidationReport; sh:conforms false; sh:result {}. {} a sh:ValidationResult; sh:sourceConstraintComponent sh:ExpressionConstraintComponent; sh:sourceShape <urn:S>; sh:resultSeverity sh:Violation; sh:focusNode <urn:f>; sh:value <urn:f>; sh:sourceConstraint {expression}; sh:resultMessage {message}.",
+                edge.subject, edge.object, edge.object
+            ), RdfFormat::Turtle, None).unwrap();
+            assert_eq!(
+                report.graph.len(),
+                expected.len(),
+                "{expression}, custom={custom}"
+            );
+            assert!(
+                expected.iter().all(|q| report.graph.contains(q)),
+                "{expression}, custom={custom}: {:?}",
+                report.graph
+            );
+            if let Some(printed) = printed {
+                let message = if custom {
+                    "custom expression"
+                } else {
+                    "Expression evaluation generated constraint did not return true."
+                };
+                assert_eq!(
+                    report.text,
+                    format!(
+                        "Validation Report\nConforms: False\nResults (1):\nConstraint Violation in ExpressionConstraintComponent ({SH}ExpressionConstraintComponent):\n\tSeverity: sh:Violation\n\tSource Shape: <urn:S>\n\tFocus Node: <urn:f>\n\tValue Node: <urn:f>\n\tSource Constraint: {printed}\n\tMessage: {message}\n"
+                    )
+                );
+            }
+        }
+    }
+}
