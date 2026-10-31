@@ -174,3 +174,21 @@ assert 'rdflib_turbo.graph' not in sys.modules
         check=False,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_unrelated_module_attributes_keep_normal_deletion_semantics():
+    name = "_unrelated_policy_deletion_test"
+    marker = object()
+    assert name not in vars(rdflib) and name not in vars(rdflib_turbo)
+    setattr(rdflib_turbo, name, marker)
+    try:
+        assert getattr(rdflib_turbo, name) is marker
+        delattr(rdflib_turbo, name)
+        assert name not in vars(rdflib_turbo) and name not in vars(rdflib)
+        with pytest.raises(AttributeError, match=name):
+            getattr(rdflib_turbo, name)
+        with pytest.raises(AttributeError, match=name):
+            delattr(rdflib_turbo, name)
+    finally:
+        if name in vars(rdflib_turbo):
+            delattr(rdflib_turbo, name)
