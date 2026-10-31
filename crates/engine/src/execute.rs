@@ -181,6 +181,9 @@ mod data_list;
 mod evaluation;
 mod report;
 mod rules;
+#[cfg(test)]
+#[path = "sparql_report_tests.rs"]
+mod sparql_report_tests;
 mod targets;
 mod validation;
 
@@ -196,3 +199,7 @@ mod traversal_tests;
 #[cfg(test)]
 #[path = "execute_borrowed_tests.rs"]
 mod borrowed_tests;
+
+#[cfg(test)]
+#[path = "language_message_tests.rs"]
+mod language_message_tests;

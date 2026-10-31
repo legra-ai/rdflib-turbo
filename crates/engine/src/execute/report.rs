@@ -27,6 +27,12 @@ impl CompiledShapes {
         display: &crate::display::Display<'_, impl GraphRead + ?Sized, impl GraphRead + ?Sized>,
     ) -> Result<()> {
         let shape = &self.shapes[violation.shape];
+        let parameterized_sparql = violation.messages.is_some()
+            && violation.source_constraint.is_none()
+            && shape.constraints.iter().any(|constraint| {
+                matches!(constraint, Constraint::Sparql(query)
+                    if query.component.as_ref() == Some(&violation.component))
+            });
         let result: Term = BlankNode::default().into();
         add(report, parent, iri(SH, edge), result.clone())?;
         for (predicate, object) in [
@@ -198,6 +204,13 @@ impl CompiledShapes {
                             )
                         }
                     }
+                    "LanguageInConstraintComponent" => {
+                        let list = values(&self.graph, &shape.node, "languageIn")?
+                            .into_iter()
+                            .next()
+                            .expect("language violation requires its source language list");
+                        format!("String language is not in {}", display.term(&list, true)?)
+                    }
                     "UniqueLangConstraintComponent" => {
                         "More than one String shares the same Language".to_owned()
                     }
@@ -279,6 +292,9 @@ impl CompiledShapes {
                             nodes.join(", ")
                         )
                     }
+                    "ExpressionConstraintComponent" => {
+                        "Expression evaluation generated constraint did not return true.".to_owned()
+                    }
                     _ => format!("{component} violated at {focus}"),
                 }
             };
@@ -291,7 +307,9 @@ impl CompiledShapes {
             .as_str()
             .strip_prefix(SH)
             .unwrap_or(violation.component.as_str());
-        let title = if [
+        let title = if parameterized_sparql {
+            "ConstraintComponent"
+        } else if [
             "QualifiedMinCountConstraintComponent",
             "QualifiedMaxCountConstraintComponent",
         ]
