@@ -10,8 +10,47 @@
 
 ## Performance
 
+### Matched public Graph pipeline
+
+**Parse → OWL-RL → SHACL: about 11× in this measured synthetic run.**
+Both arms use public Graph APIs, expand into the same source Graph and validate
+in place. The Turbo trio keeps one RDF dataset in memory throughout; a separate
+[non-timed ownership regression](https://github.com/legra-ai/pyshacl-turbo/blob/main/tests/test_matched_graph_sampling.py)
+checks the actual shared route without adding spies to timed children.
+
+| 1,000-literal case | Python trio (ms) | Turbo trio (ms) | Time ratio | Python peak (MiB) | Turbo peak (MiB) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Literal reflexivity | 285.2 | 25.5 | 11.2× | 88.0 | 86.1 |
+| Literal typing | 362.7 | 31.5 | 11.5× | 100.5 | 98.8 |
+
+Measured **31 October 2026**, macOS 27.0.1 (arm64), CPython **3.13.16**, native uv **0.13.5**:
+original registry wheels of **rdflib-turbo 0.2.0a23 / owlrl-turbo 0.2.0a1 /
+pyshacl-turbo 0.7.1**, versus **RDFLib 7.6.0 / OWL-RL 7.6.2 / pySHACL 0.40.1**.
+These are medians of five fresh children per arm after a separate warmup.
+The total includes Graph construction/parsing, OWL-RL closure construction/expansion and public
+validation/report construction; imports, fixture text and SHAPES preparation are
+outside. Complete scoped/generalized facts, literal metadata, report/text,
+namespace/effect/flag gates passed for `rdflib.NORMALIZE_LITERALS=True`.
+The separate `NORMALIZE_LITERALS=False` check differs in a global-setting side
+effect and has no performance ratio.
+
+Peak RSS is absolute whole-process memory captured before correctness encoding;
+it includes imports, setup and retained results. This single-host result is not
+a universal speed or memory claim. See the portable
+[numeric provenance](https://github.com/legra-ai/pyshacl-turbo/blob/main/benchmarks/matched-graph-macos-2026-10-31.json)
+and [method/locked replay](https://github.com/legra-ai/pyshacl-turbo/blob/main/benchmarks/companions.md#matched-public-graph-pipelines).
+From a pyshacl-turbo checkout, use a fresh output directory:
+
+```sh
+uv run --no-project --python 3.13.16 python -I -B benchmarks/matched_graph_driver.py \
+    --cohort benchmarks/matched-graph-releases.json --roles baseline --widths 1000 \
+    --repeats 5 --output benchmark-artifacts/matched-graph-readme
+```
+
+### Historical measurements and provenance
+
 **N-Triples serialization: 4.4–4.9× faster than RDFLib on 100,000 synthetic triples.**
-The unreleased candidate at [`c196691`](https://github.com/legra-ai/rdflib-turbo/commit/c1966915fb9c50a902eab729bb7bfd694c513490)
+The candidate measured on **23 October 2026** at [`c196691`](https://github.com/legra-ai/rdflib-turbo/commit/c1966915fb9c50a902eab729bb7bfd694c513490)
 serializes directly from the selected native graph and returns UTF-8 bytes without
 a Python Unicode copy. It preserves RDFLib's URI rejection and caught-transaction
 behavior; the corrected implementation is measured below.
@@ -82,7 +121,7 @@ Companion turbo projects: [pyshacl-turbo](https://github.com/legra-ai/pyshacl-tu
 [owlrl-turbo](https://github.com/legra-ai/owlrl-turbo).
 
 ```sh
-uv add rdflib-turbo==0.2.0a1
+uv add rdflib-turbo==0.2.0a23
 ```
 
 ```python
