@@ -14,7 +14,7 @@
 
 **Parse → OWL-RL → SHACL: about 11× in this measured synthetic run.**
 Both arms use public Graph APIs, expand into the same source Graph and validate
-in place. The Turbo trio shares one DATA owner; a separate
+in place. The Turbo trio keeps one RDF dataset in memory throughout; a separate
 [non-timed ownership regression](https://github.com/legra-ai/pyshacl-turbo/blob/main/tests/test_matched_graph_sampling.py)
 checks the actual shared route without adding spies to timed children.
 
@@ -30,8 +30,9 @@ These are medians of five fresh children per arm after a separate warmup.
 The total includes Graph construction/parsing, OWL-RL closure construction/expansion and public
 validation/report construction; imports, fixture text and SHAPES preparation are
 outside. Complete scoped/generalized facts, literal metadata, report/text,
-namespace/effect/flag gates passed for the declared normal policy (`True`).
-The strict `False` scenario remains DIFFERENT with null ratios.
+namespace/effect/flag gates passed for `rdflib.NORMALIZE_LITERALS=True`.
+The separate `NORMALIZE_LITERALS=False` check differs in a global-setting side
+effect and has no performance ratio.
 
 Peak RSS is absolute whole-process memory captured before correctness encoding;
 it includes imports, setup and retained results. This single-host result is not
