@@ -198,6 +198,9 @@ impl CompiledShapes {
                             )
                         }
                     }
+                    "UniqueLangConstraintComponent" => {
+                        "More than one String shares the same Language".to_owned()
+                    }
                     "ClassConstraintComponent" => {
                         let mut classes = values(&self.graph, &shape.node, "class")?
                             .iter()
@@ -314,10 +317,7 @@ impl CompiledShapes {
         let mut messages = messages;
         messages.sort_by_key(ToString::to_string);
         for message in messages {
-            let printed = match &message {
-                Term::Literal(l) => l.value().to_owned(),
-                _ => message.to_string(),
-            };
+            let printed = display.message(&message);
             text.push_str(&format!("\tMessage: {printed}\n"));
             add(report, &result, iri(SH, "resultMessage"), message)?;
         }

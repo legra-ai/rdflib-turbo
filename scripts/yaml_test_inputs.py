@@ -173,9 +173,13 @@ def _download(url, destination):
         shutil.copyfileobj(response, output)
 
 
-def _run(command, directory, environment):
+def _run(command, directory, environment, *, machine_identity=False):
     return subprocess.check_output(
-        command, cwd=directory, env=environment, text=True, stderr=subprocess.STDOUT
+        command,
+        cwd=directory,
+        env=environment,
+        text=True,
+        stderr=None if machine_identity else subprocess.STDOUT,
     )
 
 
@@ -250,11 +254,11 @@ def prepare(owner, output, python):
     for key, value in overrides.items():
         environment[key] = value if key == "PYYAML_FORCE_LIBYAML" else str(output / value)
     (output / "build-scratch").mkdir()
-    uv = _run(["uv", "--version"], output, environment).strip()
+    uv = _run(["uv", "--version"], output, environment, machine_identity=True).strip()
     if not uv.startswith("uv 0.13.5 "):
         raise ValueError("YAML inputs require pinned uv 0.13.5")
     python_command = _python_command(python)
-    actual_python = _run(python_command, output, environment).strip()
+    actual_python = _run(python_command, output, environment, machine_identity=True).strip()
     if actual_python != PYTHON:
         raise ValueError("Actual YAML build interpreter differs from Python 3.13.16")
     command = _command(archive_name, python)

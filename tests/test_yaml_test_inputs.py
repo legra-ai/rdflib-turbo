@@ -80,12 +80,15 @@ def prepared(helper, tmp_path, monkeypatch):
         assert url == "https://files.pythonhosted.org/packages/pyyaml-6.0.3.tar.gz"
         destination.write_bytes(archive)
 
-    def run(command, directory, environment):
+    def run(command, directory, environment, *, machine_identity=False):
         commands.append(command)
         if command == ["uv", "--version"]:
+            assert machine_identity
             return "uv 0.13.5 (fixture)\n"
         if "-c" in command:
+            assert machine_identity
             return "3.13.16\n"
+        assert not machine_identity
         assert command[:3] == ["uv", "build", "--wheel"]
         assert "--no-sources" in command
         assert command[-1].startswith("originals/")

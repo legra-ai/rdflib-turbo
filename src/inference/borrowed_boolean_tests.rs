@@ -164,14 +164,15 @@ fn borrowed_overlay_boolean_does_not_materialize_overlay_lexical_terms() {
     let source = source(Dataset::new());
     let mut data = BorrowedInference::new(&source, GraphName::DefaultGraph);
     data.insert(quad.clone().into()).unwrap();
-    let (present, allocated) =
-        crate::allocation_tests::measure_allocated(|| data.contains((&quad).into()).unwrap());
+    let (present, allocated) = crate::allocation_tests::current_thread::measure_allocated(|| {
+        data.contains((&quad).into()).unwrap()
+    });
     assert!(present);
     assert_eq!(
         allocated, 0,
         "overlay boolean cloned lexical payload or constructed union adapters"
     );
-    let (present, allocated) = crate::allocation_tests::measure_allocated(|| {
+    let (present, allocated) = crate::allocation_tests::current_thread::measure_allocated(|| {
         data.contains_destination((&quad).into()).unwrap()
     });
     assert!(present);

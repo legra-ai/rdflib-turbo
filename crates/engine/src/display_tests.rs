@@ -1,6 +1,32 @@
 use super::*;
 
 #[test]
+fn floating_message_corpus_matches_original_python_values() {
+    let graph = Dataset::new();
+    let display = Display {
+        shape_namespaces: Vec::new(),
+        data_namespaces: Vec::new(),
+        data: &graph,
+        shapes: &graph,
+    };
+    for row in include_str!("../tests/fixtures/python_float_messages.tsv").lines() {
+        if row.starts_with('#') {
+            continue;
+        }
+        let mut fields = row.split('\t');
+        let bits = u64::from_str_radix(fields.next().unwrap(), 16).unwrap();
+        let lexical = fields.next().unwrap();
+        let expected = fields.next().unwrap();
+        assert!(fields.next().is_none());
+        assert_eq!(lexical.parse::<f64>().unwrap().to_bits(), bits);
+        for datatype in ["float", "double"] {
+            let term = Literal::new_typed_literal(lexical, iri(XSD, datatype)).into();
+            assert_eq!(display.message(&term), expected, "{bits:016x} {datatype}");
+        }
+    }
+}
+
+#[test]
 fn programmatic_names_use_the_original_n3_character_rendering_policy() {
     let graph = Dataset::new();
     let display = Display {
