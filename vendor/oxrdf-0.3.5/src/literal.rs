@@ -917,20 +917,29 @@ macro_rules! quoted_character_escape {
 #[inline]
 pub fn print_quoted_str(string: &str, f: &mut impl Write) -> fmt::Result {
     f.write_char('"')?;
-    for c in string.chars() {
+    let mut plain_start = 0;
+    for (offset, c) in string.char_indices() {
         quoted_character_escape!(
             c,
-            character => f.write_char(character),
-            escape => f.write_str(escape),
+            _character => Ok(()),
+            escape => {
+                f.write_str(&string[plain_start..offset])?;
+                f.write_str(escape)?;
+                plain_start = offset + c.len_utf8();
+                Ok(())
+            },
             codepoint => {
+                f.write_str(&string[plain_start..offset])?;
                 f.write_str("\\u")?;
                 for digit in unicode_escape_digits(codepoint) {
                     f.write_char(digit)?;
                 }
+                plain_start = offset + c.len_utf8();
                 Ok(())
             }
         )?;
     }
+    f.write_str(&string[plain_start..])?;
     f.write_char('"')
 }
 
@@ -1107,6 +1116,31 @@ impl<'de> Deserialize<'de> for Literal {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn quoted_plain_spans_use_bounded_writer_calls() {
+        #[derive(Default)]
+        struct Writer {
+            text: String,
+            calls: usize,
+        }
+        impl Write for Writer {
+            fn write_str(&mut self, value: &str) -> fmt::Result {
+                self.calls += 1;
+                self.text.push_str(value);
+                Ok(())
+            }
+        }
+        let plain = "é😀plain".repeat(4096);
+        let mut writer = Writer::default();
+        print_quoted_str(&plain, &mut writer).unwrap();
+        assert_eq!(writer.text, format!("\"{plain}\""));
+        assert!(writer.calls <= 3, "plain writer calls: {}", writer.calls);
+        let mut writer = Writer::default();
+        print_quoted_str(&format!("{plain}\n{plain}"), &mut writer).unwrap();
+        assert_eq!(writer.text, format!("\"{plain}\\n{plain}\""));
+        assert!(writer.calls <= 5, "escaped writer calls: {}", writer.calls);
+    }
 
     #[test]
     fn display_comparison_skips_long_shared_lexical_prefixes() {

@@ -7,6 +7,7 @@ from scripts.vendor_memory_tests import patch_arguments
 
 # bounded: critical storage, ownership and ordering regression test names.
 REQUIRED_TESTS = (
+    "literal::tests::quoted_plain_spans_use_bounded_writer_calls",
     "literal::tests::display_comparison_preserves_escaping_prefixes_and_literal_kinds",
     "literal::tests::display_comparison_skips_long_shared_lexical_prefixes",
     "dataset::pattern::work_tests::pair_prefixes_visit_only_matching_physical_rows",

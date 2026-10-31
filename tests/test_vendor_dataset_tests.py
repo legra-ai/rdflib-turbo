@@ -94,6 +94,7 @@ def test_streaming_removal_is_a_mandatory_dataset_regression(runner, name):
     (
         "literal::tests::display_comparison_preserves_escaping_prefixes_and_literal_kinds",
         "literal::tests::display_comparison_skips_long_shared_lexical_prefixes",
+        "literal::tests::quoted_plain_spans_use_bounded_writer_calls",
     ),
 )
 def test_missing_literal_regression_stops_before_any_execution(
