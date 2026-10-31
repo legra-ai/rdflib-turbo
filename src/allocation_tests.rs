@@ -10,6 +10,8 @@ use super::*;
 
 #[path = "allocation_canonical_profile_tests.rs"]
 mod canonical;
+#[path = "allocation_thread_tests.rs"]
+pub(crate) mod current_thread;
 #[path = "allocation_report_overlap_tests.rs"]
 mod report_overlap;
 #[path = "allocation_trace_tests.rs"]
@@ -26,6 +28,7 @@ static TOTAL: AtomicUsize = AtomicUsize::new(0);
 static CALLS: AtomicUsize = AtomicUsize::new(0);
 
 fn allocated(size: usize) {
+    current_thread::allocated(size);
     if size == REPORT_CACHE_PAYLOAD_SIZE {
         REPORT_CACHE_PAYLOAD_LIVE.fetch_add(1, Relaxed);
     }

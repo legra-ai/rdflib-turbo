@@ -117,15 +117,16 @@ fn scoped_boolean_probes_do_not_clone_bound_lexical_terms() {
         destination,
     };
     assert!(data.contains((&input).into()).unwrap()); // warm first-touch synchronization outside measurement.
-    let (present, allocated) =
-        crate::allocation_tests::measure_allocated(|| data.contains((&input).into()).unwrap());
+    let (present, allocated) = crate::allocation_tests::current_thread::measure_allocated(|| {
+        data.contains((&input).into()).unwrap()
+    });
     assert!(present);
     assert_eq!(
         allocated, 0,
         "source-or-destination boolean cloned lexical payload"
     );
     assert!(data.contains_destination((&input).into()).unwrap()); // warm destination first touch.
-    let (present, allocated) = crate::allocation_tests::measure_allocated(|| {
+    let (present, allocated) = crate::allocation_tests::current_thread::measure_allocated(|| {
         data.contains_destination((&input).into()).unwrap()
     });
     assert!(present);
