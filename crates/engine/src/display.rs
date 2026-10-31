@@ -169,12 +169,39 @@ impl<G: GraphRead + ?Sized, S: GraphRead + ?Sized> Display<'_, G, S> {
         })
     }
 
+    fn floating_message(literal: &Literal) -> Option<String> {
+        if !matches!(
+            literal.datatype().as_str().strip_prefix(XSD),
+            Some("float" | "double")
+        ) {
+            return None;
+        }
+        // RDFLib converts both XSD types to Python's binary64 float. Rust's
+        // shortest Debug form needs Python's signed, two-digit exponent syntax.
+        let value = literal.value().parse::<f64>().ok()?;
+        if value.is_nan() {
+            return Some("nan".into());
+        }
+        let rendered = format!("{value:?}");
+        Some(
+            if let Some((mantissa, exponent)) = rendered.split_once('e') {
+                let exponent = exponent
+                    .parse::<i32>()
+                    .expect("a formatted float exponent is an integer");
+                format!("{mantissa}e{exponent:+03}")
+            } else {
+                rendered
+            },
+        )
+    }
+
     pub fn message(&self, term: &Term) -> String {
         match term {
             Term::Literal(literal) => Self::boolean_value(literal)
                 .map(str::to_owned)
                 .or_else(|| Self::integer_value(literal))
                 .or_else(|| Self::decimal_message(literal))
+                .or_else(|| Self::floating_message(literal))
                 .unwrap_or_else(|| literal.value().to_owned()),
             _ => term.to_string(),
         }

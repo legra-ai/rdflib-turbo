@@ -15,6 +15,9 @@ use crate::{Error, GraphRead, Result, UnionGraph};
 #[path = "execute_tests.rs"]
 mod coverage_tests;
 
+#[cfg(test)]
+mod report_message_tests;
+
 #[derive(Clone, Debug)]
 pub struct Options {
     pub iterate_rules: bool,
