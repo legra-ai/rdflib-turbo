@@ -1,7 +1,7 @@
 {
   "crates/engine/src/lib.rs": {
-    "sha256": "3c16a1bd99591ca6b2b82453cdc5da902df91016270198a042332e6a7deedd0a",
-    "reason": "Module declarations, re-exports, aliases and derived errors: actual Rust1.99.1/LLVM23 DEBUG instrumented engine test binary has no file or function mapping for these exact lib.rs bytes, verified by unfiltered executed and empty-profile exports (796 files,41991 functions). The new value/comparison.rs implementation has an executable mapping and remains measured."
+    "sha256": "c3b0efed923542bb6bc5bccd336c30771f3cdaa56c28a2d928aecb57ed442294",
+    "reason": "Module declarations, re-exports, aliases and derived errors: fresh exact Rust 1.99.1/LLVM 23 DEBUG default engine, binding and native test executables have no file or function mapping for these lib.rs bytes in either unfiltered executed or empty-profile exports (281 files, 7630 functions). All 166 owned sources were audited; executable sources remain measured. No cfg coverage or historical executable was used."
   },
   "crates/engine/src/model.rs": {
     "sha256": "b4e7ef47bbf266bec27ee6c73f3c0270b29b0076c40a50272af2a137b573097a",
