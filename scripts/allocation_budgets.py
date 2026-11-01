@@ -9,6 +9,7 @@ from .native_coverage import locked_python_environment, run
 
 # bounded: this fixed regression inventory requires one isolated process per budget.
 TESTS = (
+    "inference::shared::noop_tests::reflexive_subproperty_allocation_budget",
     "allocation_tests::focus_order::focus_identifier_ordering_has_linear_payload_allocation",
     "allocation_tests::focus_order::targeting_index_shape_order_has_linear_payload_allocation",
     "allocation_tests::focus_order::focus_literal_ordering_has_linear_payload_allocation",
