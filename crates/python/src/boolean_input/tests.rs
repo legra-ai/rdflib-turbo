@@ -31,6 +31,44 @@ fn caller(py: Python<'_>, input: &BooleanInput) -> Arc<Caller> {
     )
     .unwrap()
 }
+
+#[test]
+fn compiled_literal_operands_preserve_their_native_lexical_domain() {
+    Python::initialize();
+    Python::attach(|py| {
+        let (input, _) = input(
+            py,
+            c"from rdflib import Graph,URIRef,BNode,Literal\ngraph=Graph()",
+        );
+        let factories = source::Factories::bind(py, &input.classes);
+        for literal in [
+            Literal::new_simple_literal("String"),
+            Literal::new_language_tagged_literal("word", "en").unwrap(),
+            Literal::new_typed_literal(
+                "01",
+                NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#integer"),
+            ),
+        ] {
+            let object = factories.python_term(literal.as_ref().into()).unwrap();
+            assert_eq!(object.str().unwrap().to_str().unwrap(), literal.value());
+            assert_eq!(
+                object
+                    .getattr("language")
+                    .unwrap()
+                    .extract::<Option<String>>()
+                    .unwrap()
+                    .as_deref(),
+                literal.language()
+            );
+            if literal.value() == "01" {
+                assert_eq!(
+                    object.getattr("value").unwrap().extract::<i64>().unwrap(),
+                    1
+                );
+            }
+        }
+    });
+}
 #[test]
 fn selected_membership_is_not_required_to_equal_raw_membership() {
     Python::initialize();

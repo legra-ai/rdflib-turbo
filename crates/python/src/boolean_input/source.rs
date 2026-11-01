@@ -36,9 +36,18 @@ impl<'py> Factories<'py> {
         match term {
             TermRef::NamedNode(n) => self.uri.call1((n.as_str(),)),
             TermRef::BlankNode(n) => self.blank.call1((n.as_str(),)),
-            _ => Err(PyValueError::new_err(
-                "Ordinary subject/predicate kind changed",
-            )),
+            TermRef::Literal(literal) => {
+                // This is a compiled operand, not an attestation of an original
+                // SHAPES receiver. Keep its lexical word without renormalizing.
+                let kwargs = PyDict::new(self.literal.py());
+                kwargs.set_item("normalize", false)?;
+                if let Some(language) = literal.language() {
+                    kwargs.set_item("lang", language)?;
+                } else if literal.has_explicit_datatype() {
+                    kwargs.set_item("datatype", self.uri.call1((literal.datatype().as_str(),))?)?;
+                }
+                self.literal.call((literal.value(),), Some(&kwargs))
+            }
         }
     }
     pub fn stage(
