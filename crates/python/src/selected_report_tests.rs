@@ -145,6 +145,42 @@ fn constructor_rejects_duplicate_unissued_mixed_and_missing_issuers() {
 }
 
 #[test]
+fn python_binding_preserves_receiver_and_enforces_sealed_single_use_delivery() {
+    Python::initialize();
+    Python::attach(|py| {
+        assert!(
+            py.get_type::<SelectedReport>()
+                .call0()
+                .unwrap_err()
+                .is_instance_of::<pyo3::exceptions::PyTypeError>(py)
+        );
+        let receiver = literal(py);
+        let selected = SelectedLiteral(Arc::new(Owner {
+            literal: receiver.clone_ref(py),
+            issuer: issuer(py),
+            word: false,
+            receipt: 1,
+        }));
+        let report = Py::new(
+            py,
+            SelectedReport::new(batch(), vec![(1, BooleanObservation::Reported(selected))])
+                .unwrap(),
+        )
+        .unwrap();
+        let delivered = report.bind(py).call_method0("take_parts").unwrap();
+        let live = delivered.get_item(2).unwrap().get_item(0).unwrap();
+        assert!(live.get_item(1).unwrap().is(receiver.bind(py)));
+        assert!(
+            report
+                .bind(py)
+                .call_method0("take_parts")
+                .unwrap_err()
+                .is_instance_of::<PyValueError>(py)
+        );
+    });
+}
+
+#[test]
 fn constructor_checks_quad_term_role_word_and_result_context() {
     Python::initialize();
     Python::attach(|py| {
