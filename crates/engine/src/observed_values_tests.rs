@@ -4,6 +4,22 @@ use std::any::Any;
 
 #[derive(Debug)]
 struct Frame(usize, bool);
+
+#[test]
+fn count_operand_has_no_rdf_word_view() {
+    for count in [0, 1, usize::MAX] {
+        let values = ObservedValues::cardinality(count);
+        assert_eq!(values.len(), count);
+        assert_eq!(values.is_empty(), count == 0);
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| values.slots())).is_err());
+    }
+    println!(
+        "COUNT_LAYOUT collection={} observed_test={} slot={}",
+        std::mem::size_of::<ValueCollection>(),
+        std::mem::size_of::<ObservedValues>(),
+        std::mem::size_of::<ValueSlot<'_>>()
+    );
+}
 impl SelectedValueFrame for Frame {
     fn as_any(&self) -> &dyn Any {
         self
@@ -31,6 +47,14 @@ impl SelectedValueFrame for Frame {
         _: Option<crate::SelectedSubjectRef<'_>>,
     ) -> crate::Result<Vec<crate::SelectedTerm>> {
         panic!("This predicate-only test issuer does not acquire sequences")
+    }
+    fn cardinality(
+        &self,
+        _: &Term,
+        _: crate::SelectedPathRef<'_>,
+        _: Option<crate::SelectedSubjectRef<'_>>,
+    ) -> crate::Result<usize> {
+        panic!("This word-observation fixture does not admit cardinality requests")
     }
     fn datatype(&self, slot: usize, _: &NamedNode) -> Result<bool> {
         Ok(slot % 2 == 1)

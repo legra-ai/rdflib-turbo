@@ -5,6 +5,7 @@ use pyo3::types::{PyDict, PyType};
 use pyshacl_turbo_engine::oxigraph::model::*;
 use std::sync::Arc;
 mod assessment;
+mod borrowed;
 pub(super) mod caller;
 mod focus;
 mod focus_acquire;
@@ -27,8 +28,9 @@ pub(super) enum Acquisition {
 /// Call-local ordinary source with one moved, immutable parsed Dataset.
 #[pyclass(frozen)]
 pub(crate) struct BooleanInput {
-    pub data: Arc<FrozenDataset>,
+    pub data: Option<Arc<FrozenDataset>>,
     graph: Py<PyAny>,
+    view: Option<Py<PyAny>>,
     classes: [Py<PyType>; 3],
     acquisition: Acquisition,
     pub(super) canonical_booleans: bool,
@@ -37,13 +39,16 @@ pub(crate) struct BooleanInput {
 impl BooleanInput {
     fn __traverse__(&self, visit: PyVisit<'_>) -> std::result::Result<(), PyTraverseError> {
         visit.call(&self.graph)?;
+        if let Some(view) = &self.view {
+            visit.call(view)?;
+        }
         for class in &self.classes {
             visit.call(class)?;
         }
         Ok(())
     }
     #[new]
-    #[pyo3(signature=(graph,nodes,flatten=false,*,_terms,_dataset))]
+    #[pyo3(signature=(graph,nodes,flatten=false,*,_terms,_dataset,_view=None))]
     fn new(
         py: Python<'_>,
         graph: Py<PyAny>,
@@ -51,6 +56,7 @@ impl BooleanInput {
         flatten: bool,
         _terms: [Py<PyType>; 3],
         _dataset: Option<Py<PyType>>,
+        _view: Option<Py<PyAny>>,
     ) -> PyResult<Self> {
         let source = graph.bind(py);
         let context_aware = source.getattr("context_aware")?.is_truthy()?;
@@ -66,6 +72,29 @@ impl BooleanInput {
         } else {
             Acquisition::GraphObjects
         };
+        if let Some(view) = _view {
+            if !matches!(acquisition, Acquisition::GraphObjects) || flatten {
+                return Err(pyo3::exceptions::PyValueError::new_err(
+                    "Borrowed DATA requires an ordinary non-context Graph",
+                ));
+            }
+            source::Factories::new(py, &_terms)?;
+            if !view.bind(py).getattr("impl")?.is(source)
+                || view.bind(py).call_method0("is_multigraph")?.is_truthy()?
+            {
+                return Err(pyo3::exceptions::PyValueError::new_err(
+                    "Borrowed source view must select the same ordinary Graph",
+                ));
+            }
+            return Ok(Self {
+                data: None,
+                graph,
+                view: Some(view),
+                classes: _terms,
+                acquisition,
+                canonical_booleans: false,
+            });
+        }
         let default = if context_aware {
             Some(source.getattr("default_graph")?.getattr("identifier")?)
         } else {
@@ -106,8 +135,9 @@ impl BooleanInput {
         }
         let data = data.freeze();
         Ok(Self {
-            data: Arc::new(data),
+            data: Some(Arc::new(data)),
             graph,
+            view: None,
             classes: _terms,
             acquisition,
             canonical_booleans,

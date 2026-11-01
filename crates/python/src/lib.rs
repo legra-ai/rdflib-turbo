@@ -452,6 +452,11 @@ impl PyCompiledShapes {
         .map_err(error)
     }
 
+    #[getter]
+    fn selected_frames_only(&self) -> bool {
+        self.inner.uses_selected_frames_only()
+    }
+
     #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (source, rdf_format, base, iterate_rules, max_rule_iterations, max_validation_depth, include_data, allow_infos, allow_warnings, abort_on_first, focus_nodes, use_shapes, namespaces, *, _comparison_policy))]
     fn validate(
@@ -475,10 +480,17 @@ impl PyCompiledShapes {
         let direct = rdf_format == "terms";
         let input = terms::Input::read(source, rdf_format, base)?;
         if let terms::Input::Boolean(data, source) = input {
+            if data.is_none() && !self.inner.uses_selected_frames_only() {
+                return Err(pyo3::exceptions::PyValueError::new_err(
+                    "Program requires indexed DATA validation",
+                ));
+            }
             let comparison = boolean_validation::Comparison::capture(
                 py,
                 _comparison_policy,
-                source.bind(py).get().canonical_booleans || self.inner.requires_selected_focus(),
+                data.is_none()
+                    || source.bind(py).get().canonical_booleans
+                    || self.inner.requires_selected_focus(),
             )?;
             let authority = comparison.authority();
             let options = (|| -> pyshacl_turbo_engine::Result<Options> {

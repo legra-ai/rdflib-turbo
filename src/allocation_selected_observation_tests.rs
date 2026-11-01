@@ -78,6 +78,14 @@ impl SelectedValueFrame for Frame {
     ) -> pyshacl_turbo_engine::Result<Vec<SelectedTerm>> {
         panic!("This predicate allocation issuer does not acquire sequences")
     }
+    fn cardinality(
+        &self,
+        _: &Term,
+        _: pyshacl_turbo_engine::SelectedPathRef<'_>,
+        _: Option<pyshacl_turbo_engine::SelectedSubjectRef<'_>>,
+    ) -> pyshacl_turbo_engine::Result<usize> {
+        panic!("This word-observation fixture does not admit cardinality requests")
+    }
     fn datatype(&self, _: usize, _: &NamedNode) -> pyshacl_turbo_engine::Result<bool> {
         panic!("NodeKind must not read datatype assessment")
     }

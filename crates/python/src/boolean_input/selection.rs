@@ -5,7 +5,7 @@ use pyshacl_turbo_engine::{GraphRead, Result, SelectedValueSource};
 use std::sync::Arc;
 
 pub(crate) struct Captured<'a> {
-    pub data: &'a Dataset,
+    pub data: Option<&'a Dataset>,
     pub caller: Option<Arc<Caller>>,
 }
 pub(super) fn word(term: TermRef<'_>) -> Option<bool> {
@@ -45,12 +45,13 @@ impl<'source> GraphRead for Captured<'source> {
         o: Option<TermRef<'_>>,
         g: Option<GraphNameRef<'_>>,
     ) -> impl Iterator<Item = Result<GeneralizedQuad>> + use<'a, 'source> {
-        self.data.matching_quads(s, p, o, g)
+        super::borrowed::rows(self.data, self.caller.as_ref(), s, p, o, g)
     }
     fn named_graphs(&self) -> impl Iterator<Item = Result<NamedOrBlankNode>> + '_ {
-        self.data.named_graphs()
+        self.data.into_iter().flat_map(|data| data.named_graphs())
     }
     fn contains_named_graph(&self, g: &NamedOrBlankNode) -> Result<bool> {
-        self.data.contains_named_graph(g)
+        self.data
+            .map_or(Ok(false), |data| data.contains_named_graph(g))
     }
 }

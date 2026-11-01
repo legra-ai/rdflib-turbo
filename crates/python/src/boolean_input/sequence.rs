@@ -1,6 +1,6 @@
 //! Attached, depth-first predicate sequences over actual Python owner sets.
 use super::{Acquisition, frame::Frame, source};
-use pyo3::{PyTypeInfo, prelude::*, types::PySet};
+use pyo3::{prelude::*, types::PySet};
 use pyshacl_turbo_engine::oxigraph::model::*;
 use pyshacl_turbo_engine::{Error, Result, SelectedPathRef, SelectedTerm};
 
@@ -40,6 +40,43 @@ pub(super) fn acquire(
     values.ok_or_else(|| Error::Runtime("Path traversal depth is too much!".into()))
 }
 
+pub(super) fn cardinality(
+    frame: &Frame,
+    focus: &Term,
+    path: SelectedPathRef<'_>,
+    subject: Option<pyshacl_turbo_engine::SelectedSubjectRef<'_>>,
+) -> Result<usize> {
+    let caller = frame.caller()?;
+    let inherited = super::subject::Issued::resolve(&caller, subject)?;
+    let count = caller.event(|py| {
+        {
+            let frames = caller.frames.lock().expect("source frames lock poisoned");
+            frame.index(&frames)?;
+        }
+        let factories = source::Factories::bind(py, &caller.classes);
+        let focus = if let Some(subject) = inherited {
+            subject.object(py, &caller)?.into_bound(py)
+        } else {
+            factories.python_term(focus.as_ref())?
+        };
+        let graph = match &caller.view {
+            Some(view) => view,
+            None => &caller.graph,
+        };
+        walk(
+            graph.bind(py),
+            &focus,
+            path.predicates(),
+            &factories,
+            caller.acquisition,
+            0,
+        )?
+        .map(|set| frame.retain_count(&caller, set))
+        .transpose()
+    })?;
+    count.ok_or_else(|| Error::Runtime("Path traversal depth is too much!".into()))
+}
+
 fn walk<'py, 'a>(
     graph: &Bound<'py, PyAny>,
     subject: &Bound<'py, PyAny>,
@@ -61,10 +98,11 @@ fn walk<'py, 'a>(
             let rows = graph.call_method1("objects", (subject, p))?;
             // Original RdfLibDataGraph.objects delegates with yield-from, so an
             // overridden objects returning an existing set is iterated first.
-            let iterator = rows.try_iter()?;
-            PySet::type_object(graph.py())
-                .call1((iterator,))?
-                .cast_into::<PySet>()?
+            let selected = PySet::empty(graph.py())?;
+            for value in rows.try_iter()? {
+                selected.add(value?)?;
+            }
+            selected
         }
         Acquisition::LegacyUnion => {
             // Keep the separately selected legacy store-union route explicit.

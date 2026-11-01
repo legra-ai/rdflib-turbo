@@ -46,10 +46,18 @@ impl Frame {
         let frames = caller.frames.lock().expect("source frames lock poisoned");
         let i = self.index(&frames)?;
         let owner = frames.active[i]
-            .owners
+            .payload
+            .words()
             .get(slot)
             .ok_or_else(|| PyValueError::new_err("Selected value slot was not issued"))?;
         Ok(owner.literal.clone_ref(py))
+    }
+    pub(super) fn retain_count(&self, caller: &Caller, set: Bound<'_, PySet>) -> PyResult<usize> {
+        let count = set.len();
+        let mut frames = caller.frames.lock().expect("source frames lock poisoned");
+        let i = self.index(&frames)?;
+        frames.active[i].payload.counts_mut().push(set.unbind());
+        Ok(count)
     }
     pub(super) fn stage_selected(
         &self,
@@ -71,14 +79,14 @@ impl Frame {
         }
         let mut frames = caller.frames.lock().expect("source frames lock poisoned");
         let i = self.index(&frames)?;
-        let start = frames.active[i].owners.len();
+        let start = frames.active[i].payload.words().len();
         for (literal, word) in owners {
             let receipt = frames
                 .next_receipt
                 .checked_add(1)
                 .ok_or_else(|| PyValueError::new_err("Selected receipt identity exhausted"))?;
             frames.next_receipt = receipt;
-            frames.active[i].owners.push(live::Acquired {
+            frames.active[i].payload.words_mut().push(live::Acquired {
                 literal,
                 word,
                 receipt,
@@ -153,6 +161,14 @@ impl SelectedValueFrame for Frame {
     ) -> Result<Vec<SelectedTerm>> {
         super::sequence::acquire(self, focus, path, subject)
     }
+    fn cardinality(
+        &self,
+        focus: &Term,
+        path: pyshacl_turbo_engine::SelectedPathRef<'_>,
+        subject: Option<pyshacl_turbo_engine::SelectedSubjectRef<'_>>,
+    ) -> Result<usize> {
+        super::sequence::cardinality(self, focus, path, subject)
+    }
     fn datatype(&self, slot: usize, expected: &NamedNode) -> Result<bool> {
         let caller = self.caller()?;
         caller.event(|py| {
@@ -172,7 +188,8 @@ impl SelectedValueFrame for Frame {
                 .index(&frames)
                 .map_err(|e| Error::Invalid(e.to_string()))?;
             let owner = frames.active[i]
-                .owners
+                .payload
+                .words()
                 .get(slot)
                 .ok_or_else(|| Error::Invalid("Selected value slot was not issued".into()))?;
             Ok(SelectedLiteral(Arc::new(live::Owner {

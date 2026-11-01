@@ -2,7 +2,7 @@
 use super::{Acquisition, BooleanInput, frame, live};
 use crate::{SourceComparisonInvocation, SourceComparisonPublisher};
 use pyo3::prelude::*;
-use pyo3::types::PyType;
+use pyo3::types::{PySet, PyType};
 use pyshacl_turbo_engine::oxigraph::model::Literal;
 use pyshacl_turbo_engine::{
     ComparisonFailure, ComparisonOperator, ComparisonRole, CoreComparisonPolicy, Error, Result,
@@ -33,10 +33,42 @@ impl ValueComparisonPolicy for CurrentPolicy {
             .compare_numeric(role, op, left, right)
     }
 }
+pub(super) enum FramePayload {
+    Empty,
+    Words(Vec<live::Acquired>),
+    Counts(Vec<Py<PySet>>),
+}
+impl FramePayload {
+    pub fn words(&self) -> &[live::Acquired] {
+        match self {
+            Self::Empty => &[],
+            Self::Words(values) => values,
+            Self::Counts(_) => panic!("Count-only frame reached a value-slot consumer"),
+        }
+    }
+    pub fn words_mut(&mut self) -> &mut Vec<live::Acquired> {
+        if matches!(self, Self::Empty) {
+            *self = Self::Words(Vec::new());
+        }
+        let Self::Words(values) = self else {
+            panic!("Count-only frame cannot issue value slots")
+        };
+        values
+    }
+    pub fn counts_mut(&mut self) -> &mut Vec<Py<PySet>> {
+        if matches!(self, Self::Empty) {
+            *self = Self::Counts(Vec::new());
+        }
+        let Self::Counts(values) = self else {
+            panic!("Word frame cannot acquire count-only operands")
+        };
+        values
+    }
+}
 pub(super) struct ActiveFrame {
     pub id: usize,
     pub issuer: Arc<()>,
-    pub owners: Vec<live::Acquired>,
+    pub payload: FramePayload,
 }
 pub(super) struct Frames {
     pub next_frame: usize,
@@ -45,6 +77,7 @@ pub(super) struct Frames {
 }
 pub(crate) struct Caller {
     pub graph: Py<PyAny>,
+    pub view: Option<Py<PyAny>>,
     pub classes: [Py<PyType>; 3],
     pub acquisition: Acquisition,
     pub values_admitted: bool,
@@ -74,9 +107,10 @@ impl Caller {
         let policy = Arc::new(CurrentPolicy(RwLock::new(policy)));
         Ok(Arc::new_cyclic(|own| Self {
             graph: input.graph.clone_ref(py),
+            view: input.view.as_ref().map(|view| view.clone_ref(py)),
             classes: input.classes.each_ref().map(|c| c.clone_ref(py)),
             acquisition: input.acquisition,
-            values_admitted: input.canonical_booleans,
+            values_admitted: input.data.is_none() || input.canonical_booleans,
             issuer,
             frames: Mutex::new(Frames {
                 next_frame: 0,
@@ -166,7 +200,20 @@ impl Caller {
                     .position(|f| f.id == id && Arc::ptr_eq(&f.issuer, issuer))
                     .map(|i| frames.active.remove(i))
             };
-            // Release acquired Python objects attached and outside the frame mutex.
+            // Count sets keep actual members alive through the component batch.
+            // Their finalizers are source events: preserve status before teardown
+            // and refresh it afterward, outside the frame mutex. Saved errors win.
+            let mut removed = removed;
+            if removed
+                .as_ref()
+                .is_some_and(|frame| matches!(frame.payload, FramePayload::Counts(_)))
+            {
+                let _ = self.event(|_| {
+                    drop(removed.take());
+                    Ok(())
+                });
+            }
+            // Also attached when a saved error prevents a further source event.
             drop(removed);
         });
     }
@@ -192,7 +239,7 @@ impl SelectedValueSource for Caller {
         frames.active.push(ActiveFrame {
             id,
             issuer: issuer.clone(),
-            owners: Vec::new(),
+            payload: FramePayload::Empty,
         });
         Ok(Arc::new(frame::Frame {
             caller: self.own.clone(),

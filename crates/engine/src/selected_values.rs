@@ -24,6 +24,15 @@ impl<'a> SelectedPathRef<'a> {
                 .all(|p| matches!(p, crate::path::Path::Predicate(_))))
         .then_some(Self { steps })
     }
+    pub(crate) fn count_path(path: &'a crate::path::Path) -> Option<Self> {
+        if matches!(path, crate::path::Path::Predicate(_)) {
+            Some(Self {
+                steps: std::slice::from_ref(path),
+            })
+        } else {
+            Self::predicate_sequence(path)
+        }
+    }
     /// Borrow the validated predicates in their original sequence order.
     pub fn predicates(self) -> impl ExactSizeIterator<Item = &'a NamedNode> + Clone {
         self.steps.iter().map(|step| {
@@ -61,6 +70,13 @@ pub trait SelectedValueFrame: Debug + Send + Sync {
         path: SelectedPathRef<'_>,
         subject: Option<crate::SelectedSubjectRef<'_>>,
     ) -> Result<Vec<SelectedTerm>>;
+    /// Acquire and retain the actual source set without inspecting its members.
+    fn cardinality(
+        &self,
+        focus: &Term,
+        path: SelectedPathRef<'_>,
+        subject: Option<crate::SelectedSubjectRef<'_>>,
+    ) -> Result<usize>;
     /// Read the actual selected object's datatype properties at its consumer.
     fn datatype(&self, slot: usize, expected: &NamedNode) -> Result<bool>;
     /// Retain only this actual reported object, independently of this frame.

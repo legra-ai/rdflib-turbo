@@ -37,7 +37,7 @@ impl PyCompiledShapes {
     pub(super) fn validate_boolean(
         &self,
         py: Python<'_>,
-        data: Arc<FrozenDataset>,
+        data: Option<Arc<FrozenDataset>>,
         source: Py<boolean_input::BooleanInput>,
         options: Result<Options>,
         include_data: bool,
@@ -60,17 +60,29 @@ impl PyCompiledShapes {
                 options.comparison = caller.authority();
             }
             let captured = boolean_input::selection::Captured {
-                data: &data,
+                data: data.as_deref().map(|data| &**data),
                 caller,
             };
             py.detach(|| {
-                let outcome = self.inner.validate_delta(&captured, options)?;
-                let report = outcome.report;
+                let (report, additions) = if data.is_none() {
+                    (
+                        self.inner.validate_selected_graph(&captured, options)?,
+                        None,
+                    )
+                } else {
+                    let outcome = self.inner.validate_delta(&captured, options)?;
+                    (outcome.report, Some(outcome.additions))
+                };
                 Ok((
                     report.conforms,
                     terms::Output::observed_report(&report.graph, true, &report.boolean_values)?,
                     report.text,
-                    include_data.then(|| terms::Output::expanded(&data, &outcome.additions)),
+                    data.as_ref().filter(|_| include_data).map(|data| {
+                        terms::Output::expanded(
+                            data,
+                            additions.as_ref().expect("indexed additions"),
+                        )
+                    }),
                     report.recursion_warnings,
                 ))
             })

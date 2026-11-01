@@ -17,7 +17,7 @@ fn input<'py>(py: Python<'py>, code: &std::ffi::CStr) -> (BooleanInput, Bound<'p
     let graph = scope.get_item("graph").unwrap().unwrap().unbind();
     scope.del_item("graph").unwrap();
     (
-        BooleanInput::new(py, graph, &PyDict::new(py), false, classes, None).unwrap(),
+        BooleanInput::new(py, graph, &PyDict::new(py), false, classes, None, None).unwrap(),
         scope,
     )
 }
@@ -168,7 +168,7 @@ graph=Graph();graph.add((URIRef('urn:s'),URIRef('urn:p'),Literal('plain')))",
         );
         assert!(!input.canonical_booleans);
         let captured = selection::Captured {
-            data: &input.data,
+            data: input.data.as_deref().map(|data| &**data),
             caller: None,
         };
         assert!(captured.selected_value_source().is_none());
@@ -187,6 +187,74 @@ fn current_boolean_carrier_layouts_are_explicit() {
         std::mem::size_of::<pyshacl_turbo_engine::BooleanObservation>(),
         std::mem::size_of::<pyshacl_turbo_engine::SelectedLiteral>()
     );
+    let data = Dataset::new();
+    let rows = super::borrowed::rows(Some(&data), None, None, None, None, None);
+    println!(
+        "BORROWED_LAYOUT cursor={} rows={} compiled={} pycompiled={}",
+        std::mem::size_of::<super::borrowed::Cursor>(),
+        std::mem::size_of_val(&rows),
+        std::mem::size_of::<pyshacl_turbo_engine::CompiledShapes>(),
+        std::mem::size_of::<crate::PyCompiledShapes>(),
+    );
+}
+
+#[test]
+fn borrowed_cursor_delegates_early_close_to_actual_source_view() {
+    Python::initialize();
+    Python::attach(|py| {
+        let scope = PyDict::new(py);
+        py.run(
+            c"from rdflib import Graph, URIRef, BNode, Literal
+from pyshacl.graph_abstraction import DataGraph
+events=[]
+class Rows:
+ def __init__(self,rows): self.rows=rows
+ def __iter__(self): return self
+ def __next__(self): return next(self.rows)
+ def close(self): events.append('close'); self.rows.close()
+class Source(Graph):
+ def triples(self,pattern): return Rows(super().triples(pattern))
+graph=Source()
+graph.add((URIRef('urn:s'),URIRef('urn:p'),Literal('one')))
+graph.add((URIRef('urn:s'),URIRef('urn:p'),Literal('two')))
+view=DataGraph.from_rdflib_graph(graph)
+rows=view.triples((None,None,None)); next(rows); del rows
+assert events==['close']
+events.clear()
+",
+            Some(&scope),
+            None,
+        )
+        .unwrap();
+        let classes = ["URIRef", "BNode", "Literal"].map(|name| {
+            scope
+                .get_item(name)
+                .unwrap()
+                .unwrap()
+                .cast_into::<PyType>()
+                .unwrap()
+                .unbind()
+        });
+        let graph = scope.get_item("graph").unwrap().unwrap().unbind();
+        let view = scope.get_item("view").unwrap().unwrap().unbind();
+        let input = BooleanInput::new(
+            py,
+            graph,
+            &PyDict::new(py),
+            false,
+            classes,
+            None,
+            Some(view),
+        )
+        .unwrap();
+        let caller = caller(py, &input);
+        let mut rows = super::borrowed::rows(None, Some(&caller), None, None, None, None);
+        assert!(rows.next().unwrap().is_ok());
+        drop(rows);
+        caller.finish(py, Ok(())).unwrap();
+        py.run(c"assert events==['close'], events", Some(&scope), None)
+            .unwrap();
+    });
 }
 
 #[test]

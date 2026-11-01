@@ -33,15 +33,39 @@ impl CompiledShapes {
         options: Options,
         warnings: Vec<String>,
     ) -> Result<ValidationReport> {
+        let union = UnionGraph::new(data);
+        self.validate_view(&union, data, options, warnings)
+    }
+
+    /// Validate one actual non-context source without union representative rereads.
+    /// Only the compiler's selected-frame catalog is admitted; no rules can run.
+    pub fn validate_selected_graph(
+        &self,
+        data: &(impl GraphRead + ?Sized),
+        options: Options,
+    ) -> Result<ValidationReport> {
+        if !self.uses_selected_frames_only() || options.max_rule_iterations == 0 {
+            return Err(Error::Invalid(
+                "Program requires indexed DATA validation".into(),
+            ));
+        }
+        let view = crate::ScopedGraph::new(data, GraphName::DefaultGraph);
+        self.validate_view(&view, data, options, Vec::new())
+    }
+
+    fn validate_view(
+        &self,
+        data: &(impl GraphRead + ?Sized),
+        display_data: &(impl GraphRead + ?Sized),
+        options: Options,
+        warnings: Vec<String>,
+    ) -> Result<ValidationReport> {
         let mut evaluation = Evaluation::new(options.max_validation_depth);
         evaluation.warnings = warnings;
         evaluation.comparison = options.comparison.clone();
         evaluation.abort = options
             .abort_on_first
             .then_some((options.allow_infos, options.allow_warnings));
-        let display_data = data;
-        let union = UnionGraph::new(data);
-        let data = &union;
         evaluation.functions = self.functions.clone();
         let mut violations = Vec::new();
         for &index in &self.execution_order {

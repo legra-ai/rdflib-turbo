@@ -13,7 +13,10 @@ pub(crate) type Batch = (Vec<Record>, Vec<QuadRecord>);
 
 pub(crate) enum Input {
     Terms(Batch),
-    Boolean(Arc<FrozenDataset>, Py<super::boolean_input::BooleanInput>),
+    Boolean(
+        Option<Arc<FrozenDataset>>,
+        Py<super::boolean_input::BooleanInput>,
+    ),
     Text(String, super::InputFormat, Option<String>),
 }
 
@@ -22,7 +25,7 @@ impl Input {
         if format == "terms" {
             if source.is_instance_of::<super::boolean_input::BooleanInput>() {
                 let owner: Py<super::boolean_input::BooleanInput> = source.extract()?;
-                let data = Arc::clone(&owner.bind(source.py()).get().data);
+                let data = owner.bind(source.py()).get().data.clone();
                 return Ok(Self::Boolean(data, owner));
             }
             Ok(Self::Terms(source.extract()?))
@@ -37,7 +40,10 @@ impl Input {
 
     pub fn with_readonly<T>(self, operation: impl FnOnce(&Dataset) -> Result<T>) -> Result<T> {
         match self {
-            Self::Boolean(data, _) => operation(&data),
+            Self::Boolean(Some(data), _) => operation(&data),
+            Self::Boolean(None, _) => Err(Error::Invalid(
+                "Borrowed DATA requires selected validation".into(),
+            )),
             other => {
                 let data = other.parse()?;
                 operation(&data)

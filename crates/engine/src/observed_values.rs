@@ -7,29 +7,73 @@ use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
 use std::sync::Arc;
 
-/// Ordinary values with sparse non-default builtin-Boolean observations.
+/// A count consumer cannot accidentally acquire or inspect RDF words.
+pub(crate) enum ValueCollection {
+    Words {
+        terms: Vec<Term>,
+        boolean: Vec<(usize, BooleanObservation)>,
+    },
+    Cardinality(usize),
+}
+
+/// Ordinary values or a checked count-only source projection.
 pub(crate) struct ObservedValues {
-    terms: Vec<Term>,
-    boolean: Vec<(usize, BooleanObservation)>,
+    collection: ValueCollection,
     #[cfg(test)]
     lookup_steps: std::cell::Cell<usize>,
 }
+
+// Production count operands reuse the existing two-vector record's niche;
+// lookup instrumentation is deliberately excluded from this layout proof.
+#[cfg(not(test))]
+const _: () = assert!(
+    std::mem::size_of::<ObservedValues>()
+        == std::mem::size_of::<(Vec<Term>, Vec<(usize, BooleanObservation)>)>()
+);
 impl ObservedValues {
-    pub fn lexical(terms: Vec<Term>) -> Self {
+    fn words_with(terms: Vec<Term>, boolean: Vec<(usize, BooleanObservation)>) -> Self {
         Self {
-            terms,
-            boolean: Vec::new(),
+            collection: ValueCollection::Words { terms, boolean },
             #[cfg(test)]
             lookup_steps: std::cell::Cell::new(0),
         }
     }
-    pub fn focus(term: Term, observation: Option<crate::BooleanObservation>) -> Self {
+    pub fn cardinality(count: usize) -> Self {
         Self {
-            terms: vec![term],
-            boolean: observation.map(|o| vec![(0, o)]).unwrap_or_default(),
+            collection: ValueCollection::Cardinality(count),
             #[cfg(test)]
             lookup_steps: std::cell::Cell::new(0),
         }
+    }
+    fn parts(&self) -> (&[Term], &[(usize, BooleanObservation)]) {
+        match &self.collection {
+            ValueCollection::Words { terms, boolean } => (terms, boolean),
+            ValueCollection::Cardinality(_) => {
+                panic!("Count-only operand reached an RDF word consumer")
+            }
+        }
+    }
+    fn words(&self) -> &[Term] {
+        self.parts().0
+    }
+    pub fn len(&self) -> usize {
+        match &self.collection {
+            ValueCollection::Words { terms, .. } => terms.len(),
+            ValueCollection::Cardinality(count) => *count,
+        }
+    }
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn lexical(terms: Vec<Term>) -> Self {
+        Self::words_with(terms, Vec::new())
+    }
+    pub fn focus(term: Term, observation: Option<crate::BooleanObservation>) -> Self {
+        Self::words_with(
+            vec![term],
+            observation.map(|o| vec![(0, o)]).unwrap_or_default(),
+        )
     }
     pub fn predicate(
         data: &(impl GraphRead + ?Sized),
@@ -66,12 +110,7 @@ impl ObservedValues {
                     .map(|s| (i, BooleanObservation::Attested(*s)))
             })
             .collect();
-        Ok(Self {
-            terms,
-            boolean,
-            #[cfg(test)]
-            lookup_steps: std::cell::Cell::new(0),
-        })
+        Ok(Self::words_with(terms, boolean))
     }
     pub fn selected(
         frame: &Arc<dyn SelectedValueFrame>,
@@ -128,27 +167,23 @@ impl ObservedValues {
         }
         // The source already acquired the actual Python set. No RDF-key
         // deduplication or display ordering may replace that owner's sequence.
-        Ok(Self {
-            terms,
-            boolean,
-            #[cfg(test)]
-            lookup_steps: std::cell::Cell::new(0),
-        })
+        Ok(Self::words_with(terms, boolean))
     }
     pub fn slots(&self) -> impl ExactSizeIterator<Item = ValueSlot<'_>> {
-        (0..self.terms.len()).map(|index| ValueSlot { owner: self, index })
+        (0..self.words().len()).map(|index| ValueSlot { owner: self, index })
     }
     fn observation_at(&self, index: usize) -> Option<&BooleanObservation> {
         // Every producer appends metadata in strictly increasing value-slot order.
         let entry = self
-            .boolean
+            .parts()
+            .1
             .binary_search_by_key(&index, |(stored, _)| {
                 #[cfg(test)]
                 self.lookup_steps.set(self.lookup_steps.get() + 1);
                 *stored
             })
             .ok()?;
-        Some(&self.boolean[entry].1)
+        Some(&self.parts().1[entry].1)
     }
 }
 
@@ -160,7 +195,7 @@ pub(crate) struct ValueSlot<'a> {
 }
 impl<'a> ValueSlot<'a> {
     pub fn term(self) -> &'a Term {
-        &self.owner.terms[self.index]
+        &self.owner.words()[self.index]
     }
     pub fn observation(self) -> Option<&'a BooleanObservation> {
         self.owner.observation_at(self.index)
@@ -193,13 +228,13 @@ mod tests;
 impl Deref for ObservedValues {
     type Target = [Term];
     fn deref(&self) -> &Self::Target {
-        &self.terms
+        self.words()
     }
 }
 impl<'a> IntoIterator for &'a ObservedValues {
     type Item = &'a Term;
     type IntoIter = std::slice::Iter<'a, Term>;
     fn into_iter(self) -> Self::IntoIter {
-        self.terms.iter()
+        self.words().iter()
     }
 }

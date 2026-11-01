@@ -94,6 +94,25 @@ impl CompiledShapes {
                                 })
                                 .transpose()?;
                             let inherited = observation.as_ref().or(inherited);
+                            let count_path = shape
+                                .path
+                                .as_ref()
+                                .and_then(crate::SelectedPathRef::count_path);
+                            if shape.properties.is_empty()
+                                && shape.constraints.iter().all(|constraint| {
+                                    matches!(constraint, Constraint::Count { .. })
+                                })
+                                && let (Some(path), Some(frame)) = (count_path, &selected_frame)
+                            {
+                                let count = frame.frame().cardinality(
+                                    node,
+                                    path,
+                                    inherited.and_then(crate::BooleanObservation::subject),
+                                )?;
+                                return Ok(crate::observed_values::ObservedValues::cardinality(
+                                    count,
+                                ));
+                            }
                             match (&shape.path, &selected_frame) {
                                 (Some(Path::Predicate(predicate)), Some(frame)) => {
                                     crate::observed_values::ObservedValues::selected(
