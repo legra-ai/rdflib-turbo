@@ -321,7 +321,7 @@ class Graph(
     def parse(
         self, source=None, publicID=None, format=None, location=None, file=None, data=None, **args
     ):
-        if isinstance(self, Graph) and type(self) is not Graph:
+        if isinstance(self, Graph) and (type(self) is not Graph or "add" in self.__dict__):
             # A caller-defined sink owns insertion callbacks and their ordering.
             # Parsing through a new base Graph would bypass that actual owner.
             try:
