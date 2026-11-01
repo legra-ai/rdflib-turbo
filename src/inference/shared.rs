@@ -20,6 +20,9 @@ mod noop_tests;
 #[path = "shared_noops.rs"]
 mod noops;
 
+#[path = "shared_literal_values.rs"]
+mod literal_values;
+
 pub(super) struct ReadPredicates {
     pub constants: Vec<NamedNode>,
     pub wildcard: bool,
@@ -138,7 +141,7 @@ impl CompiledRule {
     }
 
     pub(super) fn with_literal_values(rule: &Rule, evaluator: SparqlEvaluator) -> Result<Self> {
-        let (head, body) = Self::validated_parts(rule, true)?;
+        let (head, body) = Self::literal_value_parts(rule)?;
         let query = evaluator
             .parse_query(&format!("CONSTRUCT {{ {head} }} WHERE {{ {body} }}"))
             .map_err(|error| Error::Runtime(format!("Invalid shared inference rule: {error}")))?;
