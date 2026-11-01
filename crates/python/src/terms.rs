@@ -1,6 +1,7 @@
 //! Typed, interned RDF term batches for the RDFLib/native boundary.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use pyo3::{IntoPyObjectExt, prelude::*};
 use pyshacl_turbo_engine::oxigraph::model::*;
@@ -12,12 +13,18 @@ pub(crate) type Batch = (Vec<Record>, Vec<QuadRecord>);
 
 pub(crate) enum Input {
     Terms(Batch),
+    Boolean(Arc<FrozenDataset>, Py<super::boolean_input::BooleanInput>),
     Text(String, super::InputFormat, Option<String>),
 }
 
 impl Input {
     pub fn read(source: &Bound<'_, PyAny>, format: &str, base: Option<&str>) -> PyResult<Self> {
         if format == "terms" {
+            if source.is_instance_of::<super::boolean_input::BooleanInput>() {
+                let owner: Py<super::boolean_input::BooleanInput> = source.extract()?;
+                let data = Arc::clone(&owner.bind(source.py()).get().data);
+                return Ok(Self::Boolean(data, owner));
+            }
             Ok(Self::Terms(source.extract()?))
         } else {
             Ok(Self::Text(
@@ -28,9 +35,22 @@ impl Input {
         }
     }
 
+    pub fn with_readonly<T>(self, operation: impl FnOnce(&Dataset) -> Result<T>) -> Result<T> {
+        match self {
+            Self::Boolean(data, _) => operation(&data),
+            other => {
+                let data = other.parse()?;
+                operation(&data)
+            }
+        }
+    }
+
     pub fn parse(self) -> Result<Dataset> {
         match self {
             Self::Terms(batch) => decode(batch),
+            Self::Boolean(_, _) => Err(Error::Invalid(
+                "Assessed input requires the observed validation mode".into(),
+            )),
             Self::Text(source, format, base) => format.parse(&source, base.as_deref()),
         }
     }
@@ -38,6 +58,8 @@ impl Input {
 
 pub(crate) enum Output {
     Terms(Batch),
+    BooleanTerms(Batch, Vec<(usize, u8)>),
+    Selected(super::selected_report::SelectedReport),
     Text(String),
 }
 
@@ -50,10 +72,61 @@ impl Output {
         }
     }
 
+    pub fn observed_report(
+        data: &Dataset,
+        direct: bool,
+        values: &[(
+            Term,
+            pyshacl_turbo_engine::ReportTermRole,
+            pyshacl_turbo_engine::BooleanObservation,
+        )],
+    ) -> Result<Self> {
+        if values.is_empty() {
+            return Self::graph(data, direct);
+        }
+        if !direct {
+            return Err(Error::Invalid(
+                "Observed report requires typed output".into(),
+            ));
+        }
+        let (batch, occurrences) = encode_observed(data, values)?;
+        if occurrences
+            .iter()
+            .any(|(_, v)| matches!(v, pyshacl_turbo_engine::BooleanObservation::Reported(_)))
+        {
+            Ok(Self::Selected(super::selected_report::SelectedReport::new(
+                batch,
+                occurrences,
+            )?))
+        } else {
+            let states = occurrences
+                .into_iter()
+                .map(|(i, value)| match value {
+                    pyshacl_turbo_engine::BooleanObservation::Attested(state) => {
+                        Ok((i, state.code()))
+                    }
+                    _ => Err(Error::Invalid("Unpromoted selected report value".into())),
+                })
+                .collect::<Result<Vec<_>>>()?;
+            Ok(Self::BooleanTerms(batch, states))
+        }
+    }
+
+    pub fn expanded(data: &Dataset, additions: &Dataset) -> Self {
+        Self::Terms(encode_rows(
+            data.iter()
+                .chain(additions.iter().filter(|q| !data.contains(*q))),
+        ))
+    }
+
     pub fn into_python(self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         match self {
             Self::Terms(batch) => batch.into_py_any(py),
+            Self::BooleanTerms((records, quads), states) => {
+                (records, quads, states).into_py_any(py)
+            }
             Self::Text(text) => text.into_py_any(py),
+            Self::Selected(report) => Py::new(py, report).map(|v| v.into_any()),
         }
     }
 }
@@ -150,6 +223,10 @@ fn decode(batch: Batch) -> Result<Dataset> {
 }
 
 fn encode(data: &Dataset) -> Batch {
+    encode_rows(data.iter())
+}
+
+fn encode_rows<'a>(rows: impl Iterator<Item = QuadRef<'a>>) -> Batch {
     let mut records = Vec::new();
     let mut indices = HashMap::new();
     let mut intern = |term: Term| {
@@ -170,8 +247,7 @@ fn encode(data: &Dataset) -> Batch {
             index
         })
     };
-    let quads = data
-        .iter()
+    let quads = rows
         .map(|q| {
             let subject = intern(q.subject.into_owned().into());
             let predicate = intern(q.predicate.into_owned().into());
@@ -185,6 +261,38 @@ fn encode(data: &Dataset) -> Batch {
         })
         .collect();
     (records, quads)
+}
+
+fn encode_observed(
+    data: &Dataset,
+    values: &[(
+        Term,
+        pyshacl_turbo_engine::ReportTermRole,
+        pyshacl_turbo_engine::BooleanObservation,
+    )],
+) -> Result<(
+    Batch,
+    Vec<(usize, pyshacl_turbo_engine::BooleanObservation)>,
+)> {
+    let lookup: HashMap<_, _> = values
+        .iter()
+        .map(|(s, role, state)| ((s.as_ref(), role.predicate()), state))
+        .collect();
+    if lookup.len() != values.len() {
+        return Err(Error::Invalid("Duplicate Boolean report result".into()));
+    }
+    let mut occurrences = Vec::with_capacity(values.len());
+    for (index, q) in data.iter().enumerate() {
+        if let Some(state) = lookup.get(&(TermRef::from(q.subject), q.predicate.as_str())) {
+            occurrences.push((index, (*state).clone()));
+        }
+    }
+    if occurrences.len() != values.len() {
+        return Err(Error::Invalid(
+            "Missing Boolean report value occurrence".into(),
+        ));
+    }
+    Ok((encode(data), occurrences))
 }
 
 #[cfg(test)]

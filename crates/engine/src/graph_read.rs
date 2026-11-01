@@ -16,6 +16,18 @@ use crate::{Error, Result};
 /// no lexical sorting is required. Borrowed views use this stable representative
 /// to deduplicate graph contexts without retaining all previously visited triples.
 pub trait GraphRead {
+    /// Explicit focus discovery authority, independent of value-cache admission.
+    /// Handled-empty source batches never select the lexical route.
+    fn selected_focus_source(&self) -> Option<&dyn crate::SelectedFocusSource>;
+    /// Explicit selected-value authority; None is the deliberate lexical route.
+    fn selected_value_source(&self) -> Option<&dyn crate::SelectedValueSource>;
+
+    /// Selected SP-unbound-object state. Legacy lexical owners explicitly return None.
+    fn boolean_object_state(
+        &self,
+        row: &GeneralizedQuad,
+    ) -> Result<Option<crate::BuiltinBooleanState>>;
+
     /// Stream matching quads. Read failures must remain errors, never omissions.
     /// Retain the source borrow, not the caller's temporary pattern references.
     fn matching_quads<'a>(
@@ -49,6 +61,20 @@ pub trait GraphRead {
 }
 
 impl GraphRead for Dataset {
+    fn selected_focus_source(&self) -> Option<&dyn crate::SelectedFocusSource> {
+        None
+    }
+    fn selected_value_source(&self) -> Option<&dyn crate::SelectedValueSource> {
+        None
+    }
+
+    fn boolean_object_state(
+        &self,
+        _row: &oxigraph::model::GeneralizedQuad,
+    ) -> crate::Result<Option<crate::BuiltinBooleanState>> {
+        Ok(None)
+    }
+
     fn matching_quads<'a>(
         &'a self,
         subject: Option<TermRef<'_>>,
@@ -117,6 +143,20 @@ impl GraphRead for Dataset {
 }
 
 impl<'tx> GraphRead for Transaction<'tx> {
+    fn selected_focus_source(&self) -> Option<&dyn crate::SelectedFocusSource> {
+        None
+    }
+    fn selected_value_source(&self) -> Option<&dyn crate::SelectedValueSource> {
+        None
+    }
+
+    fn boolean_object_state(
+        &self,
+        _row: &oxigraph::model::GeneralizedQuad,
+    ) -> crate::Result<Option<crate::BuiltinBooleanState>> {
+        Ok(None)
+    }
+
     fn matching_quads<'a>(
         &'a self,
         subject: Option<TermRef<'_>>,
@@ -143,6 +183,20 @@ impl<'tx> GraphRead for Transaction<'tx> {
 }
 
 impl GraphRead for ReadSnapshot {
+    fn selected_focus_source(&self) -> Option<&dyn crate::SelectedFocusSource> {
+        None
+    }
+    fn selected_value_source(&self) -> Option<&dyn crate::SelectedValueSource> {
+        None
+    }
+
+    fn boolean_object_state(
+        &self,
+        _row: &oxigraph::model::GeneralizedQuad,
+    ) -> crate::Result<Option<crate::BuiltinBooleanState>> {
+        Ok(None)
+    }
+
     fn matching_quads<'a>(
         &'a self,
         subject: Option<TermRef<'_>>,

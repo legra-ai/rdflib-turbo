@@ -2,6 +2,7 @@
 use sha2::{Digest, Sha256};
 
 pub const SOURCES: &[(&str, &[u8])] = &[
+    ("boolean_state.rs", include_bytes!("boolean_state.rs")),
     ("compile.rs", include_bytes!("compile.rs")),
     ("components.rs", include_bytes!("components.rs")),
     ("constraint_list.rs", include_bytes!("constraint_list.rs")),
@@ -75,6 +76,7 @@ pub const SOURCES: &[(&str, &[u8])] = &[
     ("inference/axioms.rs", include_bytes!("inference/axioms.rs")),
     ("lib.rs", include_bytes!("lib.rs")),
     ("model.rs", include_bytes!("model.rs")),
+    ("observed_values.rs", include_bytes!("observed_values.rs")),
     ("ontology.rs", include_bytes!("ontology.rs")),
     ("path.rs", include_bytes!("path.rs")),
     ("pattern.rs", include_bytes!("pattern.rs")),
@@ -83,6 +85,12 @@ pub const SOURCES: &[(&str, &[u8])] = &[
     ("regex_policy.rs", include_bytes!("regex_policy.rs")),
     ("revision.rs", include_bytes!("revision.rs")),
     ("rule_delta.rs", include_bytes!("rule_delta.rs")),
+    ("selected_focus.rs", include_bytes!("selected_focus.rs")),
+    (
+        "selected_focus_frame.rs",
+        include_bytes!("selected_focus_frame.rs"),
+    ),
+    ("selected_values.rs", include_bytes!("selected_values.rs")),
     ("shapes_policy.rs", include_bytes!("shapes_policy.rs")),
     ("shapes_source.rs", include_bytes!("shapes_source.rs")),
     ("sparql.rs", include_bytes!("sparql.rs")),

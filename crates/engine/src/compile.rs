@@ -20,6 +20,7 @@ mod tests;
 pub(crate) enum Target {
     Node(Term),
     Class(Term),
+    ImplicitClass(Term),
     Subjects(NamedNode),
     Objects(NamedNode),
     Sparql {
@@ -142,7 +143,7 @@ fn lower_target(
     Ok(match target {
         model::Target::Node(node) => Target::Node(node),
         model::Target::Class(class) => Target::Class(class.into()),
-        model::Target::ImplicitClass(class) => Target::Class(class),
+        model::Target::ImplicitClass(class) => Target::ImplicitClass(class),
         model::Target::SubjectsOf(predicate) => Target::Subjects(predicate),
         model::Target::ObjectsOf(predicate) => Target::Objects(predicate),
         model::Target::Sparql(target) => Target::Sparql {

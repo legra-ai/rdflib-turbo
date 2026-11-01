@@ -17,7 +17,7 @@ mod variable;
 pub mod vocab;
 
 pub use crate::blank_node::{BlankNode, BlankNodeIdParseError, BlankNodeRef};
-pub use crate::dataset::{Dataset, GeneralizedDataset, GeneralizedTransaction};
+pub use crate::dataset::{Dataset, GeneralizedDataset, GeneralizedTransaction, DatasetLeaseBuilder, DatasetQuadLease, InsertionQuadLease, FrozenDataset, DatasetLeaseError};
 pub use crate::generalized::{
     GeneralizedNarrowingError, GeneralizedQuad, GeneralizedQuadRef, GeneralizedTermPosition,
     GeneralizedTriple, GeneralizedTripleRef,

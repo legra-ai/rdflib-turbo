@@ -90,9 +90,30 @@ pub(crate) fn read_shape(
     };
     let mut shape = model::NodeShape::new(node.clone());
     shape.targets = targets(graph, node, advanced)?;
-    if types.contains(&iri(RDFS, "Class").into())
-        || types.contains(&iri("http://www.w3.org/2002/07/owl#", "Class").into())
-    {
+    let class = Term::from(iri(RDFS, "Class"));
+    let mut implicit = types.contains(&class)
+        || types.contains(&iri("http://www.w3.org/2002/07/owl#", "Class").into());
+    // Original's implicit-class stage admits direct SHAPES metaclasses, not
+    // arbitrary transitive DATA types. Probe the existing exact SHAPES index.
+    if !implicit {
+        for kind in &types {
+            if graph
+                .matching_quads(
+                    Some(kind.as_ref()),
+                    Some(iri(RDFS, "subClassOf").as_ref().into()),
+                    Some(class.as_ref()),
+                    Some(GraphNameRef::DefaultGraph),
+                )
+                .next()
+                .transpose()?
+                .is_some()
+            {
+                implicit = true;
+                break;
+            }
+        }
+    }
+    if implicit {
         shape
             .targets
             .push(model::Target::ImplicitClass(node.clone()));

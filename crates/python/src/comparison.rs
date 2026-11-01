@@ -7,7 +7,7 @@ use pyo3::types::PyType;
 use pyshacl_turbo_engine::{ComparisonFailure, CoreComparisonPolicy, ValueComparisonPolicy};
 
 /// A caller-thread publisher; native policy evaluation never dereferences it.
-pub trait ComparisonPublisher {
+pub trait ComparisonPublisher: Send + Sync {
     /// Publish newly raised status after every producer has completed.
     fn publish(&self, py: Python<'_>) -> PyResult<()>;
 }
@@ -29,10 +29,26 @@ impl ComparisonInvocation {
         result.map_err(super::error)
     }
 }
+/// Source checkpoints are distinct from terminal publication.
+pub trait SourceComparisonPublisher: ComparisonPublisher {
+    /// Drain completed native status before invoking source code.
+    fn publish_status(&self, py: Python<'_>) -> PyResult<()>;
+    /// Refresh caller policy while preserving pending warning occurrences.
+    fn refresh_after_source(&self, py: Python<'_>) -> PyResult<Arc<dyn ValueComparisonPolicy>>;
+}
+/// Allocated only for an invocation that actually admits selected source events.
+pub struct SourceComparisonInvocation {
+    /// Initial native policy.
+    pub policy: Arc<dyn ValueComparisonPolicy>,
+    /// Caller-only checkpoint/finalization authority.
+    pub publisher: Arc<dyn SourceComparisonPublisher>,
+}
 /// Provider-owned factory; capture is permitted only on the attached caller thread.
 pub trait ComparisonHost: Send + Sync {
     /// Snapshot the current caller's context, never a compilation-cache context.
     fn capture(&self, py: Python<'_>) -> PyResult<ComparisonInvocation>;
+    /// Capture refreshable authority only for explicit ordinary source events.
+    fn capture_source(&self, py: Python<'_>) -> PyResult<SourceComparisonInvocation>;
 }
 /// A sealed interpreter-local factory token. It owns no mutable process-global context.
 #[pyclass(frozen, name = "_ValueComparisonPolicy")]
@@ -40,7 +56,7 @@ pub struct NativeValueComparisonPolicy {
     host: Arc<dyn ComparisonHost>,
     interpreter: i64,
 }
-fn interpreter(py: Python<'_>) -> PyResult<i64> {
+pub(crate) fn interpreter(py: Python<'_>) -> PyResult<i64> {
     // SAFETY: the token proves an attached interpreter; no borrowed pointer escapes.
     let identity =
         unsafe { pyo3::ffi::PyInterpreterState_GetID(pyo3::ffi::PyInterpreterState_Get()) };

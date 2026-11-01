@@ -59,6 +59,20 @@ impl LazyList {
 }
 
 impl GraphRead for LazyList {
+    fn selected_focus_source(&self) -> Option<&dyn pyshacl_turbo_engine::SelectedFocusSource> {
+        None
+    }
+    fn selected_value_source(&self) -> Option<&dyn pyshacl_turbo_engine::SelectedValueSource> {
+        None
+    }
+
+    fn boolean_object_state(
+        &self,
+        _: &pyshacl_turbo_engine::oxigraph::model::GeneralizedQuad,
+    ) -> pyshacl_turbo_engine::Result<Option<pyshacl_turbo_engine::BuiltinBooleanState>> {
+        Ok(None)
+    }
+
     fn matching_quads<'a>(
         &'a self,
         subject: Option<TermRef<'_>>,

@@ -84,6 +84,10 @@ pub(super) struct Publisher {
     term: Py<PyModule>,
 }
 impl Publisher {
+    pub(super) fn refresh_profile(&self, py: Python<'_>) -> PyResult<Profile> {
+        profile(py, &self.site, self.warnings.bind(py), self.pending.clone())
+    }
+
     pub(super) fn publish(&self, py: Python<'_>) -> PyResult<()> {
         let count = self.pending.load(Ordering::Relaxed);
         if count == 0 {
@@ -137,8 +141,12 @@ fn read_action(name: &str) -> PyResult<Action> {
         )),
     }
 }
-pub(super) fn capture(py: Python<'_>, site: &Site) -> PyResult<(Profile, Publisher)> {
-    let warnings = py.import("warnings")?;
+fn profile(
+    py: Python<'_>,
+    site: &Site,
+    warnings: &Bound<'_, PyModule>,
+    pending: Arc<AtomicUsize>,
+) -> PyResult<Profile> {
     let mut action = read_action(&warnings.getattr("defaultaction")?.extract::<String>()?)?;
     if py.version_info().minor < 14 {
         for filter in warnings.getattr("filters")?.try_iter()? {
@@ -167,13 +175,19 @@ pub(super) fn capture(py: Python<'_>, site: &Site) -> PyResult<(Profile, Publish
             break;
         }
     }
+    Ok(Profile {
+        truth_is_error: py.version_info().minor >= 14,
+        action,
+        pending,
+    })
+}
+
+pub(super) fn capture(py: Python<'_>, site: &Site) -> PyResult<(Profile, Publisher)> {
+    let warnings = py.import("warnings")?;
     let pending = Arc::new(AtomicUsize::new(0));
+    let profile = profile(py, site, &warnings, pending.clone())?;
     Ok((
-        Profile {
-            truth_is_error: py.version_info().minor >= 14,
-            action,
-            pending: pending.clone(),
-        },
+        profile,
         Publisher {
             site: site.clone(),
             pending,

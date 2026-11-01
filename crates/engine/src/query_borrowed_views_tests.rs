@@ -9,6 +9,20 @@ fn node(word: &str) -> NamedNode {
 
 struct NamedFirst(Dataset);
 impl GraphRead for NamedFirst {
+    fn selected_focus_source(&self) -> Option<&dyn crate::SelectedFocusSource> {
+        None
+    }
+    fn selected_value_source(&self) -> Option<&dyn crate::SelectedValueSource> {
+        None
+    }
+
+    fn boolean_object_state(
+        &self,
+        _row: &oxigraph::model::GeneralizedQuad,
+    ) -> crate::Result<Option<crate::BuiltinBooleanState>> {
+        Ok(None)
+    }
+
     fn matching_quads<'a>(
         &'a self,
         s: Option<TermRef<'_>>,
@@ -78,6 +92,20 @@ fn query_union_accepts_a_named_first_source_and_nested_union_without_duplication
 
 struct FailedRepresentative(bool);
 impl GraphRead for FailedRepresentative {
+    fn selected_focus_source(&self) -> Option<&dyn crate::SelectedFocusSource> {
+        None
+    }
+    fn selected_value_source(&self) -> Option<&dyn crate::SelectedValueSource> {
+        None
+    }
+
+    fn boolean_object_state(
+        &self,
+        _row: &oxigraph::model::GeneralizedQuad,
+    ) -> crate::Result<Option<crate::BuiltinBooleanState>> {
+        Ok(None)
+    }
+
     fn matching_quads<'a>(
         &'a self,
         s: Option<TermRef<'_>>,

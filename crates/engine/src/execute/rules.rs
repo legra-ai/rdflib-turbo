@@ -80,6 +80,8 @@ impl CompiledShapes {
                                 &view,
                                 &mut condition_results,
                                 &mut evaluation,
+                                None,
+                                None,
                             )?;
                         }
                         if !condition_results.is_empty() {
@@ -94,6 +96,8 @@ impl CompiledShapes {
                                     &view,
                                     &mut results,
                                     &mut evaluation,
+                                    None,
+                                    None,
                                 )?;
                                 Ok(results.is_empty())
                             };

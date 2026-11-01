@@ -44,6 +44,7 @@ impl CompiledShapes {
                             data,
                             &mut result.details,
                             evaluation,
+                            None,
                         )?;
                     }
                     result.details.is_empty()

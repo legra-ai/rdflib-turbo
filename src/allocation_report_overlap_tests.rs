@@ -42,6 +42,20 @@ impl ValueComparisonPolicy for NoNumericHost {
 }
 
 impl<'tap> GraphRead for ObservedSnapshot<'tap> {
+    fn selected_focus_source(&self) -> Option<&dyn pyshacl_turbo_engine::SelectedFocusSource> {
+        None
+    }
+    fn selected_value_source(&self) -> Option<&dyn pyshacl_turbo_engine::SelectedValueSource> {
+        None
+    }
+
+    fn boolean_object_state(
+        &self,
+        _row: &oxigraph::model::GeneralizedQuad,
+    ) -> pyshacl_turbo_engine::Result<Option<pyshacl_turbo_engine::BuiltinBooleanState>> {
+        Ok(None)
+    }
+
     fn matching_quads<'a>(
         &'a self,
         subject: Option<TermRef<'_>>,

@@ -6,15 +6,26 @@ impl CompiledShapes {
         &self,
         index: usize,
         focus: &Term,
-        values: &[Term],
+        values: &crate::observed_values::ObservedValues,
         data: &(impl GraphRead + ?Sized),
         constraint: &Constraint,
         results: &mut Vec<Violation>,
         evaluation: &mut Evaluation,
+        focus_observation: Option<&crate::BooleanObservation>,
     ) -> Result<()> {
         let shape = &self.shapes[index];
-        let violation =
-            |component, value: Option<&Term>| Violation::new(index, shape, focus, component, value);
+        let violation = |component,
+                         value: Option<crate::observed_values::ValueSlot<'_>>|
+         -> Result<Violation> {
+            Violation::new(
+                index,
+                shape,
+                focus,
+                component,
+                value.map(|slot| slot.term()),
+            )
+            .with_observations(focus_observation, value.and_then(|slot| slot.observation()))
+        };
         match constraint {
             Constraint::Pair {
                 kind,
@@ -24,7 +35,8 @@ impl CompiledShapes {
             } => {
                 let others = objects(data, focus, predicate)?;
                 if let Some(query) = query {
-                    for value in values {
+                    for slot in values.slots() {
+                        let value = slot.term();
                         for other in &others {
                             if !crate::value::compare(
                                 &evaluation.comparison,
@@ -35,7 +47,7 @@ impl CompiledShapes {
                                 value,
                                 other,
                             )? {
-                                results.push(violation(kind, Some(value)).with_comparison(
+                                results.push(violation(kind, Some(slot))?.with_comparison(
                                     ComparisonMessage::PropertyPair {
                                         operator: operator.expect("Ordering pair has operator"),
                                         predicate: predicate.clone(),
@@ -45,16 +57,20 @@ impl CompiledShapes {
                         }
                     }
                 } else if *kind == "EqualsConstraintComponent" {
-                    for value in values
-                        .iter()
-                        .filter(|v| !others.contains(v))
-                        .chain(others.iter().filter(|v| !values.contains(v)))
-                    {
-                        results.push(violation(kind, Some(value)));
+                    for slot in values.slots().filter(|slot| !others.contains(slot.term())) {
+                        results.push(violation(kind, Some(slot))?);
+                    }
+                    for value in others.iter().filter(|value| !values.contains(value)) {
+                        // This is a different predicate's new value, not an
+                        // equal-word claim on this projection's selected owner.
+                        results.push(
+                            Violation::new(index, shape, focus, kind, Some(value))
+                                .with_observations(focus_observation, None)?,
+                        );
                     }
                 } else {
-                    for value in values.iter().filter(|v| others.contains(v)) {
-                        results.push(violation(kind, Some(value)));
+                    for slot in values.slots().filter(|slot| others.contains(slot.term())) {
+                        results.push(violation(kind, Some(slot))?);
                     }
                 }
             }
@@ -69,7 +85,8 @@ impl CompiledShapes {
                 {
                     return Ok(());
                 }
-                for value in values {
+                for slot in values.slots() {
+                    let value = slot.term();
                     let mut details = Vec::new();
                     self.evaluate_child(
                         index,
@@ -79,9 +96,10 @@ impl CompiledShapes {
                         data,
                         &mut details,
                         evaluation,
+                        slot.observation().cloned(),
                     )?;
                     if !details.is_empty() {
-                        let mut parent = violation("NodeConstraintComponent", Some(value));
+                        let mut parent = violation("NodeConstraintComponent", Some(slot))?;
                         parent.details = details;
                         results.push(parent);
                     }
@@ -97,7 +115,8 @@ impl CompiledShapes {
                 {
                     return Ok(());
                 }
-                for value in values {
+                for slot in values.slots() {
+                    let value = slot.term();
                     let mut count = 0;
                     for &target in shapes {
                         let mut nested = Vec::new();
@@ -109,6 +128,7 @@ impl CompiledShapes {
                             data,
                             &mut nested,
                             evaluation,
+                            slot.observation().cloned(),
                         )?;
                         count += usize::from(nested.is_empty());
                     }
@@ -120,7 +140,7 @@ impl CompiledShapes {
                         _ => unreachable!(),
                     };
                     if !valid {
-                        results.push(violation(kind, Some(value)));
+                        results.push(violation(kind, Some(slot))?);
                     }
                 }
             }
@@ -150,7 +170,8 @@ impl CompiledShapes {
                     return Ok(());
                 }
                 let mut count = 0usize;
-                for value in values {
+                for slot in values.slots() {
+                    let value = slot.term();
                     let mut nested = Vec::new();
                     self.evaluate_child(
                         index,
@@ -160,6 +181,7 @@ impl CompiledShapes {
                         data,
                         &mut nested,
                         evaluation,
+                        slot.observation().cloned(),
                     )?;
                     if !nested.is_empty() {
                         continue;
@@ -175,6 +197,7 @@ impl CompiledShapes {
                             data,
                             &mut sibling_results,
                             evaluation,
+                            slot.observation().cloned(),
                         )?;
                         if sibling_results.is_empty() {
                             disjoint = false;
@@ -184,17 +207,18 @@ impl CompiledShapes {
                     count += usize::from(disjoint);
                 }
                 if minimum.as_ref().is_some_and(|min| !min.allows(count, true)) {
-                    results.push(violation("QualifiedMinCountConstraintComponent", None));
+                    results.push(violation("QualifiedMinCountConstraintComponent", None)?);
                 }
                 if maximum
                     .as_ref()
                     .is_some_and(|max| !max.allows(count, false))
                 {
-                    results.push(violation("QualifiedMaxCountConstraintComponent", None));
+                    results.push(violation("QualifiedMaxCountConstraintComponent", None)?);
                 }
             }
             Constraint::Closed(allowed) => {
-                for value in values {
+                for slot in values.slots() {
+                    let value = slot.term();
                     for quad in data.matching_quads(
                         Some(value.as_ref()),
                         None,
@@ -209,8 +233,14 @@ impl CompiledShapes {
                         }
                         let permitted = matches!(&quad.predicate, Term::NamedNode(node) if allowed.contains(node));
                         if !permitted {
-                            let mut result =
-                                violation("ClosedConstraintComponent", Some(&quad.object));
+                            let mut result = Violation::new(
+                                index,
+                                shape,
+                                focus,
+                                "ClosedConstraintComponent",
+                                Some(&quad.object),
+                            )
+                            .with_observations(focus_observation, None)?;
                             result.path = Some(quad.predicate);
                             results.push(result);
                         }

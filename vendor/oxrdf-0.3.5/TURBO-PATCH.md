@@ -87,3 +87,9 @@ retains the additive journal when no predicate matches, and restores original
 record identities before rollback releases newly interned words. No base relation
 copy or extra index is created. Mandatory regressions cover graph kinds, all
 pattern masks, current additions, original Arc restoration and predicate unwind.
+
+The ordinary Boolean-assessment source component adds owner-checked immutable
+QuadRecord leases over the same indexes/dictionary. A moved builder/frozen owner
+uses a call-local provenance token; no Dataset/record persisted fields, new RDF
+index, lexical mirror or format is added. Foreign cloned-owner leases fail before
+metadata lookup; RDF key equality remains the full encoded record, not a pointer.

@@ -1,14 +1,18 @@
 mod comparison;
 pub use comparison::{
     ComparisonHost, ComparisonInvocation, ComparisonPublisher, NativeValueComparisonPolicy,
-    capture_comparison, comparison_error, comparison_host,
+    SourceComparisonInvocation, SourceComparisonPublisher, capture_comparison, comparison_error,
+    comparison_host,
 };
+mod boolean_input;
+mod boolean_validation;
 mod canonical;
 #[cfg(test)]
 mod provider_tests;
 mod regex_policy;
 #[cfg(test)]
 mod regex_policy_tests;
+mod selected_report;
 mod shape_terms;
 mod terms;
 
@@ -147,14 +151,15 @@ fn additions(
     let after = terms::Input::read(after, if direct { "terms" } else { "nquads" }, None)?;
     let output = py
         .detach(|| {
-            let before = before.parse()?;
-            let after = after.parse()?;
-            let additions = after
-                .iter()
-                .filter(|q| !before.contains(*q))
-                .map(|q| q.into_owned())
-                .collect();
-            terms::Output::graph(&additions, direct)
+            before.with_readonly(|before| {
+                let after = after.parse()?;
+                let additions = after
+                    .iter()
+                    .filter(|q| !before.contains(*q))
+                    .map(|q| q.into_owned())
+                    .collect();
+                terms::Output::graph(&additions, direct)
+            })
         })
         .map_err(error)?;
     output.into_python(py)
@@ -469,8 +474,41 @@ impl PyCompiledShapes {
     ) -> PyResult<ReportOutput> {
         let direct = rdf_format == "terms";
         let input = terms::Input::read(source, rdf_format, base)?;
+        if let terms::Input::Boolean(data, source) = input {
+            let comparison = boolean_validation::Comparison::capture(
+                py,
+                _comparison_policy,
+                source.bind(py).get().canonical_booleans || self.inner.requires_selected_focus(),
+            )?;
+            let authority = comparison.authority();
+            let options = (|| -> pyshacl_turbo_engine::Result<Options> {
+                Ok(Options {
+                    iterate_rules,
+                    max_rule_iterations,
+                    max_validation_depth,
+                    allow_infos,
+                    allow_warnings,
+                    abort_on_first,
+                    namespaces,
+                    comparison: authority,
+                    focus_nodes: focus_nodes
+                        .into_iter()
+                        .map(|s| NamedNode::new(s).map(Term::from))
+                        .collect::<std::result::Result<_, _>>()
+                        .map_err(|e| Error::Invalid(e.to_string()))?,
+                    use_shapes: use_shapes
+                        .into_iter()
+                        .map(|s| NamedNode::new(s).map(Term::from))
+                        .collect::<std::result::Result<_, _>>()
+                        .map_err(|e| Error::Invalid(e.to_string()))?,
+                })
+            })();
+            return self.validate_boolean(py, data, source, options, include_data, comparison);
+        }
+
         let comparison = capture_comparison(py, _comparison_policy)?;
         let authority = comparison.authority();
+
         let result = py.detach(|| {
             let mut data = input.parse()?;
             let report = self.inner.validate(
@@ -595,6 +633,14 @@ pub fn register(
         pyshacl_turbo_engine::engine_fingerprint(),
     )?;
     module.add_class::<PyCompiledShapes>()?;
+    module.add_class::<boolean_input::BooleanInput>()?;
+    module.add_class::<selected_report::SelectedReport>()?;
+    module.add(
+        "SelectedSourceInterruption",
+        module
+            .py()
+            .get_type::<boolean_input::caller::SelectedSourceInterruption>(),
+    )?;
     module.add_class::<PyTargetData>()?;
     module.add_function(wrap_pyfunction!(parse_rdf, module)?)?;
     module.add_class::<canonical::ShapesInput>()?;

@@ -257,8 +257,25 @@ pub(crate) fn test_comparison_host() -> Arc<dyn crate::ComparisonHost> {
             Ok(())
         }
     }
+    impl crate::SourceComparisonPublisher for Publisher {
+        fn publish_status(&self, _py: Python<'_>) -> PyResult<()> {
+            Ok(())
+        }
+        fn refresh_after_source(
+            &self,
+            _py: Python<'_>,
+        ) -> PyResult<Arc<dyn pyshacl_turbo_engine::ValueComparisonPolicy>> {
+            Ok(Arc::new(Policy))
+        }
+    }
     struct Host;
     impl crate::ComparisonHost for Host {
+        fn capture_source(&self, _py: Python<'_>) -> PyResult<crate::SourceComparisonInvocation> {
+            Ok(crate::SourceComparisonInvocation {
+                policy: Arc::new(Policy),
+                publisher: Arc::new(Publisher),
+            })
+        }
         fn capture(&self, _py: Python<'_>) -> PyResult<crate::ComparisonInvocation> {
             Ok(crate::ComparisonInvocation {
                 policy: Arc::new(Policy),

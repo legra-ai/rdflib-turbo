@@ -33,6 +33,7 @@ impl CompiledShapes {
                             data,
                             &mut nested,
                             evaluation,
+                            None,
                         )?;
                         Ok(nested.is_empty())
                     })?;
