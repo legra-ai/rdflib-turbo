@@ -857,14 +857,14 @@ wheels = [
 
 [[package]]
 name = "owlrl-turbo"
-version = "0.1.0a3"
+version = "0.2.0a1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "rdflib-turbo" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b4/5b/63e998bd7dc1ad21839ba61590271c9f10f45d5b66b47aed053d15b74bea/owlrl_turbo-0.1.0a3.tar.gz", hash = "sha256:d1876bfd3a8a59d0604e29d52e10b0f6ede4b8e300692dfb28e137d8f4ef314c", size = 72608, upload-time = "2026-10-17T20:24:50.313Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/67/bc/ef65d230df90ef746343de42b47c9fb2b75f7c231df03c0b2113d36f9e96/owlrl_turbo-0.2.0a1.tar.gz", hash = "sha256:3e08ccd6b7f77e1370060c17529303e82b37233145e85362450c7053cf6c2a3a", size = 166103, upload-time = "2026-10-31T01:45:01.83Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c4/5b/cb1e710b1a6b9adc390914f32ec8e26ac554f726f40753817a2c5fa87d22/owlrl_turbo-0.1.0a3-py3-none-any.whl", hash = "sha256:0a93ac9d7bedce17d9d453a49e906dfee8c3d4a4bc16975f7723c183644fe0d9", size = 9728, upload-time = "2026-10-17T20:24:48.99Z" },
+    { url = "https://files.pythonhosted.org/packages/7f/c9/a874cae74288557f3ce24ee9dac591be53f9a5d5a986ace813b32552adc0/owlrl_turbo-0.2.0a1-py3-none-any.whl", hash = "sha256:4dfb52ab8d71b7c6729f076210171537d17fee8a74e27810dce61e811fe4d0ab", size = 15790, upload-time = "2026-10-31T01:45:00.667Z" },
 ]
 
 [[package]]
@@ -1186,7 +1186,7 @@ packaging = [
 [package.metadata]
 requires-dist = [
     { name = "owlrl", marker = "extra == 'test'", specifier = "==7.6.2" },
-    { name = "owlrl-turbo", marker = "extra == 'test'", specifier = "==0.1.0a3" },
+    { name = "owlrl-turbo", marker = "extra == 'test'", specifier = "==0.2.0a1" },
     { name = "packaging", marker = "extra == 'test'", specifier = ">=26.3" },
     { name = "pyshacl-turbo", marker = "extra == 'test'", editable = "../pyshacl-turbo" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8,<10" },
@@ -1199,7 +1199,7 @@ provides-extras = ["test"]
 [package.metadata.requires-dev]
 coverage = [
     { name = "owlrl", specifier = "==7.6.2" },
-    { name = "owlrl-turbo", specifier = "==0.1.0a3" },
+    { name = "owlrl-turbo", specifier = "==0.2.0a1" },
     { name = "pyshacl", specifier = "==0.40.1" },
     { name = "pyshacl-turbo", extras = ["test"], editable = "../pyshacl-turbo" },
     { name = "pytest", specifier = "==9.2.0" },
