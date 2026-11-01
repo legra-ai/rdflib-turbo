@@ -188,3 +188,35 @@ fn named_shapes_compile_their_union_and_retain_original_graph_placement() {
             .unwrap()
     );
 }
+
+#[test]
+fn target_lowering_preserves_explicit_and_implicit_class_stages() {
+    let graph = Dataset::new();
+    let class = iri("urn:", "Class");
+    let explicit = lower_target(&graph, model::Target::Class(class.clone()), &[]).unwrap();
+    let implicit = lower_target(&graph, model::Target::ImplicitClass(class.into()), &[]).unwrap();
+    assert_ne!(
+        std::mem::discriminant(&explicit),
+        std::mem::discriminant(&implicit)
+    );
+}
+
+#[test]
+fn target_lowering_recognizes_direct_custom_metaclasses() {
+    let source = crate::IndexedShapesSource::parse_graph(
+        "@prefix sh:<http://www.w3.org/ns/shacl#>. \
+         @prefix rdfs:<http://www.w3.org/2000/01/rdf-schema#>. \
+         <urn:Meta> rdfs:subClassOf rdfs:Class. \
+         <urn:S> a sh:PropertyShape, <urn:Meta>; sh:path <urn:p>.",
+        RdfFormat::Turtle,
+        None,
+    )
+    .unwrap();
+    let program = CompiledShapes::compile(source, false).unwrap();
+    let shape = program
+        .shapes
+        .iter()
+        .find(|s| s.node == iri("urn:", "S").into())
+        .unwrap();
+    assert_eq!(shape.targets.len(), 1);
+}

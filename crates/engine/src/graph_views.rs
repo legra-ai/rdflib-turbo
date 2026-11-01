@@ -88,6 +88,20 @@ impl<'a, G: GraphRead + ?Sized> UnionGraph<'a, G> {
 }
 
 impl<'source, G: GraphRead + ?Sized> GraphRead for UnionGraph<'source, G> {
+    fn selected_focus_source(&self) -> Option<&dyn crate::SelectedFocusSource> {
+        self.source.selected_focus_source()
+    }
+    fn selected_value_source(&self) -> Option<&dyn crate::SelectedValueSource> {
+        self.source.selected_value_source()
+    }
+
+    fn boolean_object_state(
+        &self,
+        row: &oxigraph::model::GeneralizedQuad,
+    ) -> crate::Result<Option<crate::BuiltinBooleanState>> {
+        self.source.boolean_object_state(row)
+    }
+
     fn matching_quads<'a>(
         &'a self,
         subject: Option<TermRef<'_>>,
@@ -161,6 +175,38 @@ impl<'a, G: GraphRead + ?Sized, S: GraphRead + ?Sized> OverlayGraph<'a, G, S> {
 impl<'source, G: GraphRead + ?Sized, S: GraphRead + ?Sized> GraphRead
     for OverlayGraph<'source, G, S>
 {
+    fn selected_focus_source(&self) -> Option<&dyn crate::SelectedFocusSource> {
+        match (
+            self.source.selected_focus_source(),
+            self.shapes.selected_focus_source(),
+        ) {
+            (Some(_), Some(_)) => panic!("Two selected source authorities in one overlay"),
+            (Some(source), None) | (None, Some(source)) => Some(source),
+            (None, None) => None,
+        }
+    }
+    fn selected_value_source(&self) -> Option<&dyn crate::SelectedValueSource> {
+        match (
+            self.source.selected_value_source(),
+            self.shapes.selected_value_source(),
+        ) {
+            (Some(_), Some(_)) => panic!("Two selected source authorities in one overlay"),
+            (Some(source), None) | (None, Some(source)) => Some(source),
+            (None, None) => None,
+        }
+    }
+
+    fn boolean_object_state(
+        &self,
+        row: &GeneralizedQuad,
+    ) -> Result<Option<crate::BuiltinBooleanState>> {
+        if row.graph_name == self.graph {
+            self.shapes.boolean_object_state(row)
+        } else {
+            self.source.boolean_object_state(row)
+        }
+    }
+
     fn matching_quads<'a>(
         &'a self,
         subject: Option<TermRef<'_>>,
@@ -251,6 +297,20 @@ impl<'a, G: GraphRead + ?Sized> ScopedGraph<'a, G> {
 }
 
 impl<'source, G: GraphRead + ?Sized> GraphRead for ScopedGraph<'source, G> {
+    fn selected_focus_source(&self) -> Option<&dyn crate::SelectedFocusSource> {
+        self.source.selected_focus_source()
+    }
+    fn selected_value_source(&self) -> Option<&dyn crate::SelectedValueSource> {
+        self.source.selected_value_source()
+    }
+
+    fn boolean_object_state(
+        &self,
+        row: &oxigraph::model::GeneralizedQuad,
+    ) -> crate::Result<Option<crate::BuiltinBooleanState>> {
+        self.source.boolean_object_state(row)
+    }
+
     fn matching_quads<'a>(
         &'a self,
         subject: Option<TermRef<'_>>,

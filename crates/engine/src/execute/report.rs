@@ -4,8 +4,18 @@ impl Violation {
     fn data_term(
         &self,
         value: &Term,
+        role: crate::ReportTermRole,
         display: &crate::display::Display<'_, impl GraphRead + ?Sized, impl GraphRead + ?Sized>,
     ) -> Result<String> {
+        if let Some(terms) = &self.observed_terms {
+            let term = match role {
+                crate::ReportTermRole::Focus => &terms.focus,
+                crate::ReportTermRole::Value => &terms.value,
+            };
+            if let Some(text) = term.as_ref().and_then(|term| term.presentation.as_ref()) {
+                return Ok(text.clone());
+            }
+        }
         match self.data_description {
             DataDescription::Identity => Ok(value.to_string()),
             DataDescription::Expanded => display.term(value, false),
@@ -24,6 +34,7 @@ impl CompiledShapes {
         data: &(impl GraphRead + ?Sized),
         text: &mut String,
         clones: &mut ReportClones,
+        boolean_values: &mut Vec<(Term, crate::ReportTermRole, crate::BooleanObservation)>,
         display: &crate::display::Display<'_, impl GraphRead + ?Sized, impl GraphRead + ?Sized>,
     ) -> Result<()> {
         let shape = &self.shapes[violation.shape];
@@ -46,6 +57,18 @@ impl CompiledShapes {
             (iri(SH, "focusNode"), violation.focus.clone()),
         ] {
             add(report, &result, predicate, object)?;
+        }
+        if let Some(terms) = &violation.observed_terms {
+            for (role, term) in [
+                (crate::ReportTermRole::Focus, &terms.focus),
+                (crate::ReportTermRole::Value, &terms.value),
+            ] {
+                if let Some(term) = term
+                    && let Some(observation) = &term.observation
+                {
+                    boolean_values.push((result.clone(), role, observation.clone()));
+                }
+            }
         }
         clones.copy(&self.graph, report, &shape.node)?;
         if matches!(violation.data_description, DataDescription::Expanded) {
@@ -108,7 +131,8 @@ impl CompiledShapes {
                     }
                 }
             } else {
-                let focus = violation.data_term(&violation.focus, display)?;
+                let focus =
+                    violation.data_term(&violation.focus, crate::ReportTermRole::Focus, display)?;
                 let component = violation
                     .component
                     .as_str()
@@ -329,12 +353,12 @@ impl CompiledShapes {
             violation.component.as_str(),
             display.iri(&shape.severity),
             display.term(&shape.node, true)?,
-            violation.data_term(&violation.focus, display)?
+            violation.data_term(&violation.focus, crate::ReportTermRole::Focus, display)?
         ));
         if let Some(value) = &violation.value {
             text.push_str(&format!(
                 "\tValue Node: {}\n",
-                violation.data_term(value, display)?
+                violation.data_term(value, crate::ReportTermRole::Value, display)?
             ));
         }
         if let Some(path) = violation.printed_path() {
@@ -364,6 +388,7 @@ impl CompiledShapes {
                 data,
                 &mut description,
                 clones,
+                boolean_values,
                 display,
             )?;
             descriptions.push(description);

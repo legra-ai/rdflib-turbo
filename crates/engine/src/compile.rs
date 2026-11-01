@@ -20,6 +20,7 @@ mod tests;
 pub(crate) enum Target {
     Node(Term),
     Class(Term),
+    ImplicitClass(Term),
     Subjects(NamedNode),
     Objects(NamedNode),
     Sparql {
@@ -51,8 +52,16 @@ pub(crate) struct Shape {
     pub severity: NamedNode,
 }
 
+/// Closed DATA representation requirements, established during compilation.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ReadRequirements {
+    SelectedFramesOnly,
+    Indexed,
+}
+
 /// Immutable compiled shapes and SPARQL queries; safe to share across validations.
 pub struct CompiledShapes {
+    read_requirements: ReadRequirements,
     pub(crate) graph: IndexedShapesSource,
     pub(crate) shapes: Vec<Shape>,
     pub(crate) execution_order: Vec<usize>,
@@ -142,7 +151,7 @@ fn lower_target(
     Ok(match target {
         model::Target::Node(node) => Target::Node(node),
         model::Target::Class(class) => Target::Class(class.into()),
-        model::Target::ImplicitClass(class) => Target::Class(class),
+        model::Target::ImplicitClass(class) => Target::ImplicitClass(class),
         model::Target::SubjectsOf(predicate) => Target::Subjects(predicate),
         model::Target::ObjectsOf(predicate) => Target::Objects(predicate),
         model::Target::Sparql(target) => Target::Sparql {
@@ -331,6 +340,12 @@ fn check_vocabulary(
 }
 
 impl CompiledShapes {
+    /// Whether this program can execute against selected ordinary Graph frames.
+    /// Unsupported programs retain their established indexed input representation.
+    pub fn uses_selected_frames_only(&self) -> bool {
+        self.read_requirements == ReadRequirements::SelectedFramesOnly
+    }
+
     /// Shape identities discovered by the shared structural compiler.
     pub fn shape_nodes(&self) -> impl Iterator<Item = &Term> {
         self.shapes.iter().map(|shape| &shape.node)
@@ -654,7 +669,34 @@ impl CompiledShapes {
         }
         let mut execution_order: Vec<_> = (0..shapes.len()).collect();
         execution_order.sort_by(|&a, &b| shapes[a].order.cmp(&shapes[b].order));
+        let selected_frames = !advanced
+            && shapes.iter().all(|shape| {
+                shape.rules.is_empty()
+                    && (shape.path.is_none() || shape.properties.is_empty())
+                    && shape
+                        .constraints
+                        .iter()
+                        .all(|c| matches!(c, Constraint::Count { .. }))
+                    && shape.path.as_ref().is_none_or(|path| {
+                        matches!(path, Path::Predicate(_))
+                            || crate::SelectedPathRef::predicate_sequence(path).is_some()
+                    })
+                    && shape.targets.iter().all(|target| {
+                        matches!(
+                            target,
+                            Target::Node(Term::NamedNode(_) | Term::BlankNode(_))
+                                | Target::Subjects(_)
+                                | Target::Class(_)
+                                | Target::ImplicitClass(_)
+                        )
+                    })
+            });
         Ok(Self {
+            read_requirements: if selected_frames {
+                ReadRequirements::SelectedFramesOnly
+            } else {
+                ReadRequirements::Indexed
+            },
             graph: source,
             shapes,
             execution_order,

@@ -283,3 +283,134 @@ fn transaction_graph_reads_preserve_the_physical_term_identity() {
         .unwrap();
     assert_eq!(observed, GeneralizedQuad::from(physical));
 }
+
+#[test]
+fn abort_finishes_one_component_for_all_focuses_before_stopping() {
+    for (severity, allowed, expected_results) in [
+        ("Violation", false, 2),
+        ("Warning", false, 2),
+        ("Warning", true, 4),
+        ("Info", true, 4),
+    ] {
+        let shapes = crate::IndexedShapesSource::parse_graph(
+            &format!(
+                "@prefix sh:<http://www.w3.org/ns/shacl#>. \
+                 <urn:S> sh:targetNode <urn:a>,<urn:b>;sh:path <urn:p>;\
+                 sh:minCount 2;sh:maxCount 0;sh:severity sh:{severity}."
+            ),
+            RdfFormat::Turtle,
+            None,
+        )
+        .unwrap();
+        let program = CompiledShapes::compile(shapes, false).unwrap();
+        let data = parse(
+            "<urn:a> <urn:p> 'plain'. <urn:b> <urn:p> 'plain'.",
+            RdfFormat::Turtle,
+            None,
+        )
+        .unwrap();
+        let options = Options {
+            abort_on_first: true,
+            allow_infos: allowed,
+            allow_warnings: allowed,
+            ..Options::default()
+        };
+        let store = oxigraph::store::Store::new().unwrap();
+        for quad in &data {
+            store.insert(quad).unwrap();
+        }
+        for report in [
+            program.validate_readonly(&data, options.clone()).unwrap(),
+            program.validate_store(&store, options, false).unwrap(),
+        ] {
+            let components: Vec<_> = report
+                .graph
+                .iter()
+                .filter(|q| q.predicate == iri(SH, "sourceConstraintComponent").as_ref())
+                .map(|q| q.object.into_owned())
+                .collect();
+            assert_eq!(components.len(), expected_results, "{severity}/{allowed}");
+            assert_eq!(report.conforms, allowed);
+            if !allowed {
+                assert!(
+                    components
+                        .iter()
+                        .all(|c| c == &iri(SH, "MinCountConstraintComponent").into())
+                );
+                let focuses: HashSet<_> = report
+                    .graph
+                    .iter()
+                    .filter(|q| q.predicate == iri(SH, "focusNode").as_ref())
+                    .map(|q| q.object.into_owned())
+                    .collect();
+                assert_eq!(focuses.len(), 2);
+            }
+        }
+    }
+}
+
+#[test]
+fn abort_keeps_all_declarations_within_the_failing_component() {
+    let shapes = crate::IndexedShapesSource::parse_graph(
+        "@prefix sh:<http://www.w3.org/ns/shacl#>. \
+         <urn:S> sh:targetNode <urn:a>,<urn:b>;sh:path <urn:p>;\
+         sh:class <urn:C>,<urn:D>;sh:nodeKind sh:IRI.",
+        RdfFormat::Turtle,
+        None,
+    )
+    .unwrap();
+    let program = CompiledShapes::compile(shapes, false).unwrap();
+    let data = parse(
+        "<urn:a> <urn:p> 'plain'. <urn:b> <urn:p> 'plain'.",
+        RdfFormat::Turtle,
+        None,
+    )
+    .unwrap();
+    let report = program
+        .validate_readonly(
+            &data,
+            Options {
+                abort_on_first: true,
+                ..Options::default()
+            },
+        )
+        .unwrap();
+    let components: Vec<_> = report
+        .graph
+        .iter()
+        .filter(|q| q.predicate == iri(SH, "sourceConstraintComponent").as_ref())
+        .map(|q| q.object.into_owned())
+        .collect();
+    assert_eq!(components.len(), 4);
+    assert!(
+        components
+            .iter()
+            .all(|c| c == &iri(SH, "ClassConstraintComponent").into())
+    );
+}
+
+#[test]
+fn selected_focus_existing_layouts_are_observed() {
+    println!(
+        "FOCUS_LAYOUT Evaluation={} EvaluationBatch={} Violation={} ReportTerm={} ReportTerms={} ObservedValues={} ValueSlot={} BooleanObservation={} SelectedSlot={}",
+        std::mem::size_of::<Evaluation>(),
+        std::mem::size_of::<EvaluationBatch>(),
+        std::mem::size_of::<Violation>(),
+        std::mem::size_of::<ReportTerm>(),
+        std::mem::size_of::<ReportTerms>(),
+        std::mem::size_of::<crate::observed_values::ObservedValues>(),
+        std::mem::size_of::<crate::observed_values::ValueSlot<'_>>(),
+        std::mem::size_of::<crate::BooleanObservation>(),
+        std::mem::size_of::<crate::SelectedSlot>()
+    );
+    // The test-only lookup counter adds eight bytes to the 48-byte production holder.
+    assert_eq!(
+        std::mem::size_of::<crate::observed_values::ObservedValues>(),
+        56
+    );
+    assert_eq!(
+        std::mem::size_of::<crate::observed_values::ValueSlot<'_>>(),
+        16
+    );
+    assert_eq!(std::mem::size_of::<crate::BooleanObservation>(), 32);
+}

@@ -104,6 +104,20 @@ fn overlay_rejects_existing_graphs_including_empty_transaction_graphs() {
 struct FallibleTail(std::cell::Cell<bool>);
 
 impl GraphRead for FallibleTail {
+    fn selected_focus_source(&self) -> Option<&dyn crate::SelectedFocusSource> {
+        None
+    }
+    fn selected_value_source(&self) -> Option<&dyn crate::SelectedValueSource> {
+        None
+    }
+
+    fn boolean_object_state(
+        &self,
+        _row: &oxigraph::model::GeneralizedQuad,
+    ) -> crate::Result<Option<crate::BuiltinBooleanState>> {
+        Ok(None)
+    }
+
     fn matching_quads<'a>(
         &'a self,
         subject: Option<TermRef<'_>>,

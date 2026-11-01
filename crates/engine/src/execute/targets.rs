@@ -3,6 +3,17 @@ use std::cmp::Ordering::{Greater, Less};
 use super::*;
 
 impl CompiledShapes {
+    /// Whether active Core class targeting requires independent source authority.
+    pub fn requires_selected_focus(&self) -> bool {
+        self.shapes.iter().any(|shape| {
+            !shape.deactivated
+                && shape
+                    .targets
+                    .iter()
+                    .any(|t| matches!(t, Target::Class(_) | Target::ImplicitClass(_)))
+        })
+    }
+
     /// Inspect targets using the same evaluator as validation and rules.
     /// The caller supplies the default-union view, reusable across calls.
     pub fn shape_focus_nodes(
@@ -59,12 +70,12 @@ impl CompiledShapes {
         evaluation: &mut Evaluation,
     ) -> Result<Vec<Term>> {
         let mut nodes = HashSet::new();
-        for target in &shape.targets {
+        for target in crate::SelectedTargetsRef::new(&shape.targets).native_targets() {
             match target {
                 Target::Node(node) => {
                     nodes.insert(node.clone());
                 }
-                Target::Class(class) => {
+                Target::Class(class) | Target::ImplicitClass(class) => {
                     nodes.extend(evaluation.targets(data, class)?);
                 }
                 Target::Subjects(predicate) => {

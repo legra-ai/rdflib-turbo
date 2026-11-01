@@ -26,7 +26,15 @@ impl Host {
         })
     }
 }
+mod source;
+
 impl ComparisonHost for Host {
+    fn capture_source(
+        &self,
+        py: Python<'_>,
+    ) -> PyResult<shacl_bindings::SourceComparisonInvocation> {
+        source::capture(py, &self.site)
+    }
     fn capture(&self, py: Python<'_>) -> PyResult<ComparisonInvocation> {
         let (context, signals) = LexicalContext::capture_with_publisher(py)?;
         let (warning, warnings) = comparison_warning::capture(py, &self.site)?;

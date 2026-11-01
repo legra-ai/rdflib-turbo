@@ -62,6 +62,21 @@ fn borrowed_cleanup_preserves_source_until_acceptance_and_exact_graph_kinds() {
 fn borrowed_cleanup_never_filters_reader_errors_or_changes_empty_graph_declarations() {
     struct Broken(GeneralizedDataset);
     impl GraphRead for Broken {
+        fn selected_focus_source(&self) -> Option<&dyn pyshacl_turbo_engine::SelectedFocusSource> {
+            None
+        }
+        fn selected_value_source(&self) -> Option<&dyn pyshacl_turbo_engine::SelectedValueSource> {
+            None
+        }
+
+        fn boolean_object_state(
+            &self,
+            _row: &oxigraph::model::GeneralizedQuad,
+        ) -> pyshacl_turbo_engine::Result<Option<pyshacl_turbo_engine::BuiltinBooleanState>>
+        {
+            Ok(None)
+        }
+
         fn matching_quads<'a>(
             &'a self,
             s: Option<TermRef<'_>>,

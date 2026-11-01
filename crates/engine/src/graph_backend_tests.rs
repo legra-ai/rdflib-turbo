@@ -79,6 +79,20 @@ fn indexed_reads_keep_default_and_named_graphs_distinct() {
 struct FailingGraph;
 
 impl GraphRead for FailingGraph {
+    fn selected_focus_source(&self) -> Option<&dyn crate::SelectedFocusSource> {
+        None
+    }
+    fn selected_value_source(&self) -> Option<&dyn crate::SelectedValueSource> {
+        None
+    }
+
+    fn boolean_object_state(
+        &self,
+        _row: &oxigraph::model::GeneralizedQuad,
+    ) -> crate::Result<Option<crate::BuiltinBooleanState>> {
+        Ok(None)
+    }
+
     fn matching_quads<'a>(
         &'a self,
         _: Option<TermRef<'_>>,

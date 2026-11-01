@@ -6,15 +6,26 @@ impl CompiledShapes {
         &self,
         index: usize,
         focus: &Term,
-        values: &[Term],
+        values: &crate::observed_values::ObservedValues,
         data: &(impl GraphRead + ?Sized),
         constraint: &Constraint,
         results: &mut Vec<Violation>,
         evaluation: &mut Evaluation,
+        focus_observation: Option<&crate::BooleanObservation>,
     ) -> Result<()> {
         let shape = &self.shapes[index];
-        let violation =
-            |component, value: Option<&Term>| Violation::new(index, shape, focus, component, value);
+        let violation = |component,
+                         value: Option<crate::observed_values::ValueSlot<'_>>|
+         -> Result<Violation> {
+            Violation::new(
+                index,
+                shape,
+                focus,
+                component,
+                value.map(|slot| slot.term()),
+            )
+            .with_observations(focus_observation, value.and_then(|slot| slot.observation()))
+        };
         match constraint {
             Constraint::Count { minimum, count } => {
                 if !count.allows(values.len(), *minimum) {
@@ -25,30 +36,32 @@ impl CompiledShapes {
                             "MaxCountConstraintComponent"
                         },
                         None,
-                    ));
+                    )?);
                 }
             }
             Constraint::HasValue(required) => {
                 if !values.contains(required) {
-                    results.push(violation("HasValueConstraintComponent", None));
+                    results.push(violation("HasValueConstraintComponent", None)?);
                 }
             }
             Constraint::Class(class) => {
-                for value in values {
+                for slot in values.slots() {
+                    let value = slot.term();
                     if !evaluation.is_instance(data, value, class)? {
-                        results.push(violation("ClassConstraintComponent", Some(value)));
+                        results.push(violation("ClassConstraintComponent", Some(slot))?);
                     }
                 }
             }
             Constraint::Datatype(datatype) => {
-                for value in values {
-                    if !crate::value::datatype(value, datatype) {
-                        results.push(violation("DatatypeConstraintComponent", Some(value)));
+                for slot in values.slots() {
+                    if !slot.datatype(datatype)? {
+                        results.push(violation("DatatypeConstraintComponent", Some(slot))?);
                     }
                 }
             }
             Constraint::NodeKind(kind) => {
-                for value in values {
+                for slot in values.slots() {
+                    let value = slot.term();
                     let valid = match value {
                         Term::NamedNode(_) => {
                             ["IRI", "BlankNodeOrIRI", "IRIOrLiteral"].contains(&kind.as_str())
@@ -59,30 +72,32 @@ impl CompiledShapes {
                             .contains(&kind.as_str()),
                     };
                     if !valid {
-                        results.push(violation("NodeKindConstraintComponent", Some(value)));
+                        results.push(violation("NodeKindConstraintComponent", Some(slot))?);
                     }
                 }
             }
             Constraint::SingleLine => {
-                for value in values {
+                for slot in values.slots() {
+                    let value = slot.term();
                     if let Term::Literal(literal) = value
                         && literal
                             .value()
                             .bytes()
                             .any(|byte| (b'\n'..=b'\r').contains(&byte))
                     {
-                        results.push(violation("SingleLineConstraintComponent", Some(value)));
+                        results.push(violation("SingleLineConstraintComponent", Some(slot))?);
                     }
                 }
             }
             Constraint::Pattern(regex) => {
-                for value in values {
+                for slot in values.slots() {
+                    let value = slot.term();
                     let valid = crate::value::lexical(value)
                         .map(|text| regex.is_match(text))
                         .transpose()?
                         .unwrap_or(false);
                     if !valid {
-                        results.push(violation("PatternConstraintComponent", Some(value)));
+                        results.push(violation("PatternConstraintComponent", Some(slot))?);
                     }
                 }
             }
@@ -92,7 +107,8 @@ impl CompiledShapes {
                 component,
                 query,
             } => {
-                for value in values {
+                for slot in values.slots() {
+                    let value = slot.term();
                     if !crate::value::compare(
                         &evaluation.comparison,
                         crate::ComparisonRole::Range,
@@ -102,7 +118,7 @@ impl CompiledShapes {
                         value,
                         bound,
                     )? {
-                        results.push(violation(component, Some(value)).with_comparison(
+                        results.push(violation(component, Some(slot))?.with_comparison(
                             ComparisonMessage::Range {
                                 operator: *operator,
                                 bound: bound.clone(),
@@ -112,7 +128,8 @@ impl CompiledShapes {
                 }
             }
             Constraint::Length { minimum, count } => {
-                for value in values {
+                for slot in values.slots() {
+                    let value = slot.term();
                     let valid = (*minimum && count.is_zero())
                         || crate::value::lexical(value)
                             .is_some_and(|s| count.allows(s.chars().count(), *minimum));
@@ -123,13 +140,14 @@ impl CompiledShapes {
                             } else {
                                 "MaxLengthConstraintComponent"
                             },
-                            Some(value),
-                        ));
+                            Some(slot),
+                        )?);
                     }
                 }
             }
             Constraint::LanguageIn(ranges) => {
-                for value in values {
+                for slot in values.slots() {
+                    let value = slot.term();
                     let valid = if let Term::Literal(l) = value {
                         l.language().is_some_and(|lang| {
                             ranges.iter().any(|r| {
@@ -144,14 +162,15 @@ impl CompiledShapes {
                         false
                     };
                     if !valid {
-                        results.push(violation("LanguageInConstraintComponent", Some(value)));
+                        results.push(violation("LanguageInConstraintComponent", Some(slot))?);
                     }
                 }
             }
             Constraint::UniqueLang => {
                 let mut seen = HashSet::new();
                 let mut repeated = HashSet::new();
-                for value in values {
+                for slot in values.slots() {
+                    let value = slot.term();
                     if let Term::Literal(l) = value
                         && let Some(lang) = l.language()
                         && !seen.insert(lang)
@@ -160,13 +179,14 @@ impl CompiledShapes {
                     }
                 }
                 for _ in repeated {
-                    results.push(violation("UniqueLangConstraintComponent", None));
+                    results.push(violation("UniqueLangConstraintComponent", None)?);
                 }
             }
             Constraint::In(allowed) => {
-                for value in values {
+                for slot in values.slots() {
+                    let value = slot.term();
                     if !allowed.contains(value) {
-                        results.push(violation("InConstraintComponent", Some(value)));
+                        results.push(violation("InConstraintComponent", Some(slot))?);
                     }
                 }
             }

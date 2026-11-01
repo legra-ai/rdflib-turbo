@@ -33,12 +33,39 @@ impl CompiledShapes {
         options: Options,
         warnings: Vec<String>,
     ) -> Result<ValidationReport> {
+        let union = UnionGraph::new(data);
+        self.validate_view(&union, data, options, warnings)
+    }
+
+    /// Validate one actual non-context source without union representative rereads.
+    /// Only the compiler's selected-frame catalog is admitted; no rules can run.
+    pub fn validate_selected_graph(
+        &self,
+        data: &(impl GraphRead + ?Sized),
+        options: Options,
+    ) -> Result<ValidationReport> {
+        if !self.uses_selected_frames_only() || options.max_rule_iterations == 0 {
+            return Err(Error::Invalid(
+                "Program requires indexed DATA validation".into(),
+            ));
+        }
+        let view = crate::ScopedGraph::new(data, GraphName::DefaultGraph);
+        self.validate_view(&view, data, options, Vec::new())
+    }
+
+    fn validate_view(
+        &self,
+        data: &(impl GraphRead + ?Sized),
+        display_data: &(impl GraphRead + ?Sized),
+        options: Options,
+        warnings: Vec<String>,
+    ) -> Result<ValidationReport> {
         let mut evaluation = Evaluation::new(options.max_validation_depth);
         evaluation.warnings = warnings;
         evaluation.comparison = options.comparison.clone();
-        let display_data = data;
-        let union = UnionGraph::new(data);
-        let data = &union;
+        evaluation.abort = options
+            .abort_on_first
+            .then_some((options.allow_infos, options.allow_warnings));
         evaluation.functions = self.functions.clone();
         let mut violations = Vec::new();
         for &index in &self.execution_order {
@@ -49,9 +76,46 @@ impl CompiledShapes {
             if shape.deactivated {
                 continue;
             }
-            let focus_nodes = self.selected_focus_nodes(shape, data, &options, &mut evaluation)?;
-            self.evaluate_batch(index, &focus_nodes, data, &mut violations, &mut evaluation)?;
-            if options.abort_on_first && !violations.is_empty() {
+            let targets = crate::SelectedTargetsRef::new(&shape.targets);
+            let source_focus = if options.use_shapes.is_empty() || options.focus_nodes.is_empty() {
+                if targets.is_core()
+                    && (targets.classes().next().is_some()
+                        || targets.implicit_classes().next().is_some())
+                {
+                    data.selected_focus_source()
+                        .map(|source| {
+                            source.acquire_focus(
+                                targets,
+                                (!options.focus_nodes.is_empty())
+                                    .then_some(options.focus_nodes.as_slice()),
+                            )
+                        })
+                        .transpose()?
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            let lexical_focus;
+            let focus_nodes = if let Some(batch) = &source_focus {
+                batch.words()
+            } else {
+                lexical_focus =
+                    self.selected_focus_nodes(shape, data, &options, &mut evaluation)?;
+                &lexical_focus
+            };
+            self.evaluate_batch(
+                index,
+                focus_nodes,
+                data,
+                &mut violations,
+                &mut evaluation,
+                None,
+                source_focus.as_ref(),
+            )?;
+            drop(source_focus);
+            if self.should_abort(&violations, &evaluation) {
                 break;
             }
         }
@@ -97,6 +161,7 @@ impl CompiledShapes {
         };
         let mut clones = ReportClones::default();
         let mut descriptions = Vec::new();
+        let mut boolean_values = Vec::new();
         for violation in violations {
             let mut description = String::new();
             self.write_result(
@@ -107,6 +172,7 @@ impl CompiledShapes {
                 data,
                 &mut description,
                 &mut clones,
+                &mut boolean_values,
                 &display,
             )?;
             descriptions.push(description);
@@ -120,6 +186,7 @@ impl CompiledShapes {
             graph: report,
             text,
             recursion_warnings,
+            boolean_values,
         })
     }
 }

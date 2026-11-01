@@ -62,6 +62,10 @@ impl Signals {
             .fetch_or(Signal::FloatOperation.bit(), Ordering::Relaxed);
     }
 
+    fn drain(&self) -> u16 {
+        self.0.swap(0, Ordering::AcqRel)
+    }
+
     pub(super) fn snapshot(&self) -> u16 {
         self.0.load(Ordering::Relaxed)
     }
@@ -108,6 +112,20 @@ impl SignalPublisher {
     pub(crate) fn complete<T>(self, py: Python<'_>, result: crate::Result<T>) -> PyResult<T> {
         self.publish(py)?;
         result.map_err(crate::error)
+    }
+
+    /// Only an invocation checkpoint with all current producers paused may drain.
+    pub(crate) fn checkpoint(&self, py: Python<'_>) -> PyResult<()> {
+        self.publish_bits(py, self.signals.drain())
+    }
+
+    fn publish_bits(&self, py: Python<'_>, bits: u16) -> PyResult<()> {
+        for (signal, class) in Signal::ALL.into_iter().zip(&self.classes) {
+            if bits & signal.bit() != 0 {
+                self.flags.bind(py).set_item(class, true)?;
+            }
+        }
+        Ok(())
     }
 
     pub(crate) fn publish(&self, py: Python<'_>) -> PyResult<()> {

@@ -18,6 +18,8 @@ mod focus_order;
 mod report_overlap;
 #[path = "allocation_report_retirement_tests.rs"]
 mod report_retirement;
+#[path = "allocation_selected_observation_tests.rs"]
+mod selected_observations;
 #[path = "allocation_trace_tests.rs"]
 pub(crate) mod trace;
 

@@ -62,6 +62,8 @@ pub struct ValidationReport {
     pub graph: Dataset,
     pub text: String,
     pub recursion_warnings: Vec<String>,
+    /// Direct SH.value occurrences keyed by generated result subject.
+    pub boolean_values: Vec<(Term, crate::ReportTermRole, crate::BooleanObservation)>,
 }
 
 /// A validation report and only the rules that would be newly inserted.
@@ -92,6 +94,8 @@ struct Evaluation {
     warnings: Vec<String>,
     batch: Option<EvaluationBatch>,
     comparison: crate::CoreComparisonPolicy,
+    // None preserves complete evaluation; Some carries allowed severity policy.
+    abort: Option<(bool, bool)>,
 }
 
 #[derive(Clone, Copy)]
@@ -118,6 +122,16 @@ struct Violation {
     source_constraint: Option<Term>,
     messages: Option<Vec<Term>>,
     comparison: Option<ComparisonMessage>,
+    observed_terms: Option<Box<ReportTerms>>,
+}
+
+struct ReportTerm {
+    observation: Option<crate::BooleanObservation>,
+    presentation: Option<String>,
+}
+struct ReportTerms {
+    focus: Option<ReportTerm>,
+    value: Option<ReportTerm>,
 }
 
 enum ComparisonMessage {
@@ -162,7 +176,34 @@ impl Violation {
             source_constraint: None,
             messages: None,
             comparison: None,
+            observed_terms: None,
         }
+    }
+
+    fn with_observations(
+        mut self,
+        focus: Option<&crate::BooleanObservation>,
+        value: Option<&crate::BooleanObservation>,
+    ) -> Result<Self> {
+        let present = |observation: &crate::BooleanObservation, role| -> Result<ReportTerm> {
+            // This event belongs to this occurrence, including discarded child
+            // reports. The retained owner/token remains a separate codec authority.
+            let presentation = observation.present(role)?;
+            Ok(ReportTerm {
+                observation: observation.for_report()?,
+                presentation,
+            })
+        };
+        let focus = focus
+            .map(|o| present(o, crate::ReportTermRole::Focus))
+            .transpose()?;
+        let value = value
+            .map(|o| present(o, crate::ReportTermRole::Value))
+            .transpose()?;
+        if focus.is_some() || value.is_some() {
+            self.observed_terms = Some(Box::new(ReportTerms { focus, value }));
+        }
+        Ok(self)
     }
 
     fn with_comparison(mut self, comparison: ComparisonMessage) -> Self {

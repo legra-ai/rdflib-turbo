@@ -13,6 +13,7 @@ impl Evaluation {
             warnings: Vec::new(),
             batch: None,
             comparison: crate::CoreComparisonPolicy::default(),
+            abort: None,
         }
     }
 
@@ -41,19 +42,21 @@ impl Evaluation {
         path: &Path,
         data: &(impl GraphRead + ?Sized),
         focus: &Term,
-    ) -> Result<Vec<Term>> {
-        if matches!(path, Path::Predicate(_)) {
-            return path.values(data, focus);
+    ) -> Result<crate::observed_values::ObservedValues> {
+        if let Path::Predicate(predicate) = path {
+            return crate::observed_values::ObservedValues::predicate(data, focus, predicate);
         }
         let key = (path.clone(), focus.clone());
         if let Some(values) = self.path_values.get(&key) {
-            return Ok(values.clone());
+            return Ok(crate::observed_values::ObservedValues::lexical(
+                values.clone(),
+            ));
         }
         let values = path.values(data, focus)?;
         if self.reserve_traversal(values.len()) {
             self.path_values.insert(key, values.clone());
         }
-        Ok(values)
+        Ok(crate::observed_values::ObservedValues::lexical(values))
     }
 
     pub(super) fn is_instance(

@@ -29,6 +29,9 @@
 //!
 //! See also [`Graph`] if you only care about plain triples.
 
+#[path = "dataset_lease.rs"]
+mod lease;
+pub use lease::{DatasetLeaseBuilder,DatasetQuadLease,InsertionQuadLease,FrozenDataset,DatasetLeaseError};
 use self::indexes::*;
 use crate::interning::*;
 use std::sync::Arc;

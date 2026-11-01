@@ -2,6 +2,76 @@ use super::*;
 use oxigraph::io::RdfFormat;
 use oxigraph::store::Store;
 
+#[derive(Debug)]
+struct BaseCallbacks {
+    rows: Dataset,
+}
+
+impl crate::SelectedValueSource for BaseCallbacks {
+    fn begin_frame(&self) -> Result<std::sync::Arc<dyn crate::SelectedValueFrame>> {
+        Err(Error::Invalid(
+            "Base callback cannot read rule additions".into(),
+        ))
+    }
+}
+
+impl GraphRead for BaseCallbacks {
+    fn selected_focus_source(&self) -> Option<&dyn crate::SelectedFocusSource> {
+        None
+    }
+
+    fn selected_value_source(&self) -> Option<&dyn crate::SelectedValueSource> {
+        Some(self)
+    }
+
+    fn boolean_object_state(
+        &self,
+        _row: &GeneralizedQuad,
+    ) -> Result<Option<crate::BuiltinBooleanState>> {
+        Ok(None)
+    }
+
+    fn matching_quads<'a>(
+        &'a self,
+        subject: Option<TermRef<'_>>,
+        predicate: Option<TermRef<'_>>,
+        object: Option<TermRef<'_>>,
+        graph: Option<GraphNameRef<'_>>,
+    ) -> impl Iterator<Item = Result<GeneralizedQuad>> + use<'a> {
+        self.rows.matching_quads(subject, predicate, object, graph)
+    }
+
+    fn named_graphs(&self) -> impl Iterator<Item = Result<NamedOrBlankNode>> + '_ {
+        self.rows.named_graphs()
+    }
+
+    fn contains_named_graph(&self, graph: &NamedOrBlankNode) -> Result<bool> {
+        self.rows.contains_named_graph(graph)
+    }
+}
+
+#[test]
+fn rule_additions_are_validated_against_the_enlarged_relation() {
+    let shapes = crate::IndexedShapesSource::parse_graph(
+        r#"@prefix sh: <http://www.w3.org/ns/shacl#> .
+        <urn:S> sh:targetNode <urn:s>;
+          sh:rule [a sh:TripleRule; sh:subject sh:this;
+            sh:predicate <urn:derived>; sh:object "value"];
+          sh:property [sh:path <urn:derived>; sh:minCount 1]."#,
+        RdfFormat::Turtle,
+        None,
+    )
+    .unwrap();
+    let program = CompiledShapes::compile(shapes, true).unwrap();
+    let source = BaseCallbacks {
+        rows: Dataset::new(),
+    };
+    let outcome = program.validate_delta(&source, Options::default()).unwrap();
+    assert!(outcome.report.conforms);
+    assert_eq!(outcome.additions.len(), 1);
+    assert!(source.rows.is_empty());
+}
+
 #[test]
 fn readonly_validation_uses_pending_named_graph_changes_and_borrowed_shapes_overlay() {
     let shapes = crate::IndexedShapesSource::parse_graph(r#"@prefix sh: <http://www.w3.org/ns/shacl#> .
@@ -123,6 +193,20 @@ fn staged_validation_retains_only_rule_additions_and_does_not_change_pending_inp
 struct IndexedOnly<'source, G: GraphRead + ?Sized>(&'source G);
 
 impl<'source, G: GraphRead + ?Sized> GraphRead for IndexedOnly<'source, G> {
+    fn selected_focus_source(&self) -> Option<&dyn crate::SelectedFocusSource> {
+        None
+    }
+    fn selected_value_source(&self) -> Option<&dyn crate::SelectedValueSource> {
+        None
+    }
+
+    fn boolean_object_state(
+        &self,
+        _row: &oxigraph::model::GeneralizedQuad,
+    ) -> crate::Result<Option<crate::BuiltinBooleanState>> {
+        Ok(None)
+    }
+
     fn matching_quads<'a>(
         &'a self,
         subject: Option<TermRef<'_>>,

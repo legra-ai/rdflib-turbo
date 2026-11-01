@@ -68,6 +68,8 @@ pub use value::comparison::{
 pub enum Error {
     #[error(transparent)]
     Comparison(#[from] ComparisonFailure),
+    #[error("Selected source operation interrupted")]
+    SelectedSourceInterrupted,
     #[error("SHACL validation failure: {0}")]
     ValidationFailure(String),
     #[error("{message}\nFor reference, see {link}")]
@@ -93,3 +95,21 @@ pub enum Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+mod boolean_state;
+pub use boolean_state::BuiltinBooleanState;
+mod observed_values;
+
+mod selected_focus_frame;
+pub use selected_focus_frame::{
+    SelectedFocusBatch, SelectedFocusFrame, SelectedFocusSlot, SelectedFocusSource,
+    SelectedSubjectRef,
+};
+mod selected_focus;
+pub use selected_focus::SelectedTargetsRef;
+
+mod selected_values;
+pub use selected_values::{
+    BooleanObservation, ReportTermRole, SelectedLiteral, SelectedLiteralOwner, SelectedPathRef,
+    SelectedSlot, SelectedTerm, SelectedValueFrame, SelectedValueSource,
+};
