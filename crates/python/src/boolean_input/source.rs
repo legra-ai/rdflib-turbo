@@ -109,6 +109,7 @@ impl<'py> Factories<'py> {
         nodes: Option<&Bound<'py, PyDict>>,
         context: bool,
         default: Option<&Bound<'py, PyAny>>,
+        graph_class: Option<&Bound<'py, PyAny>>,
         flatten: bool,
     ) -> PyResult<Row> {
         let mut row = row.try_iter()?;
@@ -117,7 +118,14 @@ impl<'py> Factories<'py> {
         let p = row.next().ok_or_else(missing)??;
         let o = row.next().ok_or_else(missing)??;
         let graph = if context {
-            Some(row.next().ok_or_else(missing)??)
+            let graph = row.next().ok_or_else(missing)??;
+            Some(
+                if graph.is_instance(graph_class.expect("context graph class"))? {
+                    graph.getattr("identifier")?
+                } else {
+                    graph
+                },
+            )
         } else {
             None
         };

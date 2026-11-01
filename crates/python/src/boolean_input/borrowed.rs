@@ -90,7 +90,7 @@ impl Iterator for Cursor {
                 .next()
                 .map(|row| {
                     factories
-                        .quad(&row?, None, false, None, false)
+                        .quad(&row?, None, false, None, None, false)
                         .map(|row| row.quad.into())
                 })
                 .transpose()

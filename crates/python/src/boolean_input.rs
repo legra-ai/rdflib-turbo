@@ -95,10 +95,23 @@ impl BooleanInput {
                 canonical_booleans: false,
             });
         }
-        let default = if context_aware {
-            Some(source.getattr("default_graph")?.getattr("identifier")?)
+        let (default, context_graph_class) = if context_aware {
+            let rdflib = py.import("rdflib")?;
+            // Dataset and its legacy base expose distinct default-graph APIs.
+            // Select by the actual type, never by swallowing a getter failure.
+            let attribute = if source.is_instance(&rdflib.getattr("ConjunctiveGraph")?)?
+                && !source.is_instance(&rdflib.getattr("Dataset")?)?
+            {
+                "default_context"
+            } else {
+                "default_graph"
+            };
+            (
+                Some(source.getattr(attribute)?.getattr("identifier")?),
+                Some(rdflib.getattr("Graph")?),
+            )
         } else {
-            None
+            (None, None)
         };
         let rows = if context_aware {
             source.call_method0("quads")?
@@ -119,6 +132,7 @@ impl BooleanInput {
                     Some(nodes),
                     context_aware,
                     default.as_ref(),
+                    context_graph_class.as_ref(),
                     flatten,
                 )?);
             }

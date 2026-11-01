@@ -69,6 +69,28 @@ fn compiled_literal_operands_preserve_their_native_lexical_domain() {
         }
     });
 }
+
+#[test]
+fn legacy_conjunctive_input_keeps_default_and_named_graphs_distinct() {
+    Python::initialize();
+    Python::attach(|py| {
+        let (input, _) = input(
+            py,
+            c"from rdflib import ConjunctiveGraph,URIRef,BNode,Literal
+graph=ConjunctiveGraph()
+graph.default_context.add((URIRef('urn:s'),URIRef('urn:default'),Literal('value')))
+graph.get_context(URIRef('urn:named')).add((URIRef('urn:s'),URIRef('urn:named-p'),Literal('value')))",
+        );
+        let data = input.data.unwrap();
+        assert_eq!(data.len(), 2);
+        assert!(
+            data.iter()
+                .any(|q| q.predicate.as_str() == "urn:default" && q.graph_name.is_default_graph())
+        );
+        assert!(data.iter().any(|q| q.predicate.as_str() == "urn:named-p"
+            && q.graph_name == GraphNameRef::NamedNode(NamedNodeRef::new_unchecked("urn:named"))));
+    });
+}
 #[test]
 fn selected_membership_is_not_required_to_equal_raw_membership() {
     Python::initialize();
