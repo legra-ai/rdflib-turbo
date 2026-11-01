@@ -48,10 +48,19 @@ impl<G: GraphRead + ?Sized> GraphWrite for RuleDelta<'_, G> {
 
 impl<'source, G: GraphRead + ?Sized> GraphRead for RuleDelta<'source, G> {
     fn selected_focus_source(&self) -> Option<&dyn crate::SelectedFocusSource> {
-        self.source.selected_focus_source()
+        // Source callbacks describe the base, not a relation enlarged by rules.
+        if self.additions.is_empty() {
+            self.source.selected_focus_source()
+        } else {
+            None
+        }
     }
     fn selected_value_source(&self) -> Option<&dyn crate::SelectedValueSource> {
-        self.source.selected_value_source()
+        if self.additions.is_empty() {
+            self.source.selected_value_source()
+        } else {
+            None
+        }
     }
 
     fn boolean_object_state(
