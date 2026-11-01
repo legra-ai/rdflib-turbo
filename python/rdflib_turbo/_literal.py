@@ -1,7 +1,9 @@
 """Restore the state of native literals without repeating plain-string conversion."""
 
-from rdflib import Graph, Literal, URIRef
+from rdflib import BNode, Graph, Literal, URIRef
 from rdflib.namespace import SH
+
+from ._literal_blank import describe as _describe_blank
 
 
 def restore(lexical, datatype, language):
@@ -31,7 +33,7 @@ def restore_boolean(lexical, cached_value, assessment):
     return literal
 
 
-def _selected_stringify(graph, node, namespace_manager=None):
+def _selected_stringify(graph, node, namespace_manager=None, *, _recursion=0, _cache=None):
     """The selected Literal/IRI report consumer, independent of restoration."""
     manager = graph.namespace_manager if namespace_manager is None else namespace_manager
     if isinstance(manager, Graph):
@@ -44,6 +46,15 @@ def _selected_stringify(graph, node, namespace_manager=None):
             return node.n3(namespace_manager=manager)
         except Exception:
             return str(node)
+    if isinstance(node, BNode):
+        return _describe_blank(
+            graph,
+            node,
+            manager,
+            _recursion + 1,
+            {} if _cache is None else _cache,
+            _selected_stringify,
+        )
     if not isinstance(node, Literal):
         # This branch is only a dynamically returned datatype, not a new
         # admission decision about the acquired selected Literal's class.
