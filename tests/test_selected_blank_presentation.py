@@ -14,7 +14,9 @@ def fixture(kind):
     graph = Dataset() if kind == "dataset" else Graph()
     graph.bind("ex", EX)
     target = graph.graph(EX.context) if kind == "dataset" else graph
-    root = BNode("root")
+    # The reference's process cache uses graph id and blank-node label. Fresh
+    # labels keep independently allocated fixtures from sharing stale entries.
+    root = BNode()
     if kind == "list":
         Collection(target, root, [Literal("z"), Literal("a"), EX.value])
     elif kind == "cycle":
