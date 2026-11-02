@@ -282,6 +282,30 @@ def locked_python_environment(root, output, python, yaml_authority):
             raise RuntimeError("Installed YAML changed during native source tests")
 
 
+def facade_reference_requirement(wheel):
+    """Select the exact reference from the original facade's test-extra metadata."""
+    with zipfile.ZipFile(wheel) as archive:
+        metadata = [n for n in archive.namelist() if n.endswith(".dist-info/METADATA")]
+        if len(metadata) != 1:
+            raise ValueError("Facade must declare one exact test reference")
+        fields = Parser().parsestr(archive.read(metadata[0]).decode())
+    requirements = [
+        requirement
+        for requirement in fields.get_all("Requires-Dist", [])
+        if re.match(r"pyshacl(?:\[|[<>=!~;\s]|$)", requirement, re.IGNORECASE)
+    ]
+    if len(requirements) != 1:
+        raise ValueError("Facade must declare one exact test reference")
+    match = re.fullmatch(
+        r"(pyshacl(?:\[oxigraph\])?==[0-9]+(?:\.[0-9]+){2})\s*;\s*extra\s*==\s*['\"]test['\"]",
+        requirements[0],
+        re.IGNORECASE,
+    )
+    if match is None:
+        raise ValueError("Facade must declare one exact test reference")
+    return match[1]
+
+
 def facade_payload(wheel):
     """Require a universal facade and retain hashes for every package payload."""
     with zipfile.ZipFile(wheel) as archive:
@@ -527,7 +551,12 @@ def install_python_cohort(
         for wheel in (native_wheel, facade_wheel, owlrl_wheel, yaml_wheel)
         if wheel is not None
     ]
-    run(["uv", "add", "--project", project, "--no-sync", *installation], environment)
+    reference = [facade_reference_requirement(facade_wheel)] if facade_wheel else []
+    extras = ["--extra", "test"] if facade_wheel else []
+    run(
+        ["uv", "add", "--project", project, "--no-sync", *extras, *reference, *installation],
+        environment,
+    )
     run(["uv", "sync", "--project", project, "--locked", "--no-build"], environment)
 
 

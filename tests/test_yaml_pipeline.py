@@ -22,9 +22,20 @@ def test_collector_installs_yaml_in_the_single_no_build_transaction(tmp_path, mo
     paths = [tmp_path / name for name in ("project", "native", "shacl", "owl", "yaml")]
     commands = []
     monkeypatch.setattr(module, "run", lambda args, environment: commands.append(args))
+    monkeypatch.setattr(module, "facade_reference_requirement", lambda wheel: "pyshacl==0.40.2")
     module.install_python_cohort(*paths, {})
     assert commands == [
-        ["uv", "add", "--project", paths[0], "--no-sync", *paths[1:]],
+        [
+            "uv",
+            "add",
+            "--project",
+            paths[0],
+            "--no-sync",
+            "--extra",
+            "test",
+            "pyshacl==0.40.2",
+            *paths[1:],
+        ],
         ["uv", "sync", "--project", paths[0], "--locked", "--no-build"],
     ]
 
@@ -81,6 +92,11 @@ def test_wheel_driver_binds_same_yaml_wheel_and_checks_authority_after_suite(tmp
     authority = tmp_path / "yaml-inputs.json"
     checks, commands = [], []
     monkeypatch.setattr(module, "require_facade_wheel", lambda path: path)
+    monkeypatch.setattr(
+        module,
+        "facade_checker",
+        lambda: SimpleNamespace(facade_reference_requirement=lambda wheel: "pyshacl==0.40.2"),
+    )
     monkeypatch.setattr(module, "require_owlrl_wheel", lambda path: path)
     monkeypatch.setattr(module, "verify_metadata", lambda path: None)
     monkeypatch.setattr(module, "verify_licenses", lambda path: None)

@@ -26,3 +26,11 @@ including its unchanged full-report regressions. Its independently retained
 release-lock declaration remains a separate authority. Candidate results do not
 establish public registry availability; the facade must require an independently
 verified published provider before adopting this behavior in a release.
+
+The older immutable declaration's dependency export remains the bootstrap input,
+not the current reference authority. At artifact installation, read the one exact
+pySHACL test-extra requirement from the actual facade wheel METADATA and bind it
+in the same native uv add transaction as all original wheels. Enable their test
+extras explicitly. Missing, ranged or ambiguous reference declarations fail
+before installation. Preserve the bootstrap export and each stage's actual uv
+lock independently, including the reference change between Rust and facade tests.

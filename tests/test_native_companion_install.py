@@ -25,9 +25,20 @@ def test_all_three_original_wheels_are_bound_before_the_one_sync(tmp_path, monke
     ]
     commands = []
     monkeypatch.setattr(module, "run", lambda args, environment: commands.append(list(args)))
+    monkeypatch.setattr(module, "facade_reference_requirement", lambda wheel: "pyshacl==0.40.2")
     module.install_python_cohort(*paths, {})
     assert len(commands) == 2
-    assert commands[0] == ["uv", "add", "--project", paths[0], "--no-sync", *paths[1:]]
+    assert commands[0] == [
+        "uv",
+        "add",
+        "--project",
+        paths[0],
+        "--no-sync",
+        "--extra",
+        "test",
+        "pyshacl==0.40.2",
+        *paths[1:],
+    ]
     assert commands[1] == ["uv", "sync", "--project", paths[0], "--locked", "--no-build"]
 
 

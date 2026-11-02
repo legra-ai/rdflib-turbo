@@ -40,6 +40,8 @@ def wheel(path, requirement="rdflib>=7.3,<8", *, name="rdflib-turbo", extra=None
         f"{package}-0.0.0.dist-info/RECORD": b"",
     }
     if name == "pyshacl-turbo":
+        metadata = f"{package}-0.0.0.dist-info/METADATA"
+        members[metadata] += b"Requires-Dist: pyshacl[oxigraph]==0.40.2; extra == 'test'\n"
         members.update(
             {
                 "pyshacl_turbo/__init__.py": b"facade\n",
