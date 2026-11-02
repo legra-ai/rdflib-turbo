@@ -116,6 +116,10 @@ impl SelectedReport {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "selected_report_tests.rs"]
+mod tests;
 #[pymethods]
 impl SelectedReport {
     fn __traverse__(&self, visit: PyVisit<'_>) -> std::result::Result<(), PyTraverseError> {
