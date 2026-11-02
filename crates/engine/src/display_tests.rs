@@ -272,7 +272,7 @@ fn empty_blank_description_has_one_interior_space() {
         shapes: &graph,
     };
     let empty: Term = BlankNode::new("empty").unwrap().into();
-    assert_eq!(display.term(&empty, false).unwrap(), "[ ]");
+    assert_eq!(display.term(&empty, false).unwrap(), "empty");
     assert_eq!(display.term(&empty, true).unwrap(), "[ ]");
 }
 
@@ -327,7 +327,9 @@ fn deep_and_cyclic_blank_descriptions_share_the_reference_frame_limit() {
                 data: &graph,
                 shapes: &graph,
             };
-            let (frames, tail) = if cyclic || length > 6 {
+            let (frames, tail) = if !cyclic && length == 1 {
+                (0, "n0")
+            } else if cyclic || length > 6 {
                 (6, "<http://recursion.too.deep>")
             } else {
                 (length - 1, "[ ]")
@@ -369,4 +371,26 @@ fn recursive_collection_items_use_the_reference_description_limit() {
         " )".repeat(6)
     );
     assert_eq!(display.term(&head, false).unwrap(), expected);
+}
+
+#[test]
+fn absent_data_blank_uses_identity_but_shapes_keep_empty_description() {
+    let data = Dataset::new();
+    let mut shapes = Dataset::new();
+    let absent: Term = BlankNode::new("absent-focus").unwrap().into();
+    add(
+        &mut shapes,
+        &iri("urn:", "shape").into(),
+        iri(SH, "targetNode"),
+        absent.clone(),
+    )
+    .unwrap();
+    let display = Display {
+        shape_namespaces: Vec::new(),
+        data_namespaces: Vec::new(),
+        data: &data,
+        shapes: &shapes,
+    };
+    assert_eq!(display.term(&absent, false).unwrap(), "absent-focus");
+    assert_eq!(display.term(&absent, true).unwrap(), "[ ]");
 }
