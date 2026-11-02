@@ -424,3 +424,19 @@ def test_native_union_required_names_match_actual_compiled_inventory(vendor_memo
     assert set(vendor_memory_tests.REQUIRED_TESTS) <= set(actual["native_exact"])
     assert vendor_memory_tests.UNION_BUDGET in actual["native_exact"]
     assert vendor_memory_tests.UNION_BUDGET not in actual["native_standard"]
+
+
+def test_persistence_contract_keeps_its_own_locked_graph():
+    root = Path(__file__).resolve().parents[1]
+    arguments = [
+        "cargo",
+        "metadata",
+        "--offline",
+        "--locked",
+        "--manifest-path",
+        str(root / "tests/store-contract/Cargo.toml"),
+        "--format-version=1",
+        "--features",
+        "persistence",
+    ]
+    subprocess.run(arguments, cwd=root, check=True, capture_output=True)
