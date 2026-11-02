@@ -13,6 +13,13 @@ use crate::{Error, Result};
 
 pub(super) struct CompiledRule(PreparedSparqlQuery, ReadPredicates);
 
+#[cfg(test)]
+#[path = "shared_noop_tests.rs"]
+mod noop_tests;
+
+#[path = "shared_noops.rs"]
+mod noops;
+
 pub(super) struct ReadPredicates {
     pub constants: Vec<NamedNode>,
     pub wildcard: bool,
@@ -64,6 +71,8 @@ impl CompiledRule {
         let mut rule = id.definition();
         if matches!(id, CaxEqc1 | CaxEqc2) {
             rule = Self::without_self_membership(id, &rule)?;
+        } else if matches!(id, Rdfs7) {
+            rule = Self::without_self_subproperty(&rule)?;
         }
         Ok(rule)
     }
