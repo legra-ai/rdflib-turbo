@@ -45,7 +45,7 @@ jobs:
       release: ${{ steps.release.outputs.release }}
       revision: ${{ steps.release.outputs.revision }}
     steps:
-      - uses: astral-sh/setup-uv@v10.3.2
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           version: "0.13.5"
       - uses: actions/checkout@v7
@@ -96,7 +96,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.revision }}
-      - uses: astral-sh/setup-uv@v10.3.2
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           version: "0.13.5"
       - uses: actions-rust-lang/setup-rust-toolchain@v2
@@ -161,7 +161,7 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
-      - uses: astral-sh/setup-uv@v10.3.2
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           version: "0.13.5"
       - uses: actions-rust-lang/setup-rust-toolchain@v2
@@ -220,7 +220,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.revision }}
-      - uses: astral-sh/setup-uv@v10.3.2
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           version: "0.13.5"
       - uses: actions-rust-lang/setup-rust-toolchain@v2
@@ -264,7 +264,7 @@ jobs:
     if: always() && (github.event_name != 'workflow_dispatch' || !inputs['inference-comparison'])
     runs-on: ubuntu-latest
     steps:
-      - uses: astral-sh/setup-uv@v10.3.2
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           version: "0.13.5"
       - name: Require all release checks
@@ -305,7 +305,7 @@ jobs:
       RELEASE_REVISION: ${{ needs.prepare.outputs.revision }}
       CARGO_RELEASE_VERSION: ${{ needs.prepare.outputs.cargo-version }}
     steps:
-      - uses: astral-sh/setup-uv@v10.3.2
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           version: "0.13.5"
       - uses: actions/checkout@v7
@@ -352,7 +352,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: astral-sh/setup-uv@v10.3.2
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           version: "0.13.5"
       - uses: actions/checkout@v7
@@ -383,7 +383,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v10.3.2
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           version: "0.13.5"
       - uses: actions-rust-lang/setup-rust-toolchain@v2
