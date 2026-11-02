@@ -38,6 +38,8 @@ path = "src/lib.rs"
 
 [build-dependencies.bindgen]
 version = ">=0.71,<0.74"
+default-features = false
+features = ["logging", "runtime"]
 
 [build-dependencies.cc]
 version = "1.0.73"
