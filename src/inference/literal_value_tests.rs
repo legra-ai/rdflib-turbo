@@ -19,6 +19,37 @@ fn literal_substitution_plan_joins_on_the_value_key() {
         plan.contains("Join(HashBuildLeftProbeRight, keys = ?key)"),
         "Literal substitution must have a value-keyed join: {plan}"
     );
+    assert_eq!(
+        plan.matches("Join(").count(),
+        1,
+        "The original literal is already bound; only replacement lookup needs a join: {plan}"
+    );
+}
+
+#[test]
+fn literal_value_compiler_rejects_changed_bound_operand_roles() {
+    let original = rdf_reasoning::LiteralRuleId::RdfsValueSubstitution.definition();
+    // bounded: three malformed variations of the fixed published clause.
+    for variation in 0..3 {
+        let mut rule = original.clone();
+        match variation {
+            0 => rule.body.swap(0, 1),
+            1 => rule.head.terms.swap(0, 1),
+            2 => {
+                let datalog_structural_model::Literal::Positive(assertion) = &rule.body[0] else {
+                    panic!("published assertion")
+                };
+                rule.head.terms[2] = assertion.terms[2].clone();
+            }
+            _ => unreachable!(),
+        }
+        assert!(rule.is_safe());
+        assert!(
+            super::shared::CompiledRule::with_literal_values(&rule, SparqlEvaluator::new())
+                .is_err(),
+            "Unexpected substitution role variation {variation} must fail before execution"
+        );
+    }
 }
 
 #[test]
