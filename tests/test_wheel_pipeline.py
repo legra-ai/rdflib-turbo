@@ -181,7 +181,8 @@ def facade_wheel(directory):
     with ZipFile(path, "w") as archive:
         archive.writestr(
             "pyshacl_turbo-0.0.0.dist-info/METADATA",
-            "Metadata-Version: 2.3\nName: pyshacl-turbo\nVersion: 0.0.0\n",
+            "Metadata-Version: 2.3\nName: pyshacl-turbo\nVersion: 0.0.0\n"
+            "Requires-Dist: pyshacl[oxigraph]==0.40.2; extra == 'test'\n",
         )
         archive.writestr(
             "pyshacl_turbo-0.0.0.dist-info/WHEEL",
@@ -224,6 +225,7 @@ def test_wheel_environment_imports_locked_companion_before_artifact(tmp_path, mo
     dependencies = next(command for command in commands if "--requirements" in command)
     artifact = next(command for command in commands if str(wheel) in command)
     assert commands.index(export) < commands.index(dependencies) < commands.index(artifact)
+    assert "pyshacl[oxigraph]==0.40.2" in artifact
     assert "--extra" not in dependencies
     sync = next(command for command in commands if command[:2] == ["uv", "sync"])
     assert "--locked" in sync

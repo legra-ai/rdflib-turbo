@@ -56,9 +56,9 @@ impl<G: GraphRead + ?Sized, S: GraphRead + ?Sized> Display<'_, G, S> {
 
     pub fn term(&self, term: &Term, shapes: bool) -> Result<String> {
         if shapes {
-            Self::describe(term, self.shapes, &self.shape_namespaces)
+            Self::describe(term, self.shapes, &self.shape_namespaces, false)
         } else {
-            Self::describe(term, self.data, &self.data_namespaces)
+            Self::describe(term, self.data, &self.data_namespaces, true)
         }
     }
 
@@ -66,6 +66,7 @@ impl<G: GraphRead + ?Sized, S: GraphRead + ?Sized> Display<'_, G, S> {
         term: &Term,
         graph: &(impl GraphRead + ?Sized),
         namespaces: &[(String, String)],
+        absent_data_identity: bool,
     ) -> Result<String> {
         let mut context = None;
         if let Term::BlankNode(node) = term {
@@ -77,6 +78,12 @@ impl<G: GraphRead + ?Sized, S: GraphRead + ?Sized> Display<'_, G, S> {
                 for quad in graph.matching_quads(None, None, Some(term.as_ref()), None) {
                     Self::select_context(&mut context, quad?.graph_name);
                 }
+            }
+            if context.is_none() && absent_data_identity {
+                // pySHACL 0.40.2 keeps empty DATA instead of selecting SHAPES.
+                // Dataset lookup fails for an absent node; the report consumer
+                // handles that LookupError by printing the original identifier.
+                return Ok(node.as_str().to_owned());
             }
         }
         // bounded: memoize only descriptions emitted for this field; the cache

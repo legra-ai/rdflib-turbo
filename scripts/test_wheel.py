@@ -225,6 +225,7 @@ def test_installed_wheel(wheel, version, shacl_wheel, owlrl_wheel, yaml_authorit
                 "--extra",
                 "test",
                 "--no-sync",
+                facade_checker().facade_reference_requirement(shacl_wheel),
                 str(wheel),
                 str(shacl_wheel),
                 str(owlrl_wheel),
