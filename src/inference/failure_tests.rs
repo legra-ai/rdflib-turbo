@@ -64,30 +64,32 @@ fn failure_rolls_back(kernel: Kernel, input: &[(&str, &str, &str)], fault: Fault
 #[test]
 fn equality_iterator_and_row_failures_abort_without_publication() {
     let input = [("a", "sameAs", "b"), ("b", "sameAs", "c")];
+    // Group preparation now precedes symmetry output. Its early read failures
+    // need not leave pending heads; the late full scan still tests partial output.
     for (scan, activation, after_results, partial) in [
         (
             Scan::new(None, Some("sameAs"), None),
             Activation::Immediate,
             1,
-            true,
+            false,
         ),
         (
             Scan::new(Some("a"), Some("sameAs"), None),
             Activation::Immediate,
             0,
-            true,
+            false,
         ),
         (
             Scan::new(Some("a"), Some("sameAs"), None),
             Activation::AfterEqualityEnumeration,
             0,
-            true,
+            false,
         ),
         (
             Scan::new(Some("b"), Some("sameAs"), None),
             Activation::AfterEqualityEnumeration,
             0,
-            true,
+            false,
         ),
         (
             Scan::new(None, None, None),
