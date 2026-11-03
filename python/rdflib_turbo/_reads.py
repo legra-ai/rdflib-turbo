@@ -138,8 +138,16 @@ class ProjectedReads:
             or type(self).__getattribute__ is not object.__getattribute__
             or "triples" in self.__dict__
             or not isinstance(self.store.backend, Store)
-            or isinstance(pattern[1], Path)
         ):
+            return super().__contains__(pattern)
+        pattern_type = type(pattern)
+        if (
+            pattern_type is not tuple
+            and pattern_type is not list
+            and (issubclass(pattern_type, tuple) or issubclass(pattern_type, list))
+        ):
+            return super().__contains__(pattern)
+        if isinstance(pattern[1], Path):
             return super().__contains__(pattern)
         if pattern[0] is None or pattern[1] is None or pattern[2] is None:
             if type(pattern) is tuple or type(pattern) is list:
@@ -148,7 +156,14 @@ class ProjectedReads:
         return self.store.backend._native.contains_pattern(pattern, self, _INPUT_TERMS)
 
     def triples(self, pattern):
-        if isinstance(pattern[1], Path) or not isinstance(self.store.backend, Store):
+        pattern_type = type(pattern)
+        if (
+            pattern_type is not tuple
+            and pattern_type is not list
+            and (issubclass(pattern_type, tuple) or issubclass(pattern_type, list))
+        ):
+            yield from super().triples(pattern)
+        elif isinstance(pattern[1], Path) or not isinstance(self.store.backend, Store):
             yield from super().triples(pattern)
         else:
             yield from scoped_rows(self.store, pattern, self)

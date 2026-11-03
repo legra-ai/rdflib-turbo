@@ -7,6 +7,8 @@ reader. One boolean query could restore 128 Literal objects before returning.
 Keep the strict fully bound membership boundary and its original observation,
 extraction and failure order. Builtin tuple/list wildcard patterns use a separate
 typed existence entry point; custom pattern protocols retain generator dispatch.
+Tuple/list subclasses use RDFLib's actual iteration protocol, including their
+caller-defined iteration callbacks, rather than indexing around those callbacks.
 Pin only supplied terms, detach for the scoped native lookup, and return a boolean
 without a result batch, RDF term factories or a continuation. Keep the direct
 exact-quad lookup for fully bound patterns; wildcard lookups stop at the first
