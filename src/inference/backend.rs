@@ -123,6 +123,18 @@ pub(crate) struct TransactionGraph<'a, 'store> {
 }
 
 impl<'owner, 'data> Graph for TransactionGraph<'owner, 'data> {
+    fn contains(&self, quad: GeneralizedQuadRef<'_>) -> Result<bool> {
+        self.transaction
+            .generalized_quads_for_pattern(
+                Some(quad.subject),
+                Some(quad.predicate),
+                Some(quad.object),
+                None,
+            )
+            .has_match()
+            .map_err(|error| Error::Runtime(error.to_string()))
+    }
+
     fn cleanup_blank_predicates(&mut self) -> Result<()> {
         super::cleanup::transaction(self.transaction, None, &self.destination)
     }
