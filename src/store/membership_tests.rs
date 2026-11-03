@@ -50,3 +50,27 @@ fn boolean_membership_of_empty_default_and_declared_graphs_is_false() {
     assert!(!contains_matching(&store, None, None, None, None).unwrap());
     assert!(!contains_matching(&store, None, None, None, Some(uri("urn:empty"))).unwrap());
 }
+
+#[cfg(feature = "allocation-profiling")]
+#[test]
+#[ignore = "global allocation counters require this test to run alone with --test-threads=1"]
+fn wildcard_boolean_membership_does_not_decode_stored_literal_text() {
+    let store = Store::new().unwrap();
+    // bounded: one large field; fixture setup precedes allocation accounting.
+    store
+        .insert(&Quad::new(
+            NamedNode::new_unchecked("urn:s"),
+            NamedNode::new_unchecked("urn:p"),
+            Literal::new_simple_literal("x".repeat(4 * 1024 * 1024)),
+            GraphName::DefaultGraph,
+        ))
+        .unwrap();
+    let (found, bytes) = crate::allocation_tests::measure_allocated(|| {
+        contains_matching(&store, Some(uri("urn:s")), Some(uri("urn:p")), None, None).unwrap()
+    });
+    assert!(found);
+    assert!(
+        bytes < 64 * 1024,
+        "Boolean membership decoded unused stored text: {bytes} Rust heap bytes requested"
+    );
+}

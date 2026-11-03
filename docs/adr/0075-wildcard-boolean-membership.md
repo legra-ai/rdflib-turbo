@@ -8,7 +8,9 @@ Use the existing typed membership boundary for both bound and wildcard patterns.
 Pin only supplied terms, detach for the scoped native lookup, and return a boolean
 without a result batch, RDF term factories or a continuation. Keep the direct
 exact-quad lookup for fully bound patterns; wildcard lookups stop at the first
-matching generalized quad and propagate read failures.
+matching generalized quad and propagate read failures. Project no result fields
+so even the first matching stored literal is not decoded or copied. The isolated
+CI allocation budget checks a 4 MiB stored literal with an unbound object.
 
 Preserve the existing dispatch for overridden triples, instance callbacks,
 property paths and transaction owners. Scope and exact lexical identity retain

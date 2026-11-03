@@ -87,6 +87,7 @@ pub(super) fn contains_matching(
                     }),
             ),
         )
+        .project_lexical(false, false, false)
         .next()
         .transpose()
         .map(|row| row.is_some())
