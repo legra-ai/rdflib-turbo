@@ -175,6 +175,11 @@ fn disjoint_closed_groups_do_not_repeat_incoming_row_reads() {
         let mut rows = Rows::new(&reads, &predicate, &mut pending).unwrap();
         assert_eq!(rows.groups.len(), GROUPS);
         assert_eq!(
+            reads.probes.get(),
+            0,
+            "closed group size={size} redundantly probed existing reverse edges"
+        );
+        assert_eq!(
             reads.full_scans.get(),
             1,
             "row preparation added a source pass"
