@@ -144,6 +144,34 @@ fn ring_composition_never_probes_already_present_heads() {
 }
 
 #[test]
+fn irreflexive_ring_preparation_reuses_its_existing_outgoing_reads() {
+    let predicate = NamedNode::new("http://www.w3.org/2002/07/owl#sameAs").unwrap();
+    for size in [64, 128] {
+        let data = GeneralizedDataset::from_iter((0..size).map(|index| {
+            GeneralizedQuad::new(
+                node(index),
+                predicate.clone(),
+                node((index + 1) % size),
+                GraphName::DefaultGraph,
+            )
+        }));
+        let reads = ExistingHeads {
+            data: &data,
+            probes: Cell::new(0),
+            work: Cell::new(0),
+            incoming: Cell::new(0),
+            full_scans: Cell::new(0),
+        };
+        let mut pending = Pending::default();
+        Rows::new(&reads, &predicate, &mut pending).unwrap();
+        assert_eq!(pending.len(), size);
+        // bounded: one source scan and one single-result outgoing read per node.
+        assert_eq!(reads.work.get(), 1 + 3 * size, "ring size={size}");
+        assert_eq!(reads.full_scans.get(), 1);
+    }
+}
+
+#[test]
 fn disjoint_closed_groups_do_not_repeat_incoming_row_reads() {
     let predicate = NamedNode::new("http://www.w3.org/2002/07/owl#sameAs").unwrap();
     const GROUPS: usize = 32;

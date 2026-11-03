@@ -11,6 +11,8 @@ use crate::Result;
 mod components;
 #[path = "same_as_dense.rs"]
 mod dense;
+#[path = "same_as_symmetry.rs"]
+mod symmetry;
 use components::Components;
 
 struct RowGroup {
@@ -34,6 +36,18 @@ impl SubjectRow {
 
     fn group(self) -> usize {
         self.0 >> 1
+    }
+
+    fn prepared(group: usize, deferred: bool) -> Self {
+        Self(Self::new(group).0 | usize::from(deferred))
+    }
+
+    fn symmetry_is_deferred(self) -> bool {
+        self.0 & 1 != 0
+    }
+
+    fn finish_preparation(&mut self) {
+        self.0 &= !1;
     }
 
     fn has_cross_group_incoming(self) -> bool {
@@ -118,48 +132,27 @@ impl Rows {
                 index
             });
             output.groups[group].members.push(quad.subject.clone());
-            output.subjects.insert(quad.subject, SubjectRow::new(group));
-        }
-        output.symmetry(data, predicate, pending)?;
-        output.components = Components::discover(data, predicate, &output, &signatures)?;
-        Ok(output)
-    }
-
-    fn symmetry(
-        &self,
-        data: &impl Graph,
-        predicate: &NamedNode,
-        pending: &mut Pending,
-    ) -> Result<()> {
-        for (id, group) in self.groups.iter().enumerate() {
-            let values = row(data, &group.members[0], predicate)?;
-            let reflexive = group.members.iter().all(|member| values.contains(member));
-            for target in &values {
-                let same_group = self
-                    .subjects
-                    .get(target)
-                    .is_some_and(|subject| subject.group() == id);
-                // Identical outgoing rows prove every reverse in a closed group.
-                if same_group && reflexive {
-                    continue;
-                }
-                for member in &group.members {
-                    if same_group && values.contains(member) {
-                        continue;
-                    }
+            let deferred = values.contains(&quad.subject);
+            if !deferred {
+                for target in values {
                     pending.push(
                         data,
                         GeneralizedQuad::new(
-                            target.clone(),
+                            target,
                             predicate.clone(),
-                            member.clone(),
+                            quad.subject.clone(),
                             GraphName::DefaultGraph,
                         ),
                     )?;
                 }
             }
+            output
+                .subjects
+                .insert(quad.subject, SubjectRow::prepared(group, deferred));
         }
-        Ok(())
+        output.symmetry(data, predicate, pending, &signatures)?;
+        output.components = Components::discover(data, predicate, &output, &signatures)?;
+        Ok(output)
     }
 
     fn extend(
