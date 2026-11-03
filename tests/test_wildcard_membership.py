@@ -91,3 +91,22 @@ def test_sequence_subclass_preserves_reference_iteration_protocol(monkeypatch, b
     calls.clear()
     assert pattern in graph
     assert calls == expected_calls == ["iter"]
+
+
+def test_custom_indexed_wildcard_pattern_retains_generator_dispatch(monkeypatch):
+    graph = Graph().add(TRIPLE)
+    native = graph.store.backend._native
+
+    class Pattern:
+        def __getitem__(self, index):
+            return (SUBJECT, PREDICATE, None)[index]
+
+    class RowsOnly:
+        contains_pattern = staticmethod(forbid_rows)
+        matches_pattern = staticmethod(forbid_rows)
+
+        def read_pattern(self, *args):
+            return native.read_pattern(*args)
+
+    monkeypatch.setattr(graph.store.backend, "_native", RowsOnly())
+    assert Pattern() in graph
