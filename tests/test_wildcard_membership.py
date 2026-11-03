@@ -26,9 +26,9 @@ def test_wildcard_presence_and_absence_use_native_boolean_query(monkeypatch, mas
         read_triples = staticmethod(forbid_rows)
         read_quads = staticmethod(forbid_rows)
 
-        def contains_pattern(self, pattern, context, inputs):
+        def matches_pattern(self, pattern, context, inputs):
             calls.append((pattern, context))
-            return native.contains_pattern(pattern, context, inputs)
+            return native.matches_pattern(pattern, context, inputs)
 
     monkeypatch.setattr(graph.store.backend, "_native", BooleanReads())
     pattern = tuple(term if mask & (1 << index) else None for index, term in enumerate(TRIPLE))
@@ -59,3 +59,25 @@ def test_wildcard_membership_does_not_construct_unused_literals(monkeypatch):
     )
     assert (SUBJECT, PREDICATE, None) in graph
     assert objects == []
+
+
+def test_wildcard_tuple_subclass_preserves_its_iteration_protocol(monkeypatch):
+    graph = Graph().add(TRIPLE)
+    native = graph.store.backend._native
+    calls = []
+
+    class Pattern(tuple):
+        def __iter__(self):
+            calls.append("iter")
+            return super().__iter__()
+
+    class RowsOnly:
+        contains_pattern = staticmethod(forbid_rows)
+        matches_pattern = staticmethod(forbid_rows)
+
+        def read_pattern(self, *args):
+            return native.read_pattern(*args)
+
+    monkeypatch.setattr(graph.store.backend, "_native", RowsOnly())
+    assert Pattern((SUBJECT, PREDICATE, None)) in graph
+    assert calls == ["iter"]

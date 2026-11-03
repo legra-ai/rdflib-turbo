@@ -141,6 +141,10 @@ class ProjectedReads:
             or isinstance(pattern[1], Path)
         ):
             return super().__contains__(pattern)
+        if pattern[0] is None or pattern[1] is None or pattern[2] is None:
+            if type(pattern) is tuple or type(pattern) is list:
+                return self.store.backend._native.matches_pattern(pattern, self, _INPUT_TERMS)
+            return super().__contains__(pattern)
         return self.store.backend._native.contains_pattern(pattern, self, _INPUT_TERMS)
 
     def triples(self, pattern):

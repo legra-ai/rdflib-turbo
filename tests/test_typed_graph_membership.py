@@ -106,8 +106,8 @@ def test_partial_patterns_preserve_results_without_row_transport(monkeypatch, ma
     class BooleanReads:
         read_pattern = staticmethod(forbid)
 
-        def contains_pattern(self, pattern, context, inputs):
-            return native.contains_pattern(pattern, context, inputs)
+        def matches_pattern(self, pattern, context, inputs):
+            return native.matches_pattern(pattern, context, inputs)
 
     monkeypatch.setattr(graph.store.backend, "_native", BooleanReads())
     pattern = tuple(term if mask & (1 << index) else None for index, term in enumerate(TRIPLE))
