@@ -110,3 +110,31 @@ def test_custom_indexed_wildcard_pattern_retains_generator_dispatch(monkeypatch)
 
     monkeypatch.setattr(graph.store.backend, "_native", RowsOnly())
     assert Pattern() in graph
+
+
+@pytest.mark.parametrize("operation", ["contains", "triples"])
+@pytest.mark.parametrize("base", [tuple, list, iter])
+@pytest.mark.parametrize("length", [0, 1, 2, 3, 4])
+def test_public_patterns_preserve_reference_arity_and_iterable_contract(operation, base, length):
+    observations = []
+    for factory in (ReferenceGraph, Graph):
+        graph = factory().add(TRIPLE)
+        pattern = base((*TRIPLE, TRIPLE[2])[:length])
+        try:
+            result = pattern in graph if operation == "contains" else list(graph.triples(pattern))
+        except (ValueError, IndexError, TypeError) as error:
+            observations.append((type(error), str(error)))
+        else:
+            observations.append(result)
+    assert observations[0] == observations[1]
+
+
+@pytest.mark.parametrize("operation", ["contains", "triples"])
+def test_iterator_wildcard_pattern_matches_reference(operation):
+    observations = []
+    for factory in (ReferenceGraph, Graph):
+        graph = factory().add(TRIPLE)
+        pattern = iter((SUBJECT, PREDICATE, None))
+        result = pattern in graph if operation == "contains" else list(graph.triples(pattern))
+        observations.append(result)
+    assert observations[0] == observations[1]

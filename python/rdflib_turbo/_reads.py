@@ -1,5 +1,7 @@
 """Typed, projected reads over graph-scoped native storage cursors."""
 
+from collections.abc import Iterator
+
 from rdflib import BNode, Literal, URIRef
 from rdflib.paths import Path
 
@@ -141,11 +143,10 @@ class ProjectedReads:
         ):
             return super().__contains__(pattern)
         pattern_type = type(pattern)
-        if (
-            pattern_type is not tuple
-            and pattern_type is not list
-            and (issubclass(pattern_type, tuple) or issubclass(pattern_type, list))
-        ):
+        if pattern_type is tuple or pattern_type is list:
+            if len(pattern) != 3:
+                _subject, _predicate, _object = pattern
+        elif issubclass(pattern_type, (tuple, list, Iterator)):
             return super().__contains__(pattern)
         if isinstance(pattern[1], Path):
             return super().__contains__(pattern)
@@ -157,13 +158,13 @@ class ProjectedReads:
 
     def triples(self, pattern):
         pattern_type = type(pattern)
-        if (
-            pattern_type is not tuple
-            and pattern_type is not list
-            and (issubclass(pattern_type, tuple) or issubclass(pattern_type, list))
-        ):
+        if pattern_type is tuple or pattern_type is list:
+            if len(pattern) != 3:
+                _subject, _predicate, _object = pattern
+        elif issubclass(pattern_type, (tuple, list, Iterator)):
             yield from super().triples(pattern)
-        elif isinstance(pattern[1], Path) or not isinstance(self.store.backend, Store):
+            return
+        if isinstance(pattern[1], Path) or not isinstance(self.store.backend, Store):
             yield from super().triples(pattern)
         else:
             yield from scoped_rows(self.store, pattern, self)
