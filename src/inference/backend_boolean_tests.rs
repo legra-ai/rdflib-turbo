@@ -6,6 +6,34 @@ use oxrdf::GeneralizedDataset;
 
 use super::{Graph, TransactionGraph};
 
+#[cfg(feature = "allocation-profiling")]
+#[test]
+#[ignore = "global allocation counters require isolated execution"]
+fn union_boolean_does_not_materialize_matching_term_payloads() {
+    let text = "x".repeat(64 * 1024);
+    let row = GeneralizedQuad::new(
+        NamedNode::new("urn:s").unwrap(),
+        NamedNode::new("urn:p").unwrap(),
+        Literal::new_simple_literal(&text),
+        NamedNode::new("urn:source").unwrap(),
+    );
+    let store = Store::new().unwrap();
+    store.insert_generalized(&row).unwrap();
+    let mut transaction = store.start_transaction().unwrap();
+    let data = TransactionGraph {
+        transaction: &mut transaction,
+        destination: NamedNode::new("urn:destination").unwrap().into(),
+    };
+    let (present, allocated) = crate::allocation_tests::current_thread::measure_allocated(|| {
+        data.contains(row.as_ref()).unwrap()
+    });
+    assert!(present);
+    assert!(
+        allocated < 16 * 1024,
+        "union boolean materialized payload: {allocated}"
+    );
+}
+
 #[test]
 fn default_dataset_membership_does_not_match_only_named_input() {
     let row = Quad::new(
