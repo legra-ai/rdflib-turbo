@@ -131,10 +131,7 @@ impl<'owner, 'data> Graph for TransactionGraph<'owner, 'data> {
                 Some(quad.object),
                 None,
             )
-            .project_lexical(false, false, false)
-            .next()
-            .transpose()
-            .map(|row| row.is_some())
+            .has_match()
             .map_err(|error| Error::Runtime(error.to_string()))
     }
 
