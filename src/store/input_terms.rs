@@ -91,6 +91,13 @@ pub(super) struct PinnedPattern {
     pub graph: Option<PinnedTerm>,
 }
 
+pub(super) struct PinnedReadPattern {
+    pub subject: Option<PinnedTerm>,
+    pub predicate: Option<PinnedTerm>,
+    pub object: Option<PinnedTerm>,
+    pub graph: Option<PinnedTerm>,
+}
+
 impl NativeInputTerms {
     pub(super) fn stage_record<'py>(
         &self,
@@ -232,6 +239,19 @@ impl RawTerm<'_> {
 }
 
 impl RawPattern<'_> {
+    pub(super) fn pin_read(&self) -> PyResult<PinnedReadPattern> {
+        let subject = self.subject.as_ref().map(RawTerm::pin).transpose()?;
+        let predicate = self.predicate.as_ref().map(RawTerm::pin).transpose()?;
+        let object = self.object.as_ref().map(RawTerm::pin).transpose()?;
+        let graph = self.graph.as_ref().map(RawTerm::pin).transpose()?;
+        Ok(PinnedReadPattern {
+            subject,
+            predicate,
+            object,
+            graph,
+        })
+    }
+
     pub(super) fn pin(&self, py: Python<'_>) -> PyResult<PinnedPattern> {
         fn required(py: Python<'_>, source: &Option<RawTerm<'_>>) -> PyResult<PinnedTerm> {
             match source {

@@ -62,6 +62,37 @@ pub(super) fn start(
     Ok((rows, if finished { None } else { Some(cursor) }))
 }
 
+pub(super) fn contains_matching(
+    store: &Store,
+    subject: Option<TermView<'_>>,
+    predicate: Option<TermView<'_>>,
+    object: Option<TermView<'_>>,
+    graph: Option<TermView<'_>>,
+) -> Result<bool> {
+    if let (Some(subject), Some(predicate), Some(object)) = (subject, predicate, object) {
+        return contains_exact(store, subject, predicate, object, graph);
+    }
+    let pattern = PreparedRead::new(subject, predicate, object, graph)?;
+    store
+        .generalized_quads_for_pattern(
+            pattern.subject.as_ref().map(PreparedTerm::term_ref),
+            pattern.predicate.as_ref().map(PreparedTerm::term_ref),
+            pattern.object.as_ref().map(PreparedTerm::term_ref),
+            Some(
+                pattern
+                    .graph
+                    .as_ref()
+                    .map_or(GraphNameRef::DefaultGraph, |value| {
+                        value.graph_name_ref().into()
+                    }),
+            ),
+        )
+        .next()
+        .transpose()
+        .map(|row| row.is_some())
+        .map_err(runtime)
+}
+
 pub(super) fn contains_exact(
     store: &Store,
     subject: TermView<'_>,
@@ -229,3 +260,7 @@ impl ReadCursor {
 #[cfg(test)]
 #[path = "read_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "membership_tests.rs"]
+mod membership_tests;

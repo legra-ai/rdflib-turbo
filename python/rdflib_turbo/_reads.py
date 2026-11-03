@@ -139,9 +139,6 @@ class ProjectedReads:
             or "triples" in self.__dict__
             or not isinstance(self.store.backend, Store)
             or isinstance(pattern[1], Path)
-            or pattern[0] is None
-            or pattern[1] is None
-            or pattern[2] is None
         ):
             return super().__contains__(pattern)
         return self.store.backend._native.contains_pattern(pattern, self, _INPUT_TERMS)

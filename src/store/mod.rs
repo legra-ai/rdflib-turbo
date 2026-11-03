@@ -246,13 +246,13 @@ impl NativeStore {
         inputs: Py<input_terms::NativeInputTerms>,
     ) -> PyResult<bool> {
         let staged = inputs.bind(py).get().stage(py, pattern, context)?;
-        let pinned = staged.pin(py)?;
+        let pinned = staged.pin_read()?;
         py.detach(|| {
-            read::contains_exact(
+            read::contains_matching(
                 &self.snapshot()?,
-                pinned.subject.view(),
-                pinned.predicate.view(),
-                pinned.object.view(),
+                pinned.subject.as_ref().map(input_terms::PinnedTerm::view),
+                pinned.predicate.as_ref().map(input_terms::PinnedTerm::view),
+                pinned.object.as_ref().map(input_terms::PinnedTerm::view),
                 pinned.graph.as_ref().map(input_terms::PinnedTerm::view),
             )
         })
