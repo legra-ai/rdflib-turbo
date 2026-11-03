@@ -10,6 +10,21 @@
 
 ## Performance
 
+### Shared dataset pipeline
+
+**35.8× faster with RDFS and 11.8× faster with OWL-RL on this 10,000-node synthetic fixture**, using less peak memory. The Turbo trio shares one native dataset through parsing, inference and public SHACL validation.
+
+| Pipeline | Python trio (s) | Turbo trio (s) | Speedup | Python peak (MiB) | Turbo peak (MiB) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Parse → RDFS → SHACL | 15.889 | 0.444 | **35.8×** | 139.7 | **126.7** |
+| Parse → OWL-RL → SHACL | 11.104 | 0.940 | **11.8×** | 151.2 | **123.4** |
+
+Complete scoped and generalized closures, report graphs and report text matched. Peak memory was **9.3% lower for RDFS** and **18.4% lower for OWL-RL**.
+
+Measured **3 November 2026** on Apple M3 Max / macOS arm64, CPython **3.13.16**, uv **0.13.5**. Originals: **RDFLib 7.6.0 / OWL-RL 7.6.2 / pySHACL 0.40.2**, without optional native adapters. Turbo: published **rdflib-turbo 0.2.0a33 / owlrl-turbo 0.2.0a1**, with pyshacl-turbo code from [#137](https://github.com/legra-ai/pyshacl-turbo/pull/137), tested at [9be3f03](https://github.com/legra-ai/pyshacl-turbo/commit/9be3f032acc79763f4614733d78ec1add7ac5e5a). That facade wheel was an unpublished build, not the public 0.8.0 release.
+
+Medians use five alternating fresh-process pairs after an untimed warmup; peak RSS uses seven separate cold processes per arm. Times include data parsing, inference and public validation/report construction; imports and SHAPES preparation are outside timing. Memory includes the whole process and retained results, before correctness encoding. These finite fixture results do not establish universal speedups or full drop-in parity. See [all samples, output fingerprints and exact artifact identities](https://github.com/legra-ai/pyshacl-turbo/blob/dfb8d5d3a069b852be121b30e42fdbd041c10da9/benchmarks/shared-dataset-macos-2026-11-03.json) and the [pipeline harness](https://github.com/legra-ai/pyshacl-turbo/blob/9be3f032acc79763f4614733d78ec1add7ac5e5a/benchmarks/companions.py).
+
 ### Matched public Graph pipeline
 
 **Parse → OWL-RL → SHACL: about 11× in this measured synthetic run.**
