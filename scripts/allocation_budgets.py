@@ -24,6 +24,7 @@ TESTS = (
     "inference::scoped::boolean_tests::scoped_boolean_probes_do_not_clone_bound_lexical_terms",
     "inference::backend::boolean_tests::default_dataset_boolean_does_not_clone_bound_lexical_terms",
     "inference::backend::boolean_tests::transaction_destination_boolean_does_not_clone_bound_lexical_terms",
+    "inference::backend::boolean_tests::union_boolean_does_not_materialize_matching_term_payloads",
     "inference::borrowed::boolean_tests::borrowed_overlay_boolean_does_not_materialize_overlay_lexical_terms",
     "inference::borrowed_tests::borrowed_validation_view_does_not_clone_large_base_lexical_storage",
     "allocation_tests::shared_index_retained_budget",

@@ -126,6 +126,12 @@ impl GeneralizedQuadIter<'static> {
 }
 
 impl<'a> GeneralizedQuadIter<'a> {
+    /// Test the first encoded match without constructing a projected result row.
+    #[doc(hidden)]
+    pub fn has_match(mut self) -> Result<bool, StorageError> {
+        self.next_encoded().transpose().map(|quad| quad.is_some())
+    }
+
     /// Select one physical representative for each exact encoded SPO.
     /// The same pinned reader performs both the scan and indexed representative
     /// lookup; this retains no seen-set and decodes no rejected lexical payloads.
