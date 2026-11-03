@@ -1,5 +1,7 @@
 """Typed, projected reads over graph-scoped native storage cursors."""
 
+from collections.abc import Iterator
+
 from rdflib import BNode, Literal, URIRef
 from rdflib.paths import Path
 
@@ -138,15 +140,30 @@ class ProjectedReads:
             or type(self).__getattribute__ is not object.__getattribute__
             or "triples" in self.__dict__
             or not isinstance(self.store.backend, Store)
-            or isinstance(pattern[1], Path)
-            or pattern[0] is None
-            or pattern[1] is None
-            or pattern[2] is None
         ):
+            return super().__contains__(pattern)
+        pattern_type = type(pattern)
+        if pattern_type is tuple or pattern_type is list:
+            if len(pattern) != 3:
+                _subject, _predicate, _object = pattern
+        elif issubclass(pattern_type, (tuple, list, Iterator)):
+            return super().__contains__(pattern)
+        if isinstance(pattern[1], Path):
+            return super().__contains__(pattern)
+        if pattern[0] is None or pattern[1] is None or pattern[2] is None:
+            if type(pattern) is tuple or type(pattern) is list:
+                return self.store.backend._native.matches_pattern(pattern, self, _INPUT_TERMS)
             return super().__contains__(pattern)
         return self.store.backend._native.contains_pattern(pattern, self, _INPUT_TERMS)
 
     def triples(self, pattern):
+        pattern_type = type(pattern)
+        if pattern_type is tuple or pattern_type is list:
+            if len(pattern) != 3:
+                _subject, _predicate, _object = pattern
+        elif issubclass(pattern_type, (tuple, list, Iterator)):
+            yield from super().triples(pattern)
+            return
         if isinstance(pattern[1], Path) or not isinstance(self.store.backend, Store):
             yield from super().triples(pattern)
         else:

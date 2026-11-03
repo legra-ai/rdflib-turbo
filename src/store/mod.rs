@@ -259,6 +259,27 @@ impl NativeStore {
         .map_err(error)
     }
 
+    fn matches_pattern<'py>(
+        &self,
+        py: Python<'py>,
+        pattern: &Bound<'py, PyAny>,
+        context: &Bound<'py, PyAny>,
+        inputs: Py<input_terms::NativeInputTerms>,
+    ) -> PyResult<bool> {
+        let staged = inputs.bind(py).get().stage(py, pattern, context)?;
+        let pinned = staged.pin_read()?;
+        py.detach(|| {
+            read::contains_matching(
+                &self.snapshot()?,
+                pinned.subject.as_ref().map(input_terms::PinnedTerm::view),
+                pinned.predicate.as_ref().map(input_terms::PinnedTerm::view),
+                pinned.object.as_ref().map(input_terms::PinnedTerm::view),
+                pinned.graph.as_ref().map(input_terms::PinnedTerm::view),
+            )
+        })
+        .map_err(error)
+    }
+
     #[pyo3(signature = (pattern, factories, *, scope=None))]
     fn read_union(
         &self,

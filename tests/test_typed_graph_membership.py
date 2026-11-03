@@ -99,17 +99,17 @@ def test_membership_preserves_instance_triples_override(monkeypatch):
 
 
 @pytest.mark.parametrize("mask", range(7))
-def test_partial_patterns_keep_existing_generator_contract(monkeypatch, mask):
+def test_partial_patterns_preserve_results_without_row_transport(monkeypatch, mask):
     graph = Graph().add(TRIPLE)
     native = graph.store.backend._native
 
-    class RowsOnly:
-        contains_terms = staticmethod(forbid)
+    class BooleanReads:
+        read_pattern = staticmethod(forbid)
 
-        def read_pattern(self, *args):
-            return native.read_pattern(*args)
+        def matches_pattern(self, pattern, context, inputs):
+            return native.matches_pattern(pattern, context, inputs)
 
-    monkeypatch.setattr(graph.store.backend, "_native", RowsOnly())
+    monkeypatch.setattr(graph.store.backend, "_native", BooleanReads())
     pattern = tuple(term if mask & (1 << index) else None for index, term in enumerate(TRIPLE))
     assert pattern in graph
     if mask & 1:
