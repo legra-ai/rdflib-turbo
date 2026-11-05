@@ -11,6 +11,8 @@ use crate::Result;
 mod components;
 #[path = "same_as_dense.rs"]
 mod dense;
+#[path = "same_as_symmetry.rs"]
+mod symmetry;
 use components::Components;
 
 struct RowGroup {
@@ -34,6 +36,18 @@ impl SubjectRow {
 
     fn group(self) -> usize {
         self.0 >> 1
+    }
+
+    fn prepared(group: usize, deferred: bool) -> Self {
+        Self(Self::new(group).0 | usize::from(deferred))
+    }
+
+    fn symmetry_is_deferred(self) -> bool {
+        self.0 & 1 != 0
+    }
+
+    fn finish_preparation(&mut self) {
+        self.0 &= !1;
     }
 
     fn has_cross_group_incoming(self) -> bool {
@@ -82,15 +96,6 @@ impl Rows {
         let mut signatures: HashMap<(usize, u64), Vec<usize>> = HashMap::new();
         for quad in data.quads(None, Some(predicate.as_ref().into()), None) {
             let quad = quad?;
-            pending.push(
-                data,
-                GeneralizedQuad::new(
-                    quad.object,
-                    predicate.clone(),
-                    quad.subject.clone(),
-                    GraphName::DefaultGraph,
-                ),
-            )?;
             if output.subjects.contains_key(&quad.subject) {
                 continue;
             }
@@ -127,8 +132,25 @@ impl Rows {
                 index
             });
             output.groups[group].members.push(quad.subject.clone());
-            output.subjects.insert(quad.subject, SubjectRow::new(group));
+            let deferred = values.contains(&quad.subject);
+            if !deferred {
+                for target in values {
+                    pending.push(
+                        data,
+                        GeneralizedQuad::new(
+                            target,
+                            predicate.clone(),
+                            quad.subject.clone(),
+                            GraphName::DefaultGraph,
+                        ),
+                    )?;
+                }
+            }
+            output
+                .subjects
+                .insert(quad.subject, SubjectRow::prepared(group, deferred));
         }
+        output.symmetry(data, predicate, pending, &signatures)?;
         output.components = Components::discover(data, predicate, &output, &signatures)?;
         Ok(output)
     }
