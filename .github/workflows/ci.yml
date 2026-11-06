@@ -68,7 +68,7 @@ jobs:
       - name: Arrange the immutable declaration used by the release lock
         run: uv run --no-project --python 3.13.16 python -B scripts/ci_facade.py prepare-declaration
       - id: release
-        uses: legra-ai/github-actions/.github/actions/prepare-cargo-release@ade19d2cab57447f2450b1d5339b3e8143fe4510
+        uses: legra-ai/github-actions/.github/actions/prepare-cargo-release@3d81bf46b840ade0eb37eaeac5b216f0edb41ad9
         with:
           token: ${{ steps.writer.outputs.token }}
           tag-format: pep440
