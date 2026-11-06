@@ -1167,9 +1167,9 @@ dependencies = [
 
 [[package]]
 name = "shacl-structural-model"
-version = "6.3.0"
+version = "6.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ae56894c5761afffa37d9c0405ca7ae2a6e0b29a328fec0e3ce24a5aeb362eb"
+checksum = "3b9bdeb51fe411d65730a9c47c8a2845957306d8815d6c13386b0b4634c3b0eb"
 dependencies = [
  "iri-rfc3987",
  "rdf-structural-model",
