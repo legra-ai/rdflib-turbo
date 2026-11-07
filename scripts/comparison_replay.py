@@ -43,8 +43,8 @@ def runtime_project(inputs, arm, receipt, output):
     original = registry_packages(tomllib.loads((inputs / (arm + "-runtime/uv.lock")).read_text()))
     requirements = [f"{name}=={package['version']}" for name, package in original.items()]
     commands = [
-        ["uv", "init", "--bare", "--no-workspace", "--vcs", "none", "--python", "3.13.16", runtime],
-        ["uv", "python", "pin", "--project", runtime, "3.13.16"],
+        ["uv", "init", "--bare", "--no-workspace", "--vcs", "none", "--python", "3.13.18", runtime],
+        ["uv", "python", "pin", "--project", runtime, "3.13.18"],
         [
             "uv",
             "add",

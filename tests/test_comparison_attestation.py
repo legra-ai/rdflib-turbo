@@ -75,7 +75,7 @@ def arm(tmp_path, monkeypatch):
     modules["rdflib_turbo._native"] = native
     checker = load("attestation_under_test", ROOT / "scripts/comparison_attest.py")
     monkeypatch.setattr(
-        checker, "sys", SimpleNamespace(version="3.13.16 (fixture)", prefix=str(environment))
+        checker, "sys", SimpleNamespace(version="3.13.18 (fixture)", prefix=str(environment))
     )
     monkeypatch.setattr(checker, "version", lambda name: "7.6.0")
     monkeypatch.setattr(checker, "find_spec", lambda name: None)

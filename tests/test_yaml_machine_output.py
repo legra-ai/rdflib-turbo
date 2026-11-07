@@ -29,7 +29,7 @@ def command(stdout, stderr, code=0):
     ]
 
 
-@pytest.mark.parametrize("identity", ["3.13.16\n", "uv 0.13.5 (fixture)\n"])
+@pytest.mark.parametrize("identity", ["3.13.18\n", "uv 0.13.7 (fixture)\n"])
 def test_machine_identity_keeps_progress_out_of_stdout(helper, tmp_path, capfd, identity):
     actual = helper._run(
         command(identity, "Downloading interpreter\n"),
@@ -43,22 +43,22 @@ def test_machine_identity_keeps_progress_out_of_stdout(helper, tmp_path, capfd, 
 
 def test_expected_version_on_stderr_cannot_replace_wrong_stdout(helper, tmp_path, capfd):
     actual = helper._run(
-        command("3.13.15\n", "3.13.16\n"), tmp_path, dict(os.environ), machine_identity=True
+        command("3.13.15\n", "3.13.18\n"), tmp_path, dict(os.environ), machine_identity=True
     )
     assert actual.strip() != helper.PYTHON
-    assert capfd.readouterr().err == "3.13.16" + os.linesep
+    assert capfd.readouterr().err == "3.13.18" + os.linesep
 
 
 def test_machine_child_failure_keeps_status_stdout_and_raw_stderr(helper, tmp_path, capfd):
     with pytest.raises(subprocess.CalledProcessError) as caught:
         helper._run(
-            command("3.13.16\n", "download failed\n", 7),
+            command("3.13.18\n", "download failed\n", 7),
             tmp_path,
             dict(os.environ),
             machine_identity=True,
         )
     assert caught.value.returncode == 7
-    assert caught.value.output == "3.13.16\n"
+    assert caught.value.output == "3.13.18\n"
     assert capfd.readouterr().err == "download failed" + os.linesep
 
 

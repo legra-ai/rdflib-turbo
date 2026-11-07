@@ -70,7 +70,7 @@ class ReplayTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "request.json").write_text(
-                json.dumps({"base": "wrong", "head": "b" * 40, "python": "3.13.16"})
+                json.dumps({"base": "wrong", "head": "b" * 40, "python": "3.13.18"})
             )
             with patch.object(module, "checkout") as checkout:
                 with self.assertRaises(ValueError):
