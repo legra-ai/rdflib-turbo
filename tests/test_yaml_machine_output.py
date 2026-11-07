@@ -29,7 +29,7 @@ def command(stdout, stderr, code=0):
     ]
 
 
-@pytest.mark.parametrize("identity", ["3.13.16\n", "uv 0.13.5 (fixture)\n"])
+@pytest.mark.parametrize("identity", ["3.13.16\n", "uv 0.13.7 (fixture)\n"])
 def test_machine_identity_keeps_progress_out_of_stdout(helper, tmp_path, capfd, identity):
     actual = helper._run(
         command(identity, "Downloading interpreter\n"),

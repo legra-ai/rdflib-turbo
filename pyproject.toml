@@ -1,5 +1,5 @@
 [build-system]
-requires = ["maturin==1.15.0"]
+requires = ["maturin==1.16.0"]
 build-backend = "maturin"
 
 [project]
@@ -77,7 +77,7 @@ coverage = [
     "pyshacl-turbo[test]==0.7.0",
     "pytest==9.2.0",
     "pytest-cov==7.1.0",
-    "ruff==0.17.2",
+    "ruff==0.17.4",
     "owlrl-turbo==0.2.0a1",
 ]
 packaging = [

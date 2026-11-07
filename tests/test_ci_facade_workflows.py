@@ -102,3 +102,12 @@ def test_facade_preparation_launchers_use_the_yaml_authority_exact_interpreter()
     ]
     assert len(declaration) == 1
     assert "--python 3.13.16 python -B" in declaration[0]
+
+
+def test_verify_installs_shared_python_before_embedded_native_tests():
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+    verify = job(workflow, "verify", "test")
+    setup = verify.index("uses: actions/setup-python@")
+    assert "python-version: '3.13.16'" in verify[setup:].split("- uses:", 1)[0]
+    assert setup < verify.index("cargo clippy")
+    assert "PYO3_PYTHON: python" in verify

@@ -255,8 +255,8 @@ def prepare(owner, output, python):
         environment[key] = value if key == "PYYAML_FORCE_LIBYAML" else str(output / value)
     (output / "build-scratch").mkdir()
     uv = _run(["uv", "--version"], output, environment, machine_identity=True).strip()
-    if not uv.startswith("uv 0.13.5 "):
-        raise ValueError("YAML inputs require pinned uv 0.13.5")
+    if not uv.startswith("uv 0.13.7 "):
+        raise ValueError("YAML inputs require pinned uv 0.13.7")
     python_command = _python_command(python)
     actual_python = _run(python_command, output, environment, machine_identity=True).strip()
     if actual_python != PYTHON:
@@ -366,7 +366,7 @@ def verify(owner, authority):
         record.get("recipe") != recipe
         or not historical.is_absolute()
         or provenance.get("python") != PYTHON
-        or not provenance.get("uv", "").startswith("uv 0.13.5 ")
+        or not provenance.get("uv", "").startswith("uv 0.13.7 ")
         or provenance.get("command") != recipe["command"]
         or provenance.get("python_command") != recipe["python_command"]
         or provenance.get("environment") != expected_environment

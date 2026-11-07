@@ -47,7 +47,7 @@ jobs:
     steps:
       - uses: astral-sh/setup-uv@v10.3.3
         with:
-          version: "0.13.5"
+          version: "0.13.7"
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -68,7 +68,7 @@ jobs:
       - name: Arrange the immutable declaration used by the release lock
         run: uv run --no-project --python 3.13.16 python -B scripts/ci_facade.py prepare-declaration
       - id: release
-        uses: legra-ai/github-actions/.github/actions/prepare-cargo-release@3d81bf46b840ade0eb37eaeac5b216f0edb41ad9
+        uses: legra-ai/github-actions/.github/actions/prepare-cargo-release@3b2727b42d2c062e39e8443669af0258382b83e7
         with:
           token: ${{ steps.writer.outputs.token }}
           tag-format: pep440
@@ -98,7 +98,7 @@ jobs:
           ref: ${{ needs.prepare.outputs.revision }}
       - uses: astral-sh/setup-uv@v10.3.3
         with:
-          version: "0.13.5"
+          version: "0.13.7"
       - uses: actions-rust-lang/setup-rust-toolchain@v2
         with:
           toolchain: 1.99.1
@@ -163,7 +163,7 @@ jobs:
           python-version: '3.11'
       - uses: astral-sh/setup-uv@v10.3.3
         with:
-          version: "0.13.5"
+          version: "0.13.7"
       - uses: actions-rust-lang/setup-rust-toolchain@v2
         with:
           toolchain: 1.99.1
@@ -216,13 +216,18 @@ jobs:
   verify:
     needs: prepare
     runs-on: ubuntu-latest
+    env:
+      PYO3_PYTHON: python
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.revision }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13.16'
       - uses: astral-sh/setup-uv@v10.3.3
         with:
-          version: "0.13.5"
+          version: "0.13.7"
       - uses: actions-rust-lang/setup-rust-toolchain@v2
         with:
           toolchain: 1.99.1
@@ -230,7 +235,7 @@ jobs:
           cache-key: vendor-${{ hashFiles('vendor/**') }}
       - uses: dtolnay/rust-toolchain@nightly
         with:
-          toolchain: nightly-2026-10-16
+          toolchain: nightly-2026-11-07
           components: rustfmt
       - uses: actions/download-artifact@v8
         with:
@@ -239,7 +244,7 @@ jobs:
           include-hidden-files: true
       - name: Verify the facade cohort and arrange the original locked peer
         run: uv run --no-project --python 3.13 python -B scripts/ci_facade.py consume --input "$RUNNER_TEMP/candidate-facade-evidence" --environment-file "$GITHUB_ENV"
-      - run: cargo +nightly-2026-10-16 fmt --check
+      - run: cargo +nightly-2026-11-07 fmt --check
       - run: cargo clippy --locked -- -D warnings
       - name: Immutable native engine source metadata
         run: make test-build-metadata
@@ -266,7 +271,7 @@ jobs:
     steps:
       - uses: astral-sh/setup-uv@v10.3.3
         with:
-          version: "0.13.5"
+          version: "0.13.7"
       - name: Require all release checks
         env:
           RESULTS: ${{ toJSON(needs) }}
@@ -307,7 +312,7 @@ jobs:
     steps:
       - uses: astral-sh/setup-uv@v10.3.3
         with:
-          version: "0.13.5"
+          version: "0.13.7"
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.revision }}
@@ -315,7 +320,7 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
-      - uses: legra-ai/github-actions/.github/actions/tag-tested-release@3d81bf46b840ade0eb37eaeac5b216f0edb41ad9
+      - uses: legra-ai/github-actions/.github/actions/tag-tested-release@3b2727b42d2c062e39e8443669af0258382b83e7
         with:
           version: ${{ needs.prepare.outputs.cargo-version }}
           revision: ${{ needs.prepare.outputs.revision }}
@@ -354,7 +359,7 @@ jobs:
     steps:
       - uses: astral-sh/setup-uv@v10.3.3
         with:
-          version: "0.13.5"
+          version: "0.13.7"
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.revision }}
@@ -385,7 +390,7 @@ jobs:
           fetch-depth: 0
       - uses: astral-sh/setup-uv@v10.3.3
         with:
-          version: "0.13.5"
+          version: "0.13.7"
       - uses: actions-rust-lang/setup-rust-toolchain@v2
         with:
           toolchain: 1.99.1

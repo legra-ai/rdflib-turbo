@@ -84,7 +84,7 @@ def prepared(helper, tmp_path, monkeypatch):
         commands.append(command)
         if command == ["uv", "--version"]:
             assert machine_identity
-            return "uv 0.13.5 (fixture)\n"
+            return "uv 0.13.7 (fixture)\n"
         if "-c" in command:
             assert machine_identity
             return "3.13.16\n"
