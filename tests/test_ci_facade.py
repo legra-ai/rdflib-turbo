@@ -252,7 +252,13 @@ def test_prepare_rechecks_both_immutable_peers_after_pure_artifact_construction(
     monkeypatch.setattr(
         module,
         "load",
-        lambda name: SimpleNamespace(build=build, freeze=freeze, prepare=lambda *args: {}),
+        lambda name: SimpleNamespace(
+            build=build,
+            freeze=freeze,
+            prepare=lambda *args, **kwargs: {},
+            locked_version=lambda root: "0.2.0a1",
+            validate_source_version=lambda source, version: None,
+        ),
     )
     with pytest.raises(ValueError, match="peer source"):
         module.prepare(tmp_path / "candidate-facade-evidence")
@@ -397,7 +403,14 @@ def test_prepare_explicitly_passes_independent_declaration_before_any_build(
         raise RuntimeError("all independent authorities checked")
 
     monkeypatch.setattr(
-        module, "load", lambda name: SimpleNamespace(build=build, freeze=lambda *args: {})
+        module,
+        "load",
+        lambda name: SimpleNamespace(
+            build=build,
+            freeze=lambda *args: {},
+            locked_version=lambda root: "0.2.0a1",
+            validate_source_version=lambda source, version: None,
+        ),
     )
     with pytest.raises(RuntimeError, match="independent authorities"):
         module.prepare(tmp_path / "candidate-facade-evidence")

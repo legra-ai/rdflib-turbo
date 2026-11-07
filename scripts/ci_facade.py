@@ -147,9 +147,18 @@ def prepare(output):
         output=build_output,
         python=sys.executable,
     )
+    owl_inputs = load("owl_companion_inputs")
+    owl_version = owl_inputs.locked_version(ROOT)
+    owl_inputs.validate_source_version(owlrl, owl_version)
     record = builder.build(arguments)
-    owlrl_record = load("owl_companion_inputs").prepare(
-        owlrl, selected["owlrl"], frozen["owlrl"], build_output, sys.executable, run
+    owlrl_record = owl_inputs.prepare(
+        owlrl,
+        selected["owlrl"],
+        frozen["owlrl"],
+        build_output,
+        sys.executable,
+        run,
+        expected_version=owl_version,
     )
     yaml_source = build_output / "yaml-test-inputs"
     load("yaml_test_inputs").prepare(ROOT, yaml_source, "3.13.18")

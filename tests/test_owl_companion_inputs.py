@@ -118,3 +118,31 @@ def test_changed_archive_identity_payload_and_forward_version_are_rejected(tmp_p
     (bundle / "owlrl-inputs.json").write_text(json.dumps(record))
     with pytest.raises(ValueError):
         helper().verify(bundle, {"repository": REPOSITORY, "revision": REVISION}, version)
+
+
+def test_mismatched_git_source_version_fails_before_building(tmp_path, monkeypatch):
+    source = tmp_path / "owl-source"
+    source.mkdir()
+    (source / "pyproject.toml").write_text('[project]\nname="owlrl-turbo"\nversion="0.2.0a2"\n')
+    module = helper()
+    monkeypatch.setattr(
+        module, "load", lambda name: pytest.fail("Loaded build tools before validation")
+    )
+    with pytest.raises(ValueError, match="declared locked version"):
+        module.prepare(
+            source,
+            {"repository": REPOSITORY, "revision": REVISION},
+            {},
+            tmp_path / "output",
+            "python",
+            None,
+            expected_version="0.2.0a1",
+        )
+
+
+def test_git_source_version_matches_declared_lock_without_mutation(tmp_path):
+    manifest = tmp_path / "pyproject.toml"
+    original = '[project]\nname="owlrl-turbo"\nversion="0.2.0a1"\n'
+    manifest.write_text(original)
+    helper().validate_source_version(tmp_path, "0.2.0a1")
+    assert manifest.read_text() == original

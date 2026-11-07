@@ -18,7 +18,14 @@ def verify_source_files(files, source):
         raise ValueError("OWL source archive differs from its exact immutable Git input")
 
 
-def prepare(source, selected, frozen, output, python, run):
+def validate_source_version(source, expected_version):
+    project = tomllib.loads((source / "pyproject.toml").read_text())["project"]
+    if project["name"] != "owlrl-turbo" or project["version"] != expected_version:
+        raise ValueError("OWL Git source differs from the declared locked version")
+
+
+def prepare(source, selected, frozen, output, python, run, *, expected_version):
+    validate_source_version(source, expected_version)
     builder, companion = load("build_facade_candidate"), load("pure_companion")
     archive, wheel = builder.build_pair(source, output / "owl-originals", python, run)
     extracted = output / "owl-original-source"
