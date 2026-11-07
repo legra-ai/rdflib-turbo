@@ -1186,7 +1186,7 @@ packaging = [
 [package.metadata]
 requires-dist = [
     { name = "owlrl", marker = "extra == 'test'", specifier = "==7.6.2" },
-    { name = "owlrl-turbo", marker = "extra == 'test'", specifier = "==0.2.0a1" },
+    { name = "owlrl-turbo", marker = "extra == 'test'", specifier = ">=0.2.0a1,<0.3" },
     { name = "packaging", marker = "extra == 'test'", specifier = ">=26.3" },
     { name = "pyshacl-turbo", marker = "extra == 'test'", editable = "../pyshacl-turbo" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8,<10" },
