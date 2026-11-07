@@ -21,7 +21,7 @@ from comparison_source import (
 )
 from test_wheel import verify_metadata
 
-PYTHON = "3.13.16"
+PYTHON = "3.13.18"
 
 
 def run(command, cwd, log, env=None):

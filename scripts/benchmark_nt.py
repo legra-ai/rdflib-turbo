@@ -181,7 +181,7 @@ def main():
     parser.add_argument("--rows", type=int, required=True)
     args = parser.parse_args()
     assert 1 <= args.rows <= MAX_ROWS
-    assert sys.version.split()[0] == "3.13.16", sys.version
+    assert sys.version.split()[0] == "3.13.18", sys.version
     assert version("rdflib") == "7.6.0"
     assert find_spec("pyoxigraph") is None, "Benchmark runners must omit optional PyOxigraph"
     graph, _owner, input_hash, method_owner = make_graph(args.arm, args.scope, args.rows)

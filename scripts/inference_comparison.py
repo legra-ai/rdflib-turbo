@@ -189,7 +189,7 @@ def preflight(output):
             **versions,
             "libclang_loaded": loaded,
             "build_flag_environment": overrides,
-            "python": "3.13.16",
+            "python": "3.13.18",
             "cargo_jobs": 2,
         },
     )
@@ -205,7 +205,7 @@ def run_comparison(args):
         {
             "base": args.base,
             "head": args.head,
-            "python": "3.13.16",
+            "python": "3.13.18",
             "wall_guard_seconds": 90,
             "rss_guard_mib": 1280,
             "owlrl_public_source": OWL_REVISION,

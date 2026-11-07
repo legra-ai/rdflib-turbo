@@ -93,21 +93,21 @@ def test_facade_preparation_launchers_use_the_yaml_authority_exact_interpreter()
     prepare = job(workflow, "prepare", "sdist")
     native = (ROOT / ".github/workflows/native-coverage.yml").read_text()
     for launcher in (prepare, native):
-        assert "python-version: '3.13.16'" in launcher
+        assert "python-version: '3.13.18'" in launcher
         calls = [line for line in launcher.splitlines() if "scripts/ci_facade.py prepare " in line]
         assert len(calls) == 1
-        assert "--python 3.13.16 python -B" in calls[0]
+        assert "--python 3.13.18 python -B" in calls[0]
     declaration = [
         line for line in prepare.splitlines() if "ci_facade.py prepare-declaration" in line
     ]
     assert len(declaration) == 1
-    assert "--python 3.13.16 python -B" in declaration[0]
+    assert "--python 3.13.18 python -B" in declaration[0]
 
 
 def test_verify_installs_shared_python_before_embedded_native_tests():
     workflow = (ROOT / ".github/workflows/ci.yml").read_text()
     verify = job(workflow, "verify", "test")
     setup = verify.index("uses: actions/setup-python@")
-    assert "python-version: '3.13.16'" in verify[setup:].split("- uses:", 1)[0]
+    assert "python-version: '3.13.18'" in verify[setup:].split("- uses:", 1)[0]
     assert setup < verify.index("cargo clippy")
     assert "PYO3_PYTHON: python" in verify

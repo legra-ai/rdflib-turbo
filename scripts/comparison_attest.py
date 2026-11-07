@@ -11,7 +11,7 @@ from zipfile import ZipFile
 
 
 def attest(receipt):
-    if sys.version.split()[0] != "3.13.16" or version("rdflib") != "7.6.0":
+    if sys.version.split()[0] != "3.13.18" or version("rdflib") != "7.6.0":
         raise ValueError("Wrong comparison Python or RDFLib version")
     for name in ("pyoxigraph", "pyshacl_turbo", "pyshacl", "owlrl"):
         if find_spec(name) is not None:

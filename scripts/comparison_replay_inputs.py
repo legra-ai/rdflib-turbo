@@ -105,7 +105,7 @@ def download(run_id, output):
 
 def verify(inputs, output, base, head, harness):
     request = json.loads((inputs / "request.json").read_text())
-    if request["base"] != base or request["head"] != head or request["python"] != "3.13.16":
+    if request["base"] != base or request["head"] != head or request["python"] != "3.13.18":
         raise ValueError("Original comparison source/interpreter differs from requested replay")
     if request["wall_guard_seconds"] != 90 or request["rss_guard_mib"] != 1280:
         raise ValueError("Original process guards differ")
@@ -118,7 +118,7 @@ def verify(inputs, output, base, head, harness):
     if (
         not toolchain["uv"].startswith("uv 0.13.1 ")
         or not toolchain["rustc"].startswith("rustc 1.99.1 ")
-        or toolchain["python"] != "3.13.16"
+        or toolchain["python"] != "3.13.18"
         or toolchain["cargo_jobs"] != 2
         or any(
             k != "CARGO_PROFILE_DEV_DEBUG" or v != "0"

@@ -87,7 +87,7 @@ def prepared(helper, tmp_path, monkeypatch):
             return "uv 0.13.7 (fixture)\n"
         if "-c" in command:
             assert machine_identity
-            return "3.13.16\n"
+            return "3.13.18\n"
         assert not machine_identity
         assert command[:3] == ["uv", "build", "--wheel"]
         assert "--no-sources" in command
@@ -103,7 +103,7 @@ def prepared(helper, tmp_path, monkeypatch):
     monkeypatch.setattr(helper, "_download", download)
     monkeypatch.setattr(helper, "_run", run)
     output = tmp_path / "bundle"
-    record = helper.prepare(owner, output, "3.13.16")
+    record = helper.prepare(owner, output, "3.13.18")
     return helper, owner, output, record, commands
 
 
@@ -129,7 +129,7 @@ def test_prepare_rejects_nonunique_or_changed_locked_version(helper, tmp_path, v
     owner = tmp_path / "owner"
     locked(owner, source_archive(), version=version, duplicate=duplicate)
     with pytest.raises(ValueError):
-        helper.prepare(owner, tmp_path / "bundle", "3.13.16")
+        helper.prepare(owner, tmp_path / "bundle", "3.13.18")
 
 
 @pytest.mark.parametrize("path", ["../escape.py", "/absolute.py", "a\\bad.py", "C:drive.py"])
@@ -141,7 +141,7 @@ def test_prepare_rejects_unsafe_original_archive(helper, tmp_path, monkeypatch, 
         helper, "_download", lambda url, destination: destination.write_bytes(archive)
     )
     with pytest.raises(ValueError):
-        helper.prepare(owner, tmp_path / "bundle", "3.13.16")
+        helper.prepare(owner, tmp_path / "bundle", "3.13.18")
 
 
 @pytest.mark.parametrize(

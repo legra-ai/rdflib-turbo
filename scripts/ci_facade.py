@@ -152,7 +152,7 @@ def prepare(output):
         owlrl, selected["owlrl"], frozen["owlrl"], build_output, sys.executable, run
     )
     yaml_source = build_output / "yaml-test-inputs"
-    load("yaml_test_inputs").prepare(ROOT, yaml_source, "3.13.16")
+    load("yaml_test_inputs").prepare(ROOT, yaml_source, "3.13.18")
     if owner_input() != owner:
         raise ValueError("Native provider source changed during candidate preparation")
     for name, project, source in peers:

@@ -17,7 +17,7 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 from zipfile import ZipFile
 
 VERSION = "6.0.3"
-PYTHON = "3.13.16"
+PYTHON = "3.13.18"
 DSO = (".so", ".pyd", ".dll", ".dylib")
 KIND = "test-only-yaml-dependency"
 
@@ -217,7 +217,7 @@ def prepare(owner, output, python):
     entry, lock_sha = _locked(owner)
     python = str(python)
     if python != PYTHON:
-        raise ValueError("YAML test inputs require Python 3.13.16")
+        raise ValueError("YAML test inputs require Python 3.13.18")
     output = Path(output).resolve()
     output.mkdir(parents=True, exist_ok=False)
     (output / "originals").mkdir()
@@ -260,7 +260,7 @@ def prepare(owner, output, python):
     python_command = _python_command(python)
     actual_python = _run(python_command, output, environment, machine_identity=True).strip()
     if actual_python != PYTHON:
-        raise ValueError("Actual YAML build interpreter differs from Python 3.13.16")
+        raise ValueError("Actual YAML build interpreter differs from Python 3.13.18")
     command = _command(archive_name, python)
     (output / "build.log").write_text(_run(command, output, environment))
     wheels = list((output / "wheels").glob("*.whl"))
