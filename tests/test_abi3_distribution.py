@@ -59,3 +59,9 @@ def test_unicode_tables_match_every_host_codepoint():
         text=True,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_unicode_forwarding_does_not_create_an_unmappable_rust_source_file():
+    # LLVM cannot map a source containing only `pub use`; keep the alias in
+    # its existing executable owner instead of weakening the source denominator.
+    assert not (ROOT / "src/inference/diagnostic_datatypes/unicode.rs").exists()

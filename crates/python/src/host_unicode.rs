@@ -84,6 +84,13 @@ pub fn simple_lower(ch: char) -> char {
     }
     let data = tables().lower;
     let scalar = ch as u32;
+    // Most of the Unicode domain lies above the final nonidentity mapping.
+    // Its exact answer needs no binary search, including during policy setup.
+    let last = data.len() - 8;
+    let maximum = u32::from_le_bytes(data[last..last + 4].try_into().unwrap());
+    if scalar > maximum {
+        return ch;
+    }
     let mut start = 0;
     let mut end = data.len() / 8;
     while start < end {
