@@ -1,8 +1,51 @@
 """Workflow callers supply the collector's mandatory immutable facade inputs."""
 
+import os
+import subprocess
+import sys
+import textwrap
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def formatter_code():
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+    verify = job(workflow, "verify", "test")
+    assert "toolchain: ${{ steps.formatter.outputs.toolchain }}" in verify
+    assert 'run: cargo "+${{ steps.formatter.outputs.toolchain }}" fmt --check' in verify
+    step = verify.split("- id: formatter\n", 1)[1].split("\n      - uses:", 1)[0]
+    return textwrap.dedent(step.split("run: |\n", 1)[1])
+
+
+@pytest.mark.parametrize("selected", ["nightly-2026-11-07", "nightly-2026-11-08"])
+def test_formatter_follows_the_prepared_source_including_release_replays(tmp_path, selected):
+    (tmp_path / "rustfmt-toolchain").write_text(selected + "\n")
+    output = tmp_path / "outputs"
+    subprocess.run(
+        [sys.executable, "-I", "-c", formatter_code()],
+        cwd=tmp_path,
+        env={**os.environ, "GITHUB_OUTPUT": str(output)},
+        check=True,
+    )
+    assert output.read_text() == f"toolchain={selected}\n"
+
+
+def test_invalid_prepared_formatter_is_a_hard_error(tmp_path):
+    (tmp_path / "rustfmt-toolchain").write_text("nightly\nmalformed\n")
+    output = tmp_path / "outputs"
+    result = subprocess.run(
+        [sys.executable, "-I", "-c", formatter_code()],
+        cwd=tmp_path,
+        env={**os.environ, "GITHUB_OUTPUT": str(output)},
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0 and "Invalid prepared formatter" in result.stderr
+    assert not output.exists()
 
 
 def job(document, name, following):
