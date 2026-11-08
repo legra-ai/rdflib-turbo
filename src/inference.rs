@@ -45,6 +45,7 @@ mod shared_rule_tests;
 mod staged;
 #[cfg(test)]
 mod staged_tests;
+mod standard_numeric;
 mod traversal;
 
 pub(crate) use delta::expand_delta;
@@ -323,3 +324,6 @@ mod scheduling_tests;
 
 #[cfg(test)]
 mod generalized_parity_tests;
+
+#[cfg(test)]
+mod standard_numeric_tests;
