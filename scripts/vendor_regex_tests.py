@@ -50,7 +50,7 @@ def run(root):
             raise RuntimeError(f"Missing matcher regressions: {sorted(missing)}")
         subprocess.run(command, cwd=root, check=True)
     formatter = (root / "rustfmt-toolchain").read_text().strip()
-    if formatter != "nightly-2026-11-07":
+    if formatter != "nightly-2026-11-08":
         raise ValueError("Matcher formatting requires the existing pinned nightly")
     subprocess.run(
         ["cargo", "+" + formatter, "fmt", "--manifest-path", manifest, "--", "--check"],

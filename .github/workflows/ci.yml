@@ -235,7 +235,7 @@ jobs:
           cache-key: vendor-${{ hashFiles('vendor/**') }}
       - uses: dtolnay/rust-toolchain@nightly
         with:
-          toolchain: nightly-2026-11-07
+          toolchain: nightly-2026-11-08
           components: rustfmt
       - uses: actions/download-artifact@v8
         with:
@@ -244,7 +244,7 @@ jobs:
           include-hidden-files: true
       - name: Verify the facade cohort and arrange the original locked peer
         run: uv run --no-project --python 3.13 python -B scripts/ci_facade.py consume --input "$RUNNER_TEMP/candidate-facade-evidence" --environment-file "$GITHUB_ENV"
-      - run: cargo +nightly-2026-11-07 fmt --check
+      - run: cargo +nightly-2026-11-08 fmt --check
       - run: cargo clippy --locked -- -D warnings
       - name: Immutable native engine source metadata
         run: make test-build-metadata
