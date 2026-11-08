@@ -6,5 +6,6 @@ dependencies = []
 
 [dependency-groups]
 packaging = [
+    "abi3audit==0.0.26",
     "twine==7.0.0",
 ]

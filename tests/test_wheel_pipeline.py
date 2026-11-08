@@ -1,4 +1,4 @@
-"""Every release wheel is selected and exercised only on its own interpreter."""
+"""Every interpreter exercises the exact same stable-ABI wheel payload."""
 
 import importlib.util
 import subprocess
@@ -42,13 +42,9 @@ def driver(monkeypatch):
 
 
 def wheels(directory):
-    paths = {}
-    for version in ("3.11", "3.12", "3.13", "3.14", "3.15"):
-        tag = "cp" + version.replace(".", "")
-        path = directory / f"rdflib_turbo-0.2.0a1-{tag}-{tag}-win_amd64.whl"
-        path.touch()
-        paths[version] = path
-    return paths
+    path = directory / "rdflib_turbo-0.2.0a1-cp311-abi3-win_amd64.whl"
+    path.touch()
+    return dict.fromkeys(("3.11", "3.12", "3.13", "3.14", "3.15"), path)
 
 
 def test_selects_one_native_wheel_for_each_matching_interpreter(tmp_path, monkeypatch):
@@ -65,7 +61,7 @@ def test_missing_python_wheel_is_a_hard_error(tmp_path, monkeypatch, version):
 
 
 @pytest.mark.parametrize("abi", ("abi3", "cp312", "cp313t"))
-def test_wrong_or_stable_abi_is_rejected(tmp_path, monkeypatch, abi):
+def test_wrong_minimum_or_interpreter_abi_is_rejected(tmp_path, monkeypatch, abi):
     paths = wheels(tmp_path)
     paths["3.13"].rename(tmp_path / f"rdflib_turbo-0.2.0a1-cp313-{abi}-win_amd64.whl")
     with pytest.raises(ValueError):
@@ -80,8 +76,8 @@ def test_extra_native_wheel_is_a_hard_error(tmp_path, monkeypatch):
 
 
 def test_mixed_platform_wheels_are_rejected(tmp_path, monkeypatch):
-    paths = wheels(tmp_path)
-    paths["3.13"].rename(tmp_path / "rdflib_turbo-0.2.0a1-cp313-cp313-macosx_11_0_arm64.whl")
+    wheels(tmp_path)
+    (tmp_path / "rdflib_turbo-0.2.0a1-cp311-abi3-macosx_11_0_arm64.whl").touch()
     with pytest.raises(ValueError):
         driver(monkeypatch).select_wheels(tmp_path, "0.2.0a1")
 

@@ -116,9 +116,7 @@ jobs:
   wheels:
     needs: [prepare, sdist]
     runs-on: ${{ matrix.os }}
-    # Intel's five builds and installed suites exceed even the two-hour budget.
-    # Windows also needs two cohorts to finish acceptance within its 90-minute limit.
-    # Disjoint cohorts retain every interpreter without increasing either limit.
+    # Build once per platform, then test the identical wheel on all five interpreters.
     timeout-minutes: ${{ matrix.os == 'macos-15-intel' && 120 || 90 }}
     strategy:
       fail-fast: false
@@ -136,24 +134,16 @@ jobs:
             container: quay.io/pypa/manylinux_2_28_aarch64:latest
           - os: macos-15-intel
             target: x86_64-apple-darwin
-            python-versions: '3.11 3.12 3.13'
-            artifact: release-wheel-x86_64-apple-darwin-cp311-cp313
-          - os: macos-15-intel
-            target: x86_64-apple-darwin
-            python-versions: '3.14 3.15'
-            artifact: release-wheel-x86_64-apple-darwin-cp314-cp315
+            python-versions: '3.11 3.12 3.13 3.14 3.15'
+            artifact: release-wheel-x86_64-apple-darwin
           - os: macos-15
             target: aarch64-apple-darwin
             python-versions: '3.11 3.12 3.13 3.14 3.15'
             artifact: release-wheel-aarch64-apple-darwin
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            python-versions: '3.11 3.12 3.13'
-            artifact: release-wheel-x86_64-pc-windows-msvc-cp311-cp313
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            python-versions: '3.14 3.15'
-            artifact: release-wheel-x86_64-pc-windows-msvc-cp314-cp315
+            python-versions: '3.11 3.12 3.13 3.14 3.15'
+            artifact: release-wheel-x86_64-pc-windows-msvc
     steps:
       - uses: actions/checkout@v7
         with:
@@ -186,7 +176,7 @@ jobs:
         run: uv run --no-project --python 3.13 python -I -B scripts/extract_source.py --archive-directory "$RUNNER_TEMP/release-source-dist" --destination source-build
       - name: Build native manylinux wheel from source archive
         if: runner.os == 'Linux'
-        run: sh scripts/build_manylinux.sh '${{ matrix.container }}' '${{ matrix.target }}' cp311-cp311 cp312-cp312 cp313-cp313 cp314-cp314 cp315-cp315
+        run: sh scripts/build_manylinux.sh '${{ matrix.container }}' '${{ matrix.target }}'
       - name: Build native wheel from source archive
         if: runner.os != 'Linux'
         env:
@@ -194,10 +184,10 @@ jobs:
           CARGO_TARGET_DIR: ${{ github.workspace }}/target
         run: |
           uv python install ${{ matrix.python-versions }} || exit 1
-          for python in ${{ matrix.python-versions }}; do
-            uv build --wheel --python "$python" --out-dir dist -C 'maturin.build-args=--locked --target ${{ matrix.target }} --compatibility pypi' source-build || exit 1
-          done
+          uv build --wheel --python 3.11 --out-dir dist -C 'maturin.build-args=--locked --target ${{ matrix.target }} --compatibility pypi' source-build || exit 1
       - run: uv --project tools/packaging run --locked --only-group packaging twine check --strict dist/*
+      - name: Audit the original wheel against Python 3.11's stable ABI
+        run: uv --project tools/packaging run --locked --only-group packaging abi3audit --strict --summary dist/*.whl
       - name: Test the installed wheel without source-tree imports
         run: uv run --no-project python scripts/test_wheel.py --python-versions ${{ matrix.python-versions }} --shacl-wheel "$SHACL_WHEEL" --owlrl-wheel "$OWLRL_WHEEL" --yaml-authority "$YAML_AUTHORITY"
       - uses: actions/upload-artifact@v7

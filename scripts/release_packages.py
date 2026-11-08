@@ -119,11 +119,7 @@ def inventory(directory, version):
         minimum = targets[triple]["macos-deployment-target"].replace(".", "_")
         platforms.append(f"macosx_{minimum}_{architecture}")
     expected = {f"rdflib_turbo-{version}.tar.gz"}
-    for python in CPYTHON_VERSIONS:
-        tag = "cp" + python.replace(".", "")
-        expected.update(
-            f"rdflib_turbo-{version}-{tag}-{tag}-{platform}.whl" for platform in platforms
-        )
+    expected.update(f"rdflib_turbo-{version}-cp311-abi3-{platform}.whl" for platform in platforms)
     actual = {path.name for path in packages}
     if actual != expected:
         raise ValueError(
@@ -184,7 +180,7 @@ def main():
     if command == "check-build":
         version = tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"]
         inventory(Path("dist"), version)
-        print("Verified one source archive and all twenty-five CPython platform wheels")
+        print("Verified one source archive and all five stable-ABI platform wheels")
         return
     version = os.environ["RELEASE_VERSION"]
     if command == "draft":

@@ -1,8 +1,6 @@
 //! Stock CPython float-string classification used only by Literal.n3 numeric output.
 use std::borrow::Cow;
 
-include!(concat!(env!("OUT_DIR"), "/python_scalar_imports.rs"));
-
 pub(super) enum Number {
     Finite,
     Infinite,
@@ -25,7 +23,7 @@ pub(super) fn classify(source: &str) -> Number {
                         return char::from(b'0' + digit);
                     }
                     // SAFETY: immutable CPython scalar table; no object, GIL or interpreter state.
-                    if unsafe { _PyUnicode_IsWhitespace(ch as u32) != 0 } {
+                    if shacl_bindings::host_unicode::whitespace(ch) {
                         ' '
                     } else {
                         ch

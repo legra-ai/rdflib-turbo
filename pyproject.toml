@@ -7,7 +7,7 @@ name = "rdflib-turbo"
 version = "0.2.0a38"
 description = "Native exact-term RDF datasets, parsing and SPARQL for Python"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.16"
 license = "MIT OR Apache-2.0"
 license-files = ["LICENSE-MIT", "LICENSE-APACHE", "vendor/**/LICENSE*"]
 authors = [{ name = "DataRoad Inc, Delaware, USA, trading as Legra" }]
@@ -32,7 +32,7 @@ test = [
 profile = "release"
 locked = true
 editable-profile = "release"
-features = ["pyo3/extension-module", "persistence"]
+features = ["pyo3/extension-module", "pyo3/abi3-py311", "persistence"]
 python-source = "python"
 module-name = "rdflib_turbo._native"
 include = [{path = "tools/**/*", format = "sdist"}, {path = ".cargo/config.toml", format = "sdist"}, {path = "uv.lock", format = "sdist"}, {path = "build_support/**/*", format = "sdist"}, {path = "vendor/**/*", format = "sdist"}, {path = "tests/**/*", format = "sdist"}, {path = "docs/**/*", format = "sdist"}, {path = "scripts/**/*", format = "sdist"}, {path = ".github/**/*", format = "sdist"}, {path = "rust-toolchain.toml", format = "sdist"}]

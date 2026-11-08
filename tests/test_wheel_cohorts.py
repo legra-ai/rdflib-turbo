@@ -41,23 +41,14 @@ def test_cohorts_cover_every_platform_interpreter_pair_exactly_once():
         for version in row["python-versions"].strip("'\"").split()
     )
     assert actual == Counter((target, version) for target in TARGETS for version in VERSIONS)
-    split = {"x86_64-apple-darwin", "x86_64-pc-windows-msvc"}
-    for target in split:
-        partition = [row for row in rows if row["target"] == target]
-        assert len(partition) == 2
-        assert {row["python-versions"].strip("'\"") for row in partition} == {
-            "3.11 3.12 3.13",
-            "3.14 3.15",
-        }
-    assert len(rows) == 7
-    for target in TARGETS - split:
-        assert sum(row["target"] == target for row in rows) == 1
+    assert len(rows) == 5
+    assert all(sum(row["target"] == target for row in rows) == 1 for target in TARGETS)
     artifacts = [row["artifact"] for row in rows]
     assert len(artifacts) == len(set(artifacts))
     assert all(artifact.startswith("release-wheel-") for artifact in artifacts)
     job = wheel_job()
     assert "uv python install ${{ matrix.python-versions }}" in job
-    assert "for python in ${{ matrix.python-versions }}; do" in job
+    assert "uv build --wheel --python 3.11" in job
     assert "scripts/test_wheel.py --python-versions ${{ matrix.python-versions }}" in job
     assert "name: ${{ matrix.artifact }}" in job
     assert "timeout-minutes: ${{ matrix.os == 'macos-15-intel' && 120 || 90 }}" in job
@@ -91,13 +82,9 @@ def driver(monkeypatch):
 
 
 def wheels(directory, versions):
-    paths = {}
-    for version in versions:
-        tag = "cp" + version.replace(".", "")
-        path = directory / f"rdflib_turbo-0.2.0a1-{tag}-{tag}-macosx_11_0_x86_64.whl"
-        path.touch()
-        paths[version] = path
-    return paths
+    path = directory / "rdflib_turbo-0.2.0a1-cp311-abi3-macosx_11_0_x86_64.whl"
+    path.touch()
+    return dict.fromkeys(versions, path)
 
 
 @pytest.mark.parametrize("versions", (VERSIONS[:3], VERSIONS[3:]))
@@ -125,13 +112,12 @@ def test_invalid_cohort_fails_before_testing(tmp_path, monkeypatch, versions):
         driver(monkeypatch).select_wheels(tmp_path, "0.2.0a1", versions=versions)
 
 
-def test_missing_and_additional_cohort_archives_are_hard_errors(tmp_path, monkeypatch):
+def test_missing_and_additional_platform_archives_are_hard_errors(tmp_path, monkeypatch):
     module = driver(monkeypatch)
-    paths = wheels(tmp_path, VERSIONS[:2])
     with pytest.raises(ValueError):
         module.select_wheels(tmp_path, "0.2.0a1", versions=VERSIONS[:3])
-    paths["3.12"].unlink()
-    wheels(tmp_path, VERSIONS[4:])
+    wheels(tmp_path, VERSIONS)
+    (tmp_path / "rdflib_turbo-0.2.0a1-cp311-abi3-win_amd64.whl").touch()
     with pytest.raises(ValueError):
         module.select_wheels(tmp_path, "0.2.0a1", versions=VERSIONS[:1])
 
@@ -183,8 +169,9 @@ def test_main_accepts_an_explicit_cohort_without_weakening_the_default(tmp_path,
             str(tmp_path / "yaml-inputs.json"),
         ],
     )
-    with pytest.raises(ValueError):
-        module.main()
+    called.clear()
+    module.main()
+    assert called == [(expected[VERSIONS[3]], version, facade, owl) for version in VERSIONS]
 
 
 def test_host_dependency_preflight_runs_once_before_any_wheel_acceptance(tmp_path, monkeypatch):

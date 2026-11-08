@@ -15,7 +15,7 @@ def test_packaging_uses_an_independent_locked_project():
     tools = ROOT / "tools/packaging"
     manifest = tomllib.loads((tools / "pyproject.toml").read_text())
     assert manifest["project"]["dependencies"] == []
-    assert manifest["dependency-groups"]["packaging"] == ["twine==7.0.0"]
+    assert manifest["dependency-groups"]["packaging"] == ["abi3audit==0.0.26", "twine==7.0.0"]
     assert not manifest.get("tool", {}).get("uv", {}).get("sources")
     lock = tomllib.loads((tools / "uv.lock").read_text())
     names = {package["name"] for package in lock["package"]}

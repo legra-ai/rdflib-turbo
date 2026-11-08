@@ -2,8 +2,8 @@
 
 Status: Accepted in source; installed artifact validation pending
 
-Extends ADR0020's CPython-specific wheel boundary and ADR0068's single native
-provider. This decision covers Core `sh:pattern`; SPARQL REGEX/REPLACE remains
+Extends ADR0068's single native provider. ADR0077 replaces ADR0020's wheel
+layout and direct scalar-symbol imports with exact version-selected compact tables. This decision covers Core `sh:pattern`; SPARQL REGEX/REPLACE remains
 separately scoped. It does not establish full Python exception or lazy-error
 activation parity.
 

@@ -28,13 +28,9 @@ def driver(monkeypatch):
 
 
 def wheels(directory, versions):
-    paths = {}
-    for version in versions:
-        tag = "cp" + version.replace(".", "")
-        path = directory / f"rdflib_turbo-0.2.0a1-{tag}-{tag}-macosx_11_0_x86_64.whl"
-        path.touch()
-        paths[version] = path
-    return paths
+    path = directory / "rdflib_turbo-0.2.0a1-cp311-abi3-macosx_11_0_x86_64.whl"
+    path.touch()
+    return dict.fromkeys(versions, path)
 
 
 @pytest.mark.parametrize("versions", (VERSIONS[:3], VERSIONS[3:]))
@@ -68,10 +64,9 @@ def test_invalid_cohort_fails_before_testing(tmp_path, monkeypatch, versions):
 def test_missing_extra_and_wrong_matrix_inventory_fail(tmp_path, monkeypatch):
     module = driver(monkeypatch)
     paths = wheels(tmp_path, VERSIONS[:2])
-    with pytest.raises(ValueError):
-        module.select_wheels(tmp_path, "0.2.0a1", versions=VERSIONS[:3])
-    with pytest.raises(ValueError):
-        module.select_wheels(tmp_path, "0.2.0a1", versions=VERSIONS[:1])
+    assert module.select_wheels(tmp_path, "0.2.0a1", versions=VERSIONS[:3]) == dict.fromkeys(
+        VERSIONS[:3], paths["3.11"]
+    )
     with pytest.raises(ValueError):
         module.test_matrix(
             paths,
@@ -131,5 +126,6 @@ def test_main_accepts_both_required_facade_and_selected_cohort(tmp_path, monkeyp
             str(tmp_path / "yaml-inputs.json"),
         ],
     )
-    with pytest.raises(ValueError):
-        module.main()
+    called.clear()
+    module.main()
+    assert called == [(expected[VERSIONS[3]], version, facade, owl) for version in VERSIONS]

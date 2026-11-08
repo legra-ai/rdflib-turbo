@@ -1,4 +1,4 @@
-"""Test each CPython-specific wheel with its matching isolated interpreter."""
+"""Test the same stable-ABI wheel on every supported isolated interpreter."""
 
 import argparse
 import hashlib
@@ -101,21 +101,11 @@ def selected_versions(versions=None):
 
 def select_wheels(directory, version, *, versions=None):
     wheels = sorted(directory.glob("*.whl"))
-    selected = {}
-    for python in selected_versions(versions):
-        tag = "cp" + python.replace(".", "")
-        matches = [
-            path for path in wheels if path.name.startswith(f"rdflib_turbo-{version}-{tag}-{tag}-")
-        ]
-        if len(matches) != 1:
-            raise ValueError(f"Expected exactly one CPython {python} wheel")
-        selected[python] = matches[0]
-    platforms = {path.name.rsplit("-", 1)[1] for path in wheels}
-    if len(platforms) != 1 or set(wheels) != set(selected.values()):
-        raise ValueError("Expected matching cohort wheels for one native platform")
-    if any(not path.is_file() for path in wheels):
+    if len(wheels) != 1 or not wheels[0].name.startswith(f"rdflib_turbo-{version}-cp311-abi3-"):
+        raise ValueError("Expected exactly one Python 3.11 stable-ABI wheel for one platform")
+    if not wheels[0].is_file():
         raise ValueError("Every wheel must be a regular file")
-    return selected
+    return dict.fromkeys(selected_versions(versions), wheels[0])
 
 
 def verify_licenses(wheel):
