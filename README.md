@@ -405,3 +405,33 @@ Rust branch coverage and dependency/vendored-patch coverage are not measured by 
 
 CI requires 100% measured Python package line and branch coverage. Coverage is
 separate from full API compatibility and standards conformance.
+
+### Restricted standard numeric inference
+
+`graph.infer(inference="owl2-rl-numeric-core")` selects exactly the shared
+`numeric/dt-eq`, `numeric/dt-diff`, `numeric/dt-type2` and `numeric/dt-not-type`
+clauses from `rdf-reasoning` 2.6.0. This is a restricted standard numeric mode;
+`rdfs`, `owlrl` and `both` retain their Python-reference contracts.
+
+The selected domain is XML Schema decimal, integer, its twelve built-in derived
+integer types, float and double. Interpretation uses strict shared lexical
+mapping, including signed zero, NaN and infinities. Distinct numeric spaces stay
+disjoint. Malformed or out-of-range literals in that domain abort the entire
+native operation. Other literal datatypes and nested RDF triple terms are opaque.
+`owl:real` and `owl:rational` are excluded from this OWL-RL numeric selection.
+
+Equality/difference and membership consequences remain generalized triples with
+literal subjects. An asserted incompatible numeric type emits the existing
+atomic diagnostic RDF and `last_inference.error_messages`, with the
+`numeric/dt-not-type` identifier. Missing membership is never negative evidence.
+Graph scope, Dataset union, named destinations and transaction rollback use the
+same native ownership as other inference modes. Source data is streamed;
+retained state scales with the distinct output delta and diagnostic messages.
+Pairwise consequences can be quadratic; this is not a bounded-output guarantee.
+
+This mode does not enable RDFS/OWL relational rules, equality substitution,
+list/cardinality reasoning, `dt-type1`, nonnumeric datatypes, general facets or
+other inconsistency rules. It rejects `axiomatic_triples=True` and
+`datatype_axioms=True`. It is not a complete OWL-RL profile. The functional
+`owlrl-turbo.expand` companion requires a matching provider release before
+exposing this selector.
