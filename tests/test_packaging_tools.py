@@ -81,3 +81,9 @@ def test_packaging_sync_and_command_work_without_any_source_peer(tmp_path):
         check=True,
     )
     assert "twine version 7.0.0" in result.stdout
+
+
+def test_release_build_strips_symbols_without_stripping_coverage_profile():
+    manifest = tomllib.loads((ROOT / "Cargo.toml").read_text())
+    assert manifest["profile"]["release"].get("strip") == "symbols"
+    assert not manifest["profile"].get("dev", {}).get("strip", False)
