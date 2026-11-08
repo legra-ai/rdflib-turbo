@@ -1,8 +1,8 @@
 """Partition expensive interpreter jobs while preserving the exact global inventory."""
 
 import importlib.util
-import re
 import sys
+import tomllib
 import types
 from collections import Counter
 from pathlib import Path
@@ -26,11 +26,12 @@ def wheel_job():
 
 
 def cohorts():
-    matrix = wheel_job().split("        include:\n", 1)[1].split("    steps:\n", 1)[0]
-    return [
-        dict(re.findall(r"^\s*(?:- )?([a-z-]+): (.+)$", entry, re.MULTILINE))
-        for entry in matrix.split("          - ")[1:]
-    ]
+    spec = importlib.util.spec_from_file_location(
+        "cohort_policy", ROOT / "scripts/release_wheel_policy.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.select(tomllib.loads((ROOT / "pyproject.toml").read_text()))["matrix"]["include"]
 
 
 def test_cohorts_cover_every_platform_interpreter_pair_exactly_once():

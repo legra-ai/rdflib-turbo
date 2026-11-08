@@ -109,7 +109,7 @@ def test_wheel_job_budget_covers_its_interpreters_and_verification():
     assert 35 + 9 * 5 + 3 <= int(timeout.group("default")) <= 90
     assert 35 + 12 * 5 + 3 <= int(timeout.group("intel")) <= 120
     assert "uv build --wheel --python 3.11" in wheels
-    assert "for python" not in wheels
+    assert "needs.prepare.outputs.stable-abi" in wheels
     assert "python scripts/test_wheel.py" in wheels
 
 

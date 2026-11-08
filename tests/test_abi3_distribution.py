@@ -1,6 +1,7 @@
 """One stable-ABI build per platform retains every supported installed suite."""
 
 import hashlib
+import importlib.util
 import json
 import subprocess
 import sys
@@ -21,16 +22,24 @@ def test_release_uses_the_python_311_stable_abi():
 def test_each_platform_builds_once_and_tests_all_five_interpreters():
     workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
     job = workflow["jobs"]["wheels"]
-    matrix = job["strategy"]["matrix"]["include"]
+    assert job["strategy"]["matrix"] == "${{ fromJSON(needs.prepare.outputs.wheel-matrix) }}"
+    spec = importlib.util.spec_from_file_location(
+        "abi3_policy", ROOT / "scripts/release_wheel_policy.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    matrix = module.select(tomllib.loads((ROOT / "pyproject.toml").read_text()))["matrix"][
+        "include"
+    ]
     assert len(matrix) == 5
     assert len({entry["target"] for entry in matrix}) == 5
     assert all(entry["python-versions"] == "3.11 3.12 3.13 3.14 3.15" for entry in matrix)
     runs = [step.get("run", "") for step in job["steps"]]
     native = next(command for command in runs if "uv build --wheel" in command)
     assert "--python 3.11" in native
-    assert "for python" not in native
+    assert "for python" not in native.split("else", 1)[0]
     linux = next(command for command in runs if "sh scripts/build_manylinux.sh" in command)
-    assert "cp312" not in linux and "cp315" not in linux
+    assert "cp312" not in linux.split("else", 1)[0] and "cp315" not in linux.split("else", 1)[0]
     assert any("--python-versions ${{ matrix.python-versions }}" in command for command in runs)
     assert any("abi3audit --strict" in command for command in runs)
 

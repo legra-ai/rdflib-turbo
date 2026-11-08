@@ -44,6 +44,8 @@ jobs:
       cargo-version: ${{ steps.versions.outputs.cargo-version }}
       release: ${{ steps.release.outputs.release }}
       revision: ${{ steps.release.outputs.revision }}
+      wheel-matrix: ${{ steps.wheel-policy.outputs.wheel-matrix }}
+      stable-abi: ${{ steps.wheel-policy.outputs.stable-abi }}
     steps:
       - uses: astral-sh/setup-uv@v10.3.3
         with:
@@ -67,6 +69,8 @@ jobs:
           repositories: ${{ github.event.repository.name }}
       - name: Arrange the immutable declaration used by the release lock
         run: uv run --no-project --python 3.13.18 python -B scripts/ci_facade.py prepare-declaration
+      - name: Preserve the wheel-policy controller before preparing historical source
+        run: cp scripts/release_wheel_policy.py "$RUNNER_TEMP/release-wheel-policy.py" || exit 1
       - id: release
         uses: legra-ai/github-actions/.github/actions/prepare-cargo-release@73b8b18ad18c56f35a6a450f41091a2f848669ba
         with:
@@ -76,6 +80,8 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: ${{ steps.release.outputs.revision }}
+      - id: wheel-policy
+        run: uv run --no-project python "$RUNNER_TEMP/release-wheel-policy.py" "$GITHUB_OUTPUT"
       - id: versions
         env:
           PREPARED_VERSION: ${{ steps.release.outputs.version }}
@@ -120,30 +126,7 @@ jobs:
     timeout-minutes: ${{ matrix.os == 'macos-15-intel' && 120 || 90 }}
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-24.04
-            target: x86_64-unknown-linux-gnu
-            python-versions: '3.11 3.12 3.13 3.14 3.15'
-            artifact: release-wheel-x86_64-unknown-linux-gnu
-            container: quay.io/pypa/manylinux_2_28_x86_64:latest
-          - os: ubuntu-24.04-arm
-            target: aarch64-unknown-linux-gnu
-            python-versions: '3.11 3.12 3.13 3.14 3.15'
-            artifact: release-wheel-aarch64-unknown-linux-gnu
-            container: quay.io/pypa/manylinux_2_28_aarch64:latest
-          - os: macos-15-intel
-            target: x86_64-apple-darwin
-            python-versions: '3.11 3.12 3.13 3.14 3.15'
-            artifact: release-wheel-x86_64-apple-darwin
-          - os: macos-15
-            target: aarch64-apple-darwin
-            python-versions: '3.11 3.12 3.13 3.14 3.15'
-            artifact: release-wheel-aarch64-apple-darwin
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            python-versions: '3.11 3.12 3.13 3.14 3.15'
-            artifact: release-wheel-x86_64-pc-windows-msvc
+      matrix: ${{ fromJSON(needs.prepare.outputs.wheel-matrix) }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -176,7 +159,12 @@ jobs:
         run: uv run --no-project --python 3.13 python -I -B scripts/extract_source.py --archive-directory "$RUNNER_TEMP/release-source-dist" --destination source-build
       - name: Build native manylinux wheel from source archive
         if: runner.os == 'Linux'
-        run: sh scripts/build_manylinux.sh '${{ matrix.container }}' '${{ matrix.target }}'
+        run: |
+          if [ '${{ needs.prepare.outputs.stable-abi }}' = 'true' ]; then
+            sh scripts/build_manylinux.sh '${{ matrix.container }}' '${{ matrix.target }}' || exit 1
+          else
+            sh scripts/build_manylinux.sh '${{ matrix.container }}' '${{ matrix.target }}' cp311-cp311 cp312-cp312 cp313-cp313 cp314-cp314 cp315-cp315 || exit 1
+          fi
       - name: Build native wheel from source archive
         if: runner.os != 'Linux'
         env:
@@ -184,9 +172,16 @@ jobs:
           CARGO_TARGET_DIR: ${{ github.workspace }}/target
         run: |
           uv python install ${{ matrix.python-versions }} || exit 1
-          uv build --wheel --python 3.11 --out-dir dist -C 'maturin.build-args=--locked --target ${{ matrix.target }} --compatibility pypi' source-build || exit 1
+          if [ '${{ needs.prepare.outputs.stable-abi }}' = 'true' ]; then
+            uv build --wheel --python 3.11 --out-dir dist -C 'maturin.build-args=--locked --target ${{ matrix.target }} --compatibility pypi' source-build || exit 1
+          else
+            for python in ${{ matrix.python-versions }}; do
+              uv build --wheel --python "$python" --out-dir dist -C 'maturin.build-args=--locked --target ${{ matrix.target }} --compatibility pypi' source-build || exit 1
+            done
+          fi
       - run: uv --project tools/packaging run --locked --only-group packaging twine check --strict dist/*
       - name: Audit the original wheel against Python 3.11's stable ABI
+        if: needs.prepare.outputs.stable-abi == 'true'
         run: uv --project tools/packaging run --locked --only-group packaging abi3audit --strict --summary dist/*.whl
       - name: Test the installed wheel without source-tree imports
         run: uv run --no-project python scripts/test_wheel.py --python-versions ${{ matrix.python-versions }} --shacl-wheel "$SHACL_WHEEL" --owlrl-wheel "$OWLRL_WHEEL" --yaml-authority "$YAML_AUTHORITY"

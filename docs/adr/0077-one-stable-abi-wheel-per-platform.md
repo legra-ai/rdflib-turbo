@@ -4,7 +4,12 @@ Status: Accepted; cross-platform installed release validation remains mandatory
 
 Supersedes ADR0020 for newly prepared releases. Preserve every existing release's
 original archive inventory and bytes; recovery still checks out that release's
-prepared revision and its original packaging rules.
+prepared revision and its original packaging rules. Preserve the workflow-owned
+wheel-policy controller before that checkout, then derive the matrix from the
+prepared manifest. Its explicitly audited historical CPython mode retains the
+original seven cohorts/25 wheels; new abi3 sources select five jobs/wheels.
+Unknown feature/range combinations fail. Only abi3 sources run the stable-ABI
+audit, since old prepared packaging-tool locks do not declare that tool.
 
 Build the sole native provider with PyO3's `abi3-py311` feature through `uv build`.
 Each of the five existing platforms produces one `cp311-abi3` wheel. Test that
