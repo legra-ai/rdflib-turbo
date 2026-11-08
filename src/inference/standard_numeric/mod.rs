@@ -6,7 +6,7 @@ use super::backend::Graph;
 use super::diagnostics::Diagnostics;
 use super::{InferenceOutcome, InferenceRequest, Pending};
 use crate::{Error, Result};
-use bindings::{Bindings, Cell};
+use bindings::Bindings;
 use datalog_structural_model::{Atom, BuiltinFilter, Literal as Body, Rule};
 use oxigraph::model::*;
 use rdf_reasoning::{
@@ -23,15 +23,12 @@ impl Program {
     fn new() -> Self {
         // bounded: exactly four definitions from the published numeric catalogue.
         Self {
-            rules: OwlNumericRuleId::ALL
-                .iter()
-                .map(|id| id.definition())
-                .chain(
-                    OwlNumericMembershipRuleId::ALL
-                        .iter()
-                        .map(|id| id.definition()),
-                )
-                .collect(),
+            rules: vec![
+                OwlNumericRuleId::DtEq.definition(),
+                OwlNumericRuleId::DtDiff.definition(),
+                OwlNumericMembershipRuleId::DtType2.definition(),
+                OwlNumericMembershipRuleId::DtNotType.definition(),
+            ],
         }
     }
 
@@ -65,12 +62,75 @@ impl Program {
         }
     }
 
+    fn validate(&self) -> Result<()> {
+        for rule in &self.rules {
+            if !rule.is_safe() || rule.body.len() > 3 {
+                return Err(Error::Unsupported(
+                    "Unsafe or oversized shared numeric clause".into(),
+                ));
+            }
+            Self::validate_atom(&rule.head, true)?;
+            for body in &rule.body {
+                match body {
+                    Body::Positive(atom) => Self::validate_atom(atom, false)?,
+                    Body::Filter(BuiltinFilter::Ne(left, right)) => {
+                        Self::validate_term(left)?;
+                        Self::validate_term(right)?;
+                    }
+                    _ => {
+                        return Err(Error::Unsupported(
+                            "Unsupported operator in numeric clause".into(),
+                        ));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_atom(atom: &Atom, head: bool) -> Result<()> {
+        let arity = match atom.predicate.as_str() {
+            TRIPLE_RELATION => 3,
+            OWL_NUMERIC_TYPE_VIOLATION_RELATION if head => 2,
+            rdf_reasoning::OWL_NUMERIC_VALUE_RELATION
+            | rdf_reasoning::OWL_NUMERIC_MEMBER_RELATION
+            | rdf_reasoning::OWL_NUMERIC_NONMEMBER_RELATION
+                if !head =>
+            {
+                2
+            }
+            _ => return Err(Error::Unsupported("Unsupported numeric relation".into())),
+        };
+        if atom.terms.len() != arity {
+            return Err(Error::Unsupported("Invalid numeric relation arity".into()));
+        }
+        for term in &atom.terms {
+            Self::validate_term(term)?;
+        }
+        Ok(())
+    }
+
+    fn validate_term(term: &datalog_structural_model::Term) -> Result<()> {
+        match term {
+            datalog_structural_model::Term::Variable(_) => Ok(()),
+            datalog_structural_model::Term::Constant(value) => {
+                NamedNode::new(value.as_str()).map(|_| ()).map_err(|error| {
+                    Error::Unsupported(format!("Invalid numeric clause IRI: {error}"))
+                })
+            }
+            _ => Err(Error::Unsupported(
+                "Numeric clauses require flat terms".into(),
+            )),
+        }
+    }
+
     fn apply<G: Graph>(
         &self,
         graph: &G,
         pending: &mut Pending,
         diagnostics: &mut Diagnostics,
     ) -> Result<()> {
+        self.validate()?;
         let source = Source { graph };
         // Validate the complete selected numeric domain even on an empty join result.
         source.literals(None, |_, _| Ok(()))?;
@@ -113,13 +173,12 @@ impl Program {
                                         "Unsupported numeric diagnostic datatype".into(),
                                     )
                                 })?;
-                            let Cell::Rdf(Term::Literal(parsed)) = Cell::Rdf(literal.clone())
-                            else {
+                            let Term::Literal(parsed) = &literal else {
                                 return Err(Error::Unsupported(
                                     "Numeric diagnostic requires literal".into(),
                                 ));
                             };
-                            let value = Source::<G>::parse(&parsed)?;
+                            let value = Source::<G>::parse(parsed)?;
                             let value = value.ok_or_else(|| {
                                 Error::Unsupported(
                                     "Numeric diagnostic requires interpreted value".into(),
@@ -164,3 +223,6 @@ pub(super) fn expand(
     }
     diagnostics.finish(graph, false, |_| Ok(false))
 }
+
+#[cfg(test)]
+mod validation_tests;
