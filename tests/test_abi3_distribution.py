@@ -31,8 +31,8 @@ def test_each_platform_builds_once_and_tests_all_five_interpreters():
     matrix = module.select(tomllib.loads((ROOT / "pyproject.toml").read_text()))["matrix"][
         "include"
     ]
-    assert len(matrix) == 5
-    assert len({entry["target"] for entry in matrix}) == 5
+    assert len(matrix) == 4
+    assert len({entry["target"] for entry in matrix}) == 4
     assert all(entry["python-versions"] == "3.11 3.12 3.13 3.14 3.15" for entry in matrix)
     runs = [step.get("run", "") for step in job["steps"]]
     native = next(command for command in runs if "uv build --wheel" in command)

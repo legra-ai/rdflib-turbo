@@ -19,7 +19,6 @@ def archive_names():
     targets = project["tool"]["maturin"]["target"]
     platforms = ["manylinux_2_28_x86_64", "manylinux_2_28_aarch64", "win_amd64"]
     for triple, architecture in [
-        ("x86_64-apple-darwin", "x86_64"),
         ("aarch64-apple-darwin", "arm64"),
     ]:
         minimum = targets[triple]["macos-deployment-target"].replace(".", "_")
@@ -36,7 +35,7 @@ def populate(directory):
 
 def test_inventory_accepts_all_five_interpreters_and_five_platforms(tmp_path):
     populate(tmp_path)
-    assert len(archive_names()) == 6
+    assert len(archive_names()) == 5
     assert release_packages.inventory(tmp_path, "0.2.0a1") == sorted(tmp_path.iterdir())
 
 
@@ -47,7 +46,6 @@ def test_inventory_accepts_all_five_interpreters_and_five_platforms(tmp_path):
         "manylinux_2_28_x86_64",
         "manylinux_2_28_aarch64",
         "macosx_11_0_arm64",
-        "macosx_11_0_x86_64",
     ),
 )
 def test_inventory_rejects_a_missing_platform(tmp_path, platform):
@@ -61,6 +59,7 @@ def test_inventory_rejects_a_missing_platform(tmp_path, platform):
 @pytest.mark.parametrize(
     "replacement",
     (
+        "rdflib_turbo-0.2.0a1-cp311-abi3-macosx_11_0_x86_64.whl",
         "rdflib_turbo-0.2.0a1-cp311-cp311-win_amd64.whl",
         "rdflib_turbo-0.2.0a1-cp313-cp312-win_amd64.whl",
         "rdflib_turbo-0.2.0a1-cp313-cp313t-win_amd64.whl",

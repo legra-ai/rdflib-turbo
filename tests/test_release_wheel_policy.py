@@ -19,13 +19,14 @@ def policy():
     return module
 
 
-def test_prepared_stable_abi_source_has_five_builds_and_twenty_five_installed_pairs():
+def test_prepared_stable_abi_source_has_four_builds_and_twenty_installed_pairs():
     project = tomllib.loads((ROOT / "pyproject.toml").read_text())
     result = policy().select(project)
     assert result["stable-abi"] is True
     rows = result["matrix"]["include"]
-    assert len(rows) == 5
-    assert sum(len(row["python-versions"].split()) for row in rows) == 25
+    assert len(rows) == 4
+    assert sum(len(row["python-versions"].split()) for row in rows) == 20
+    assert all(row["os"] != "macos-15-intel" for row in rows)
 
 
 def test_pending_original_cpython_release_retains_its_exact_seven_job_inventory():

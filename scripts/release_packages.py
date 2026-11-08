@@ -113,7 +113,6 @@ def inventory(directory, version):
     )
     targets = project["tool"]["maturin"]["target"]
     for triple, architecture in [
-        ("x86_64-apple-darwin", "x86_64"),
         ("aarch64-apple-darwin", "arm64"),
     ]:
         minimum = targets[triple]["macos-deployment-target"].replace(".", "_")
@@ -180,7 +179,7 @@ def main():
     if command == "check-build":
         version = tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"]
         inventory(Path("dist"), version)
-        print("Verified one source archive and all five stable-ABI platform wheels")
+        print("Verified one source archive and all four stable-ABI platform wheels")
         return
     version = os.environ["RELEASE_VERSION"]
     if command == "draft":

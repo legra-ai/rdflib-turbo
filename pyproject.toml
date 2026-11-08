@@ -39,6 +39,7 @@ include = [{path = "tools/**/*", format = "sdist"}, {path = ".cargo/config.toml"
 exclude = ["**/target/**/*", "**/__pycache__/**/*", "docs/plans/**", "docs/parity-evidence/**"]
 
 # Apply the same SDK minimum to user source builds and wheel tags, not just CI.
+# Minimum for source builds only; new releases do not publish Intel macOS wheels.
 [tool.maturin.target.x86_64-apple-darwin]
 macos-deployment-target = "11.0"
 

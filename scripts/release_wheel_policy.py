@@ -31,6 +31,8 @@ def select(project):
         raise ValueError("Prepared Python range differs from the audited wheel policy")
     rows = []  # bounded: five fixed platforms and at most two historical cohorts.
     for os_name, target, container in PLATFORMS:
+        if stable and target == "x86_64-apple-darwin":
+            continue
         cohorts = [VERSIONS]
         if not stable and os_name in {"macos-15-intel", "windows-latest"}:
             cohorts = ["3.11 3.12 3.13", "3.14 3.15"]

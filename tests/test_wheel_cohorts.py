@@ -14,7 +14,6 @@ VERSIONS = ("3.11", "3.12", "3.13", "3.14", "3.15")
 TARGETS = {
     "x86_64-unknown-linux-gnu",
     "aarch64-unknown-linux-gnu",
-    "x86_64-apple-darwin",
     "aarch64-apple-darwin",
     "x86_64-pc-windows-msvc",
 }
@@ -42,7 +41,7 @@ def test_cohorts_cover_every_platform_interpreter_pair_exactly_once():
         for version in row["python-versions"].strip("'\"").split()
     )
     assert actual == Counter((target, version) for target in TARGETS for version in VERSIONS)
-    assert len(rows) == 5
+    assert len(rows) == 4
     assert all(sum(row["target"] == target for row in rows) == 1 for target in TARGETS)
     artifacts = [row["artifact"] for row in rows]
     assert len(artifacts) == len(set(artifacts))

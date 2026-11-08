@@ -1,4 +1,4 @@
-# ADR 0077: Build one stable-ABI wheel per platform
+# ADR 0077: Build one stable-ABI wheel per supported platform
 
 Status: Accepted; cross-platform installed release validation remains mandatory
 
@@ -7,18 +7,22 @@ original archive inventory and bytes; recovery still checks out that release's
 prepared revision and its original packaging rules. Preserve the workflow-owned
 wheel-policy controller before that checkout, then derive the matrix from the
 prepared manifest. Its explicitly audited historical CPython mode retains the
-original seven cohorts/25 wheels; new abi3 sources select five jobs/wheels.
+original seven cohorts/25 wheels; new abi3 sources select four jobs/wheels.
 Unknown feature/range combinations fail. Only abi3 sources run the stable-ABI
 audit, since old prepared packaging-tool locks do not declare that tool.
 
 Build the sole native provider with PyO3's `abi3-py311` feature through `uv build`.
-Each of the five existing platforms produces one `cp311-abi3` wheel. Test that
+The supported platforms are Apple Silicon macOS, Linux x86-64/ARM64 and Windows
+x86-64. Intel macOS wheels are discontinued for new releases by explicit user
+decision; historical release files and their concrete recovery policy remain.
+Each supported platform produces one `cp311-abi3` wheel. Test that
 identical original wheel, including every installed native/Python file hash, on
-ordinary CPython 3.11, 3.12, 3.13, 3.14 and 3.15. Do not replace the 25 installed
-acceptance combinations with five interpreter tests. Retain all native coverage,
+ordinary CPython 3.11, 3.12, 3.13, 3.14 and 3.15. Retain all 20 supported
+platform/interpreter acceptance combinations; each platform tests the same wheel
+on all five supported Python versions. Retain all native coverage,
 persistence, source-archive, companion and aggregate checks. Audit every wheel
 with the independently locked `abi3audit --strict` before acceptance/publication.
-The aggregate requires exactly five platform wheels and one source archive.
+The aggregate requires exactly four platform wheels and one source archive.
 
 The previous scalar-only `_PyUnicode_*` imports are not part of Python's stable
 ABI. Replace those imports with compact read-only classification and lowercase

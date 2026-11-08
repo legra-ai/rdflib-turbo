@@ -21,7 +21,7 @@ uses the returned revision, including the step exposing the Python version.
 The shared tagger verifies that revision's Cargo manifest. Cargo is not a
 separately published crate.
 
-All five stable-ABI platform wheels and 25 installed platform/interpreter suites
+All four stable-ABI platform wheels and 20 installed platform/interpreter suites
 (ADR 0077), source-archive tests, native coverage, exact-term
 storage contracts and lint gates remain mandatory. Publication consumes the
 original tested artifacts and retains the immutable archive bundle and hashes

@@ -7,6 +7,7 @@ import textwrap
 from pathlib import Path
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -58,7 +59,11 @@ def test_prepare_creates_one_nonrelease_evidence_artifact():
     assert prepare.count("scripts/ci_facade.py prepare ") == 1
     assert "name: candidate-facade-evidence" in prepare
     assert "path: ${{ runner.temp }}/candidate-facade-evidence" in prepare
-    assert "release-wheel" not in prepare
+    steps = yaml.safe_load(workflow)["jobs"]["prepare"]["steps"]
+    uploads = [
+        step for step in steps if step.get("uses", "").startswith("actions/upload-artifact@")
+    ]
+    assert [step["with"]["name"] for step in uploads] == ["candidate-facade-evidence"]
 
 
 def test_every_provider_wheel_job_verifies_the_shared_artifact_before_acceptance():
