@@ -21,3 +21,44 @@ fn unsupported_operator_cannot_hide_behind_an_empty_relation() {
             .is_err()
     );
 }
+
+#[test]
+fn repeated_literal_occurrences_have_one_streamed_domain_witness() {
+    let mut data = GeneralizedDataset::new();
+    let literal = Literal::new_typed_literal(
+        "1",
+        NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#integer"),
+    );
+    for subject in ["urn:a", "urn:b", "urn:c"] {
+        data.insert(
+            GeneralizedQuad::new(
+                NamedNode::new_unchecked(subject),
+                NamedNode::new_unchecked("urn:p"),
+                literal.clone(),
+                GraphName::DefaultGraph,
+            )
+            .as_ref(),
+        );
+    }
+    data.insert(
+        GeneralizedQuad::new(
+            literal.clone(),
+            NamedNode::new_unchecked("urn:p"),
+            literal,
+            GraphName::DefaultGraph,
+        )
+        .as_ref(),
+    );
+    let transaction = data.transaction();
+    let source = Source {
+        graph: &transaction,
+    };
+    let mut witnesses = 0;
+    source
+        .literals(None, |_, _| {
+            witnesses += 1;
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(witnesses, 1);
+}

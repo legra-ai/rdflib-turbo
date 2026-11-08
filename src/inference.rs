@@ -72,6 +72,10 @@ mod same_as_tests;
 use backend::Graph;
 use pending::Pending;
 
+pub(crate) fn supports_mode(mode: &str) -> bool {
+    matches!(mode, "rdfs" | "owlrl" | "both" | standard_numeric::MODE)
+}
+
 const OWL: &str = "http://www.w3.org/2002/07/owl#";
 
 const PREFIXES: &str = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>

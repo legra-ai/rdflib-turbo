@@ -356,7 +356,7 @@ impl Operation {
                 destination,
                 request,
             } => {
-                if !matches!(mode.as_str(), "rdfs" | "owlrl" | "both") {
+                if !crate::inference::supports_mode(&mode) {
                     return Err(Error::Invalid(format!("Unknown inference mode: {mode}")));
                 }
                 crate::inference::scoped::expand(
@@ -369,7 +369,7 @@ impl Operation {
                 .map(Reply::Inference)
             }
             Self::Infer(mode, destination, request) => {
-                if !matches!(mode.as_str(), "rdfs" | "owlrl" | "both") {
+                if !crate::inference::supports_mode(&mode) {
                     return Err(Error::Invalid(format!("Unknown inference mode: {mode}")));
                 }
                 let destination = destination

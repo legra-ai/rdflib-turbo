@@ -301,7 +301,7 @@ impl NativeDataset {
         datatype_axioms: bool,
         prior_error_messages: Option<Vec<String>>,
     ) -> PyResult<inference::InferenceOutcome> {
-        if !matches!(mode, "rdfs" | "owlrl" | "both") {
+        if !inference::supports_mode(mode) {
             return Err(PyValueError::new_err(format!(
                 "Unknown inference mode: {mode}"
             )));

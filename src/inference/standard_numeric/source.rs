@@ -65,15 +65,47 @@ impl<G: Graph> Source<'_, G> {
         }
         for quad in self.graph.quads(None, None, None) {
             let quad = quad?;
-            for term in [quad.subject, quad.predicate, quad.object] {
+            for (position, term) in [&quad.subject, &quad.predicate, &quad.object]
+                .into_iter()
+                .enumerate()
+            {
                 if let Term::Literal(literal) = term
-                    && let Some(value) = Self::parse(&literal)?
+                    && self.first_occurrence(literal, position, &quad)?
+                    && let Some(value) = Self::parse(literal)?
                 {
-                    visit(literal.into(), value)?;
+                    visit(term.clone(), value)?;
                 }
             }
         }
         Ok(())
+    }
+
+    fn first_occurrence(
+        &self,
+        literal: &Literal,
+        position: usize,
+        row: &GeneralizedQuad,
+    ) -> Result<bool> {
+        let term = TermRef::Literal(literal.as_ref());
+        // bounded: three exact indexed role probes, no retained literal set.
+        for role in 0..=position {
+            let (subject, predicate, object) = match role {
+                0 => (Some(term), None, None),
+                1 => (None, Some(term), None),
+                _ => (None, None, Some(term)),
+            };
+            if let Some(first) = self
+                .graph
+                .quads(subject, predicate, object)
+                .next()
+                .transpose()?
+            {
+                return Ok(role == position && first == *row);
+            }
+        }
+        Err(Error::Runtime(
+            "Numeric source row disappeared during immutable scan".into(),
+        ))
     }
 
     pub(super) fn facts(
