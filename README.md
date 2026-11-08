@@ -363,7 +363,9 @@ and commit only after success when inplace=True is requested. See
 [the runtime ADR](docs/adr/0001-shared-native-runtime.md) and
 [source provenance](vendor/README.md).
 
-Requires Python 3.11+. macOS wheels require macOS 11 or later on Intel and ARM64.
+Requires Python 3.11–3.15. New native wheels cover macOS 11+ on Apple Silicon,
+Linux x86-64/ARM64, and Windows x86-64. Intel macOS wheels are discontinued for
+new releases; existing release files remain available.
 Source builds require Rust 1.99.1, a C++20 compiler and libclang. Both project code and
 extracted inference code are MIT OR Apache-2.0; vendored sources retain licenses.
 Copyright 2026 DataRoad Inc, Delaware, USA, trading as Legra.

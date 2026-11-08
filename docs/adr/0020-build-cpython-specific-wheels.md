@@ -1,6 +1,6 @@
 # ADR 0020: Build and test CPython-specific wheels
 
-Status: Accepted
+Status: Superseded for new releases by ADR0077; retained for immutable historical releases
 
 Build the Python extension against the CPython API for each supported interpreter.
 Remove PyO3's `abi3-py311` feature; retain its safe public APIs, the extension-module

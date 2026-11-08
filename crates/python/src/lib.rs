@@ -33,16 +33,8 @@ pub use regex_policy::{
     NativeRegexPolicy, RegexCompilationPolicy, compilation_policy, registered_regex_policy,
 };
 
-/// Read the current CPython wheel host's immutable Unicode decimal table.
-///
-/// This scalar-only operation allocates no Python object and needs no GIL.
-/// CPython exposes Py_UCS4 -> int as an immutable generated-table lookup.
-pub fn python_decimal_digit(ch: char) -> Option<u8> {
-    // SAFETY: a Rust char is a valid Unicode scalar. This CPython-specific
-    // export accesses no PyObject, refcount, interpreter or error state.
-    let value = unsafe { pyo3::ffi::Py_UNICODE_TODECIMAL(ch as u32) };
-    u8::try_from(value).ok()
-}
+pub mod host_unicode;
+pub use host_unicode::decimal as python_decimal_digit;
 
 pyo3::create_exception!(_native, ValidationFailure, PyValueError);
 pyo3::create_exception!(_native, ShapeLoadFailure, PyValueError);
@@ -632,6 +624,7 @@ pub fn register(
     regex_policy: Arc<RegexPolicy>,
     comparison_host: Arc<dyn ComparisonHost>,
 ) -> PyResult<()> {
+    host_unicode::validate(module.py())?;
     if module.hasattr("_REGEX_POLICY")? {
         return Err(PyRuntimeError::new_err(
             "SHACL module is already registered",

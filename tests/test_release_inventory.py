@@ -19,15 +19,12 @@ def archive_names():
     targets = project["tool"]["maturin"]["target"]
     platforms = ["manylinux_2_28_x86_64", "manylinux_2_28_aarch64", "win_amd64"]
     for triple, architecture in [
-        ("x86_64-apple-darwin", "x86_64"),
         ("aarch64-apple-darwin", "arm64"),
     ]:
         minimum = targets[triple]["macos-deployment-target"].replace(".", "_")
         platforms.append(f"macosx_{minimum}_{architecture}")
     return ["rdflib_turbo-0.2.0a1.tar.gz"] + [
-        f"rdflib_turbo-0.2.0a1-cp{version}-cp{version}-{platform}.whl"
-        for version in ("311", "312", "313", "314", "315")
-        for platform in platforms
+        f"rdflib_turbo-0.2.0a1-cp311-abi3-{platform}.whl" for platform in platforms
     ]
 
 
@@ -38,14 +35,22 @@ def populate(directory):
 
 def test_inventory_accepts_all_five_interpreters_and_five_platforms(tmp_path):
     populate(tmp_path)
-    assert len(archive_names()) == 26
+    assert len(archive_names()) == 5
     assert release_packages.inventory(tmp_path, "0.2.0a1") == sorted(tmp_path.iterdir())
 
 
-@pytest.mark.parametrize("version", ("311", "312", "313", "314", "315"))
-def test_inventory_rejects_a_missing_interpreter_platform(tmp_path, version):
+@pytest.mark.parametrize(
+    "platform",
+    (
+        "win_amd64",
+        "manylinux_2_28_x86_64",
+        "manylinux_2_28_aarch64",
+        "macosx_11_0_arm64",
+    ),
+)
+def test_inventory_rejects_a_missing_platform(tmp_path, platform):
     populate(tmp_path)
-    missing = f"rdflib_turbo-0.2.0a1-cp{version}-cp{version}-win_amd64.whl"
+    missing = f"rdflib_turbo-0.2.0a1-cp311-abi3-{platform}.whl"
     (tmp_path / missing).unlink()
     with pytest.raises(ValueError, match=missing):
         release_packages.inventory(tmp_path, "0.2.0a1")
@@ -54,7 +59,8 @@ def test_inventory_rejects_a_missing_interpreter_platform(tmp_path, version):
 @pytest.mark.parametrize(
     "replacement",
     (
-        "rdflib_turbo-0.2.0a1-cp311-abi3-win_amd64.whl",
+        "rdflib_turbo-0.2.0a1-cp311-abi3-macosx_11_0_x86_64.whl",
+        "rdflib_turbo-0.2.0a1-cp311-cp311-win_amd64.whl",
         "rdflib_turbo-0.2.0a1-cp313-cp312-win_amd64.whl",
         "rdflib_turbo-0.2.0a1-cp313-cp313t-win_amd64.whl",
         "rdflib_turbo-0.2.0a1-cp313-cp313-win_arm64.whl",
@@ -63,14 +69,14 @@ def test_inventory_rejects_a_missing_interpreter_platform(tmp_path, version):
 )
 def test_inventory_rejects_wrong_abi_platform_or_version(tmp_path, replacement):
     populate(tmp_path)
-    original = tmp_path / "rdflib_turbo-0.2.0a1-cp313-cp313-win_amd64.whl"
+    original = tmp_path / "rdflib_turbo-0.2.0a1-cp311-abi3-win_amd64.whl"
     original.rename(tmp_path / replacement)
     with pytest.raises(ValueError, match="win_amd64"):
         release_packages.inventory(tmp_path, "0.2.0a1")
 
 
 @pytest.mark.parametrize(
-    "extra", ("unexpected.txt", "rdflib_turbo-0.2.0a1-cp311-abi3-win_amd64.whl")
+    "extra", ("unexpected.txt", "rdflib_turbo-0.2.0a1-cp312-abi3-win_amd64.whl")
 )
 def test_inventory_rejects_extra_artifacts(tmp_path, extra):
     populate(tmp_path)
@@ -81,7 +87,7 @@ def test_inventory_rejects_extra_artifacts(tmp_path, extra):
 
 def test_inventory_rejects_a_directory_with_an_archive_name(tmp_path):
     populate(tmp_path)
-    path = tmp_path / "rdflib_turbo-0.2.0a1-cp314-cp314-win_amd64.whl"
+    path = tmp_path / "rdflib_turbo-0.2.0a1-cp311-abi3-win_amd64.whl"
     path.unlink()
     path.mkdir()
     with pytest.raises(ValueError, match="regular file"):

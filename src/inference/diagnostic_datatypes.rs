@@ -16,7 +16,7 @@ mod signals;
 mod temporal;
 mod text;
 mod truthiness;
-pub(crate) mod unicode;
+pub(crate) use shacl_bindings::host_unicode as unicode;
 
 pub(crate) use context::LexicalContext;
 pub(super) use numeric::{PythonNumericValue, parse_numeric};

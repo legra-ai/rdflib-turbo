@@ -21,7 +21,8 @@ uses the returned revision, including the step exposing the Python version.
 The shared tagger verifies that revision's Cargo manifest. Cargo is not a
 separately published crate.
 
-All 25 CPython/platform wheels (ADR 0020), source-archive tests, native coverage, exact-term
+All four stable-ABI platform wheels and 20 installed platform/interpreter suites
+(ADR 0077), source-archive tests, native coverage, exact-term
 storage contracts and lint gates remain mandatory. Publication consumes the
 original tested artifacts and retains the immutable archive bundle and hashes
 in a draft GitHub release. Recovery finishes an incomplete tag before advancing

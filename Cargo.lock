@@ -970,7 +970,6 @@ dependencies = [
  "oxilangtag",
  "oxrdf",
  "pyo3",
- "pyo3-build-config",
  "pyshacl-turbo-engine",
  "pyshacl-turbo-python",
  "rdf-reasoning",
