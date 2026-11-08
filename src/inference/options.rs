@@ -119,6 +119,16 @@ pub(super) fn expand_configured<'a>(
 ) -> Result<(PreparedOptions<'a>, InferenceOutcome)> {
     #[cfg(all(test, feature = "allocation-profiling"))]
     trace::mark("configured_enter", 0, (0, 0));
+    if mode == super::standard_numeric::MODE {
+        if request.options.axiomatic_triples || request.options.datatype_axioms {
+            return Err(Error::Unsupported(
+                "Standard numeric core excludes optional axioms".into(),
+            ));
+        }
+        let prepared = PreparedOptions::new(data, mode, InferenceOptions::default())?;
+        let outcome = super::standard_numeric::expand(data, request)?;
+        return Ok((prepared, outcome));
+    }
     match mode {
         "none" | "" => {
             return Ok((

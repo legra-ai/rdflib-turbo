@@ -152,3 +152,14 @@ provide checked transport and independent value/membership fixtures, then bind
 its operations through backend capabilities. Reuse those operations in forward
 and backward callers. Keep private Legra storage/execution separate, and do not
 add more consumer-owned standard rule definitions to close catalogue gaps.
+
+## Explicit standard numeric mode
+
+`owl2-rl-numeric-core` selects the four shared numeric clauses from
+`rdf-reasoning` 2.6.0 through typed native relation bindings. Its sixteen XSD
+numeric datatypes include strict integer/decimal/float/double lexical mapping
+and derived integer ranges. It preserves generalized identity/membership heads
+and uses checked typed nonmembership witnesses for diagnostics. This is a
+separate restricted selection from the Python-reference audit above; it does
+not imply adoption of any unselected catalogue clause or complete OWL-RL
+conformance. See ADR 0076 and the README for the exact exclusions.

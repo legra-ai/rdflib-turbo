@@ -38,7 +38,7 @@ impl Diagnostics {
         diagnostics
     }
 
-    fn add(&mut self, message: String) {
+    pub(super) fn add(&mut self, message: String) {
         let message = Arc::new(message);
         if self.known.insert(message.clone()) {
             self.messages.push(message);

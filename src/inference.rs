@@ -45,6 +45,7 @@ mod shared_rule_tests;
 mod staged;
 #[cfg(test)]
 mod staged_tests;
+mod standard_numeric;
 mod traversal;
 
 pub(crate) use delta::expand_delta;
@@ -70,6 +71,10 @@ mod same_as_tests;
 
 use backend::Graph;
 use pending::Pending;
+
+pub(crate) fn supports_mode(mode: &str) -> bool {
+    matches!(mode, "rdfs" | "owlrl" | "both" | standard_numeric::MODE)
+}
 
 const OWL: &str = "http://www.w3.org/2002/07/owl#";
 
@@ -323,3 +328,6 @@ mod scheduling_tests;
 
 #[cfg(test)]
 mod generalized_parity_tests;
+
+#[cfg(test)]
+mod standard_numeric_tests;
