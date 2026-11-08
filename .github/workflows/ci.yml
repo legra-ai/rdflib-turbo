@@ -233,9 +233,21 @@ jobs:
           toolchain: 1.99.1
           components: rustfmt, clippy
           cache-key: vendor-${{ hashFiles('vendor/**') }}
+      - id: formatter
+        name: Read the formatter pinned by the prepared source
+        shell: uv run --no-project --python 3.13.18 python {0}
+        run: |
+          import os
+          import re
+          from pathlib import Path
+          toolchain = Path('rustfmt-toolchain').read_text().strip()
+          if re.fullmatch(r'nightly-\d{4}-\d{2}-\d{2}', toolchain) is None:
+              raise ValueError('Invalid prepared formatter')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'toolchain={toolchain}\n')
       - uses: dtolnay/rust-toolchain@nightly
         with:
-          toolchain: nightly-2026-11-08
+          toolchain: ${{ steps.formatter.outputs.toolchain }}
           components: rustfmt
       - uses: actions/download-artifact@v8
         with:
@@ -244,7 +256,7 @@ jobs:
           include-hidden-files: true
       - name: Verify the facade cohort and arrange the original locked peer
         run: uv run --no-project --python 3.13 python -B scripts/ci_facade.py consume --input "$RUNNER_TEMP/candidate-facade-evidence" --environment-file "$GITHUB_ENV"
-      - run: cargo +nightly-2026-11-08 fmt --check
+      - run: cargo "+${{ steps.formatter.outputs.toolchain }}" fmt --check
       - run: cargo clippy --locked -- -D warnings
       - name: Immutable native engine source metadata
         run: make test-build-metadata
