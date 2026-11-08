@@ -42,7 +42,7 @@ def test_standalone_matcher_manifest_is_explicitly_outside_owner_workspace():
 def test_regex_owner_runs_all_three_profiles_and_pinned_formatter(tmp_path, monkeypatch):
     module = runner(monkeypatch)
     (tmp_path / "Cargo.toml").write_text('[patch.crates-io]\noxrdf={path="vendor/oxrdf"}\n')
-    (tmp_path / "rustfmt-toolchain").write_text("nightly-2026-11-07\n")
+    (tmp_path / "rustfmt-toolchain").write_text("nightly-2026-11-08\n")
     calls = []
 
     def cargo(arguments, **kwargs):
@@ -63,7 +63,7 @@ def test_regex_owner_runs_all_three_profiles_and_pinned_formatter(tmp_path, monk
     assert all("--no-default-features" in call and "--lib" in call for call in tests[1:])
     assert calls[-1] == [
         "cargo",
-        "+nightly-2026-11-07",
+        "+nightly-2026-11-08",
         "fmt",
         "--manifest-path",
         str(tmp_path / "vendor/fancy-regex-0.20.0/Cargo.toml"),

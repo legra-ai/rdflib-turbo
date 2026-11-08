@@ -3,7 +3,7 @@ use super::{caller::Caller, focus::Payload, source::Factories};
 use pyo3::{
     PyTypeInfo,
     prelude::*,
-    types::{PyDict, PyList, PySet, PyString},
+    types::{PyDict, PyList, PySet, PyString, PyTuple},
 };
 use pyshacl_turbo_engine::{SelectedTargetsRef, oxigraph::model::*};
 use std::sync::Arc;
@@ -22,6 +22,40 @@ fn terms<'a, 'py>(
 fn update(target: &Bound<'_, PySet>, values: &Bound<'_, PyAny>) -> PyResult<()> {
     target.call_method1("update", (values,))?;
     Ok(())
+}
+fn unpack_source_pair<'py>(
+    py: Python<'py>,
+    row: Bound<'py, PyAny>,
+    python_unpack: &mut Option<Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyTuple>> {
+    if let Ok(pair) = row.cast_exact::<PyTuple>()
+        && pair.len() == 2
+    {
+        return Ok(pair.clone());
+    }
+    let unpack = match python_unpack {
+        Some(unpack) => unpack,
+        None => {
+            // The interpreter owns iterable consumption and its version-specific
+            // errors. Compile once per acquisition, without a module or global cache.
+            let namespace = PyDict::new(py);
+            py.run(
+                c"def unpack_pair(row):\n    subject, object = row\n    return subject, object\n",
+                Some(&namespace),
+                None,
+            )?;
+            let unpack = namespace
+                .get_item("unpack_pair")?
+                .expect("the local unpack function was just defined");
+            // Do not retain a function -> globals -> function reference cycle.
+            namespace.del_item("unpack_pair")?;
+            python_unpack.insert(unpack)
+        }
+    };
+    unpack
+        .call1((row,))?
+        .cast_into::<PyTuple>()
+        .map_err(Into::into)
 }
 pub(super) fn acquire(
     py: Python<'_>,
@@ -72,6 +106,7 @@ pub(super) fn acquire(
         }
     }
     update(&found, instances.as_any())?;
+    let mut python_unpack = None;
     for (predicates, object_role) in [
         (targets.subjects_of().collect::<Vec<_>>(), false),
         (targets.objects_of().collect::<Vec<_>>(), true),
@@ -82,24 +117,9 @@ pub(super) fn acquire(
             let rows = graph.call_method("subject_objects", (predicate,), Some(&unique))?;
             let selected = PySet::empty(py)?;
             for row in rows.try_iter()? {
-                // Match the actual comprehension's two-item unpack, including
-                // iterator exceptions and the third-item overflow check.
-                let mut pair = row?.try_iter()?;
-                let subject = pair.next().transpose()?.ok_or_else(|| {
-                    pyo3::exceptions::PyValueError::new_err(
-                        "not enough values to unpack (expected 2, got 0)",
-                    )
-                })?;
-                let object = pair.next().transpose()?.ok_or_else(|| {
-                    pyo3::exceptions::PyValueError::new_err(
-                        "not enough values to unpack (expected 2, got 1)",
-                    )
-                })?;
-                if pair.next().transpose()?.is_some() {
-                    return Err(pyo3::exceptions::PyValueError::new_err(
-                        "too many values to unpack (expected 2)",
-                    ));
-                }
+                let pair = unpack_source_pair(py, row?, &mut python_unpack)?;
+                let subject = pair.get_item(0)?;
+                let object = pair.get_item(1)?;
                 selected.add(if object_role { object } else { subject })?;
             }
             update(&all, selected.as_any())?;
