@@ -59,6 +59,8 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@v2
         with:
           toolchain: 1.99.1
+      - run: uv run --no-project python scripts/test_dependabot_policy.py
+      - run: uv run --no-project python scripts/test_dev_tools.py
       - uses: actions/create-github-app-token@v3
         id: writer
         if: github.ref == 'refs/heads/main'
