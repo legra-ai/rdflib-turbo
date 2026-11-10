@@ -72,7 +72,7 @@ jobs:
       - name: Preserve the wheel-policy controller before preparing historical source
         run: cp scripts/release_wheel_policy.py "$RUNNER_TEMP/release-wheel-policy.py" || exit 1
       - id: release
-        uses: legra-ai/github-actions/.github/actions/prepare-cargo-release@41e4bc29aa877568a5a099a0c1b0639ea2bdc5e5
+        uses: legra-ai/github-actions/.github/actions/prepare-cargo-release@50b7c9ece16002e2cc0c900e7c80ad74d500be5b
         with:
           token: ${{ steps.writer.outputs.token }}
           tag-format: pep440
