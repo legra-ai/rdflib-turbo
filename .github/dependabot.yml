@@ -17,7 +17,7 @@ updates:
       prefix: build
       include: scope
   - package-ecosystem: uv
-    directory: /
+    directories: [/, /tools/dev, /tools/packaging]
     schedule:
       interval: daily
     groups:
