@@ -1,6 +1,7 @@
 """Python lint tools must run without building the native project."""
 
 import os
+import shutil
 import subprocess
 import sys
 import tomllib
@@ -32,6 +33,11 @@ def test_commit_lint_runs_when_project_build_backend_is_unavailable(tmp_path):
     formatter.chmod(0o755)
     hook = tmp_path / "pre-commit"
     hook.write_bytes((root / ".githooks/pre-commit").read_bytes())
+    shutil.copytree(
+        root / "tools/dev",
+        tmp_path / "tools/dev",
+        ignore=shutil.ignore_patterns(".venv", "__pycache__"),
+    )
     environment = dict(os.environ)
     for name in ("VIRTUAL_ENV", "UV_PROJECT", "UV_PROJECT_ENVIRONMENT", "UV_NO_SYNC"):
         environment.pop(name, None)
