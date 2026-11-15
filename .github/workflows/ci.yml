@@ -312,8 +312,18 @@ jobs:
       - uses: astral-sh/setup-uv@v10.3.3
         with:
           version: "0.13.7"
+      - uses: actions/create-github-app-token@v3
+        id: writer
+        with:
+          app-id: ${{ secrets.RELEASE_WRITER_APP_ID }}
+          private-key: ${{ secrets.RELEASE_WRITER_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-workflows: write
       - uses: actions/checkout@v7
         with:
+          token: ${{ steps.writer.outputs.token }}
           ref: ${{ needs.prepare.outputs.revision }}
           fetch-depth: 0
       - uses: actions/setup-python@v7
