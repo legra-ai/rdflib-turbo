@@ -74,7 +74,7 @@ jobs:
       - name: Preserve the wheel-policy controller before preparing historical source
         run: cp scripts/release_wheel_policy.py "$RUNNER_TEMP/release-wheel-policy.py" || exit 1
       - id: release
-        uses: legra-ai/github-actions/.github/actions/prepare-cargo-release@b1647cd8e896738fa2aed2b2b9d0d5f60a7e1cb4
+        uses: legra-ai/github-actions/.github/actions/prepare-cargo-release@4f513e763cf79e620f670ceb4430fd8adfd06c7e
         with:
           token: ${{ steps.writer.outputs.token }}
           tag-format: pep440
@@ -329,7 +329,7 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
-      - uses: legra-ai/github-actions/.github/actions/tag-tested-release@b1647cd8e896738fa2aed2b2b9d0d5f60a7e1cb4
+      - uses: legra-ai/github-actions/.github/actions/tag-tested-release@4f513e763cf79e620f670ceb4430fd8adfd06c7e
         with:
           version: ${{ needs.prepare.outputs.cargo-version }}
           revision: ${{ needs.prepare.outputs.revision }}
