@@ -35,9 +35,13 @@ updates:
     schedule:
       interval: daily
     groups:
+      shared-policy:
+        applies-to: version-updates
+        patterns: ['legra-ai/github-actions*']
       compatible:
         update-types: [minor, patch]
         patterns: ['*']
+        exclude-patterns: ['legra-ai/github-actions*']
       security:
         applies-to: security-updates
         patterns: ['*']
