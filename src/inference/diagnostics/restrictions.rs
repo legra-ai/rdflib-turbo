@@ -2,7 +2,8 @@
 
 use oxigraph::model::*;
 
-use super::{Diagnostics, has, objects, text};
+use super::collector::Diagnostics;
+use super::terms::{has, objects, text};
 use crate::Result;
 use crate::graph::{RDF, iri};
 use crate::inference::OWL;

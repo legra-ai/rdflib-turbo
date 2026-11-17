@@ -1,11 +1,3 @@
-#[cfg(all(test, feature = "allocation-profiling"))]
-use crate::allocation_tests::trace;
-use oxigraph::model::*;
-use oxigraph::sparql::{PreparedSparqlQuery, SparqlEvaluator};
-use oxrdf::GeneralizedDataset;
-
-use crate::{Error, Result};
-
 mod axioms;
 mod backend;
 mod borrowed;
@@ -22,13 +14,16 @@ mod diagnostics;
 #[cfg(all(test, feature = "allocation-profiling"))]
 mod frontier_attribution_tests;
 mod intersections;
+mod kernel;
 mod literal_values;
+mod modes;
 mod options;
 mod outcome;
 mod pending;
 #[cfg(test)]
 mod pending_retirement_tests;
 mod request;
+mod rules;
 mod same_as;
 #[cfg(test)]
 mod same_as_reference_tests;
@@ -70,250 +65,12 @@ mod literal_value_tests;
 mod same_as_tests;
 
 use backend::Graph;
+use kernel::expand_inner;
+pub(crate) use modes::{expand, expand_into, expand_transaction, supports_mode};
 use pending::Pending;
-
-pub(crate) fn supports_mode(mode: &str) -> bool {
-    matches!(mode, "rdfs" | "owlrl" | "both" | standard_numeric::MODE)
-}
-
-const OWL: &str = "http://www.w3.org/2002/07/owl#";
-
-const PREFIXES: &str = "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-PREFIX owl: <http://www.w3.org/2002/07/owl#>
-PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>";
-
-// OWL 2 RL/RDF entailment rules, represented as native CONSTRUCT programs.
-// https://www.w3.org/TR/owl2-profiles/#Reasoning_in_OWL_2_RL_and_RDF_Graphs
-const OWL_RULES: &[(&str, &str)] = &[
-    (
-        "?s owl:sameAs ?s . ?p owl:sameAs ?p . ?o owl:sameAs ?o",
-        "?s ?p ?o",
-    ),
-    ("?s ?q ?o", "?p owl:sameAs ?q . ?s ?p ?o"),
-    (
-        "?y owl:sameAs ?z",
-        "?r owl:onProperty ?p ; owl:maxCardinality ?n . FILTER(?n = 1) ?x a ?r ; ?p ?y, ?z",
-    ),
-    (
-        "?y owl:sameAs ?z",
-        "?r owl:onProperty ?p ; owl:maxQualifiedCardinality ?n ; owl:onClass ?c . FILTER(?n = 1) ?x a ?r ; ?p ?y, ?z . ?y a ?c . ?z a ?c",
-    ),
-    (
-        "?y owl:sameAs ?z",
-        "?r owl:onProperty ?p ; owl:maxQualifiedCardinality ?n ; owl:onClass owl:Thing . FILTER(?n = 1) ?x a ?r ; ?p ?y, ?z",
-    ),
-];
-
-pub(crate) fn expand(
-    data: &mut GeneralizedDataset,
-    mode: &str,
-    request: InferenceRequest,
-) -> Result<InferenceOutcome> {
-    if data.iter().any(|q| !q.graph_name.is_default_graph()) {
-        return expand_into(data, mode, GraphName::DefaultGraph, request);
-    }
-    let mut transaction = data.transaction();
-    let (_, outcome) = expand_configured(&mut transaction, mode, request)?;
-    transaction.commit();
-    Ok(outcome)
-}
-
-/// Infer over the dataset union and put output in the exact destination.
-/// Original graph contexts remain available to callers and report descriptions.
-pub(crate) fn expand_into(
-    data: &mut GeneralizedDataset,
-    mode: &str,
-    destination: GraphName,
-    request: InferenceRequest,
-) -> Result<InferenceOutcome> {
-    staged::expand(data, mode, destination, request)
-}
-
-/// The pinned original's derived-head policy is separate from stored data.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum HeadDisposition {
-    Accepted,
-    AlreadyPresent,
-    RefusedLiteralPredicate,
-}
-
-fn apply_rules(
-    data: &impl Graph,
-    queries: &[PreparedSparqlQuery],
-    additions: &mut Pending,
-    owl: bool,
-) -> Result<()> {
-    if owl {
-        same_as::apply(data, additions)?;
-    }
-    for query in queries {
-        let triples = data.projected_inference_heads(query.clone())?;
-        for triple in triples {
-            let triple = triple?;
-            additions.push_head(data, triple)?;
-        }
-    }
-    Ok(())
-}
-
-fn expand_inner(
-    data: &mut impl Graph,
-    mode: &str,
-    request: InferenceRequest,
-) -> Result<InferenceOutcome> {
-    #[cfg(all(test, feature = "allocation-profiling"))]
-    trace::mark("kernel_enter", 0, (0, 0));
-    match mode {
-        "none" | "" => return Ok(InferenceOutcome::default()),
-        "rdfs" | "owlrl" | "both" => {}
-        _ => return Err(Error::Unsupported(format!("inference: {mode}"))),
-    }
-    if mode == "rdfs" {
-        // RDFS_Semantics.one_time_rules publishes every literal's identity pair
-        // directly to its destination, even when the input contains that SPO.
-        // Retain only the output delta; no source snapshot is needed.
-        #[cfg(all(test, feature = "allocation-profiling"))]
-        trace::mark("literal_publications_before", 0, (0, 0));
-        let mut literal_publications = Pending::default();
-        for quad in data.quads(None, None, None) {
-            let mut quad = quad?;
-            if quad.object.is_literal() && !data.contains_destination(quad.as_ref())? {
-                quad.graph_name = GraphName::DefaultGraph;
-                literal_publications.insert(quad);
-            }
-        }
-        #[cfg(all(test, feature = "allocation-profiling"))]
-        trace::mark(
-            "literal_publications_collected",
-            0,
-            literal_publications.trace_counts(),
-        );
-        for quad in literal_publications.into_heads() {
-            data.insert_head(quad)?;
-        }
-        #[cfg(all(test, feature = "allocation-profiling"))]
-        trace::mark("literal_publications_done", 0, (0, 0));
-        literal_values::substitute(data, &request.lexical_context)?;
-        #[cfg(all(test, feature = "allocation-profiling"))]
-        trace::mark("literal_values_done", 0, (0, 0));
-    }
-    let mut diagnostics = diagnostics::Diagnostics::new(
-        request.prior_error_messages,
-        request.lexical_context.integer_digit_limit,
-    );
-    // bounded: the fixed RDFS/OWL rule tables above.
-    let mut rules = Vec::new();
-    if mode != "rdfs" {
-        rules.extend_from_slice(OWL_RULES);
-        axioms::owl(
-            data,
-            mode == "both",
-            &mut diagnostics,
-            &request.lexical_context,
-        )?;
-    }
-    #[cfg(all(test, feature = "allocation-profiling"))]
-    trace::mark("resources_before", 0, (0, 0));
-    let mut initial_resources = Pending::default();
-    if mode != "owlrl" {
-        for quad in axioms::resources(data) {
-            initial_resources.push(data, quad?)?;
-        }
-    }
-    #[cfg(all(test, feature = "allocation-profiling"))]
-    trace::mark("resources_collected", 0, initial_resources.trace_counts());
-    // bounded: one prepared query per built-in rule.
-    let mut schedule = scheduling::Schedule::for_mode(mode)?;
-    let queries = rules
-        .iter()
-        .map(|(template, pattern)| {
-            SparqlEvaluator::new()
-                .parse_query(&format!(
-                    "{PREFIXES}\nCONSTRUCT {{ {template} }} WHERE {{ {pattern} }}"
-                ))
-                .map_err(|e| Error::Runtime(format!("Invalid inference rule: {e}")))
-        })
-        .collect::<Result<Vec<_>>>()?;
-    #[cfg(all(test, feature = "allocation-profiling"))]
-    trace::mark("rules_prepared", 0, initial_resources.trace_counts());
-    #[cfg(all(test, feature = "allocation-profiling"))]
-    let mut trace_round = 0;
-    loop {
-        #[cfg(all(test, feature = "allocation-profiling"))]
-        {
-            trace_round += 1;
-            trace::mark("round_enter", trace_round, initial_resources.trace_counts());
-        }
-        if mode != "rdfs" {
-            diagnostics.round(data)?;
-        }
-        let mut additions = std::mem::take(&mut initial_resources);
-        if mode != "rdfs" {
-            same_as::apply(data, &mut additions)?;
-        }
-        #[cfg(all(test, feature = "allocation-profiling"))]
-        trace::mark("schedule_before", trace_round, additions.trace_counts());
-        #[cfg(not(all(test, feature = "allocation-profiling")))]
-        schedule.apply(data, &mut additions)?;
-        #[cfg(all(test, feature = "allocation-profiling"))]
-        schedule.apply_traced(data, &mut additions, trace_round)?;
-        #[cfg(all(test, feature = "allocation-profiling"))]
-        trace::mark("schedule_after", trace_round, additions.trace_counts());
-        apply_rules(data, &queries, &mut additions, false)?;
-        #[cfg(all(test, feature = "allocation-profiling"))]
-        trace::mark("other_queries_after", trace_round, additions.trace_counts());
-        if mode != "rdfs" {
-            // Lists can themselves be inferred, so discover them each round.
-            intersections::additions(data, &mut additions)?;
-            traversal::chains(data, &mut additions, diagnostics.witnesses())?;
-            traversal::keys(data, &mut additions, diagnostics.witnesses())?;
-        }
-        if additions.is_empty() {
-            #[cfg(all(test, feature = "allocation-profiling"))]
-            trace::mark("diagnostics_before", trace_round, additions.trace_counts());
-            let outcome = diagnostics.finish(data, mode != "rdfs", |term| {
-                diagnostics::cardinality_zero(term, &request.lexical_context)
-            })?;
-            if mode != "rdfs" {
-                data.cleanup_blank_predicates()?;
-            }
-            #[cfg(all(test, feature = "allocation-profiling"))]
-            trace::mark("kernel_return", trace_round, additions.trace_counts());
-            return Ok(outcome);
-        }
-        #[cfg(all(test, feature = "allocation-profiling"))]
-        trace::mark("publish_before", trace_round, additions.trace_counts());
-        let mut dirty = 0;
-        for quad in additions.into_heads() {
-            // Conservatively count destination-only publications too. Native
-            // membership kernels still run every round and retain their wider view.
-            dirty |= schedule.changed(&quad.as_ref().predicate.into_owned());
-            data.insert_head(quad)?;
-        }
-        #[cfg(all(test, feature = "allocation-profiling"))]
-        trace::mark("publish_after", trace_round, (0, 0));
-        schedule.advance(dirty);
-    }
-}
-
-/// Expand directly over the active transaction's union, without copying its base.
-pub(crate) fn expand_transaction(
-    transaction: &mut oxigraph::store::Transaction<'_>,
-    mode: &str,
-    destination: GraphName,
-    request: InferenceRequest,
-) -> Result<InferenceOutcome> {
-    expand_configured(
-        &mut backend::TransactionGraph {
-            transaction,
-            destination,
-        },
-        mode,
-        request,
-    )
-    .map(|(_, outcome)| outcome)
-}
+use rules::{HeadDisposition, OWL, apply_rules};
+#[cfg(test)]
+use rules::{OWL_RULES, PREFIXES};
 
 #[cfg(test)]
 mod insertion_failure_tests;

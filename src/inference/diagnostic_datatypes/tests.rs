@@ -1,5 +1,5 @@
 use super::*;
-use oxigraph::model::NamedNode;
+use oxigraph::model::{Literal, NamedNode};
 use serde::Deserialize;
 
 #[derive(Deserialize)]

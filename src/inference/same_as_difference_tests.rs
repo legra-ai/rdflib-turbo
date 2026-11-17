@@ -5,7 +5,8 @@ use std::cell::Cell;
 use oxigraph::model::*;
 use oxigraph::sparql::{PreparedSparqlQuery, QueryResults};
 
-use super::{Graph, Pending, Rows, SubjectRow};
+use super::super::{Graph, Pending};
+use super::rows::{Rows, SubjectRow};
 use crate::Result;
 
 struct ExistingHeads<'a> {

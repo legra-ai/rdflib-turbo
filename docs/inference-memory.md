@@ -45,7 +45,7 @@ Use the full pipeline RSS results for process memory, and uninstrumented wheels
 for performance. Profiling counters are compiled only into this opt-in test
 binary; normal wheels have no allocation counter.
 
-CI also runs `allocation_tests::inference_heap_budget` alone with one test thread.
+CI also runs `allocation_tests::budgets::inference_heap_budget` alone with one test thread.
 Its fixed 1,000-record inference workload requires peak requested Rust heap to
 stay below twice retained heap. This targets transient duplication, rather than
 noisy OS RSS. The original clone-and-buffer implementation fails the budget.

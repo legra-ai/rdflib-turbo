@@ -1,4 +1,5 @@
 //! Preserve the previous materialized-union algorithm as an independent oracle.
+use oxigraph::model::*;
 use oxrdf::GeneralizedDataset;
 use std::time::{Duration, Instant};
 

@@ -1,4 +1,9 @@
+use oxigraph::io::{RdfFormat, RdfParser};
+use oxigraph::model::*;
 use oxigraph::sparql::QueryResults;
+use oxigraph::sparql::SparqlEvaluator;
+use pyo3::exceptions::{PyNotImplementedError, PyRuntimeError, PyValueError};
+use pyo3::prelude::*;
 
 use super::*;
 
@@ -95,7 +100,7 @@ fn frozen_union_preserves_source_contexts_without_mutation() {
         object.clone(),
         NamedNode::new("urn:g").unwrap(),
     ));
-    let union = graph::with_union(&before.clone().into());
+    let union = crate::graph::with_union(&before.clone().into());
     assert_eq!(union.len(), before.len() + 1);
     assert!(!before.contains(QuadRef::new(
         NamedNodeRef::new_unchecked("urn:n"),
