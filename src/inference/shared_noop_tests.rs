@@ -1,5 +1,10 @@
 //! Reflexive subproperty joins must not materialize already-visible heads.
-use super::*;
+use datalog_structural_model::Literal;
+use oxigraph::model::NamedNode;
+use rdf_reasoning::RuleId::*;
+
+use super::CompiledRule;
+use crate::Error;
 #[cfg(feature = "allocation-profiling")]
 use crate::inference::HeadDisposition;
 use crate::inference::{Graph, Pending, backend::TransactionGraph};

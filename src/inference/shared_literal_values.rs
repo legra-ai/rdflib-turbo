@@ -1,6 +1,10 @@
 //! Lower the checked one-time literal clause without rediscovering bound terms.
 
-use super::*;
+use datalog_structural_model::{Literal, Rule, Term};
+use rdf_reasoning::{LITERAL_VALUE_RELATION, TRIPLE_RELATION};
+
+use super::CompiledRule;
+use crate::{Error, Result};
 
 impl CompiledRule {
     pub(super) fn literal_value_parts(rule: &Rule) -> Result<(String, String)> {

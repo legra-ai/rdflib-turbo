@@ -1,5 +1,8 @@
 //! Exact catalogue optimizations retain arbitrary-clause and scoped publication semantics.
-use super::*;
+use datalog_structural_model::Literal;
+use rdf_reasoning::RuleId::*;
+
+use super::CompiledRule;
 use oxigraph::model::{GeneralizedQuad, GraphName, Literal as RdfLiteral, NamedNode, Triple};
 use oxigraph::sparql::QueryResults;
 use oxrdf::GeneralizedDataset;
