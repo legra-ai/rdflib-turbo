@@ -1,0 +1,909 @@
+{
+  "rdflib_version": "7.6.0",
+  "suites": {
+    "RDF11_TURTLE": {
+      "total": 313,
+      "turbo": 313,
+      "rdflib": 270
+    },
+    "RDF11_TRIG": {
+      "total": 357,
+      "turbo": 357,
+      "rdflib": 305
+    },
+    "RDF11_NTRIPLES": {
+      "total": 70,
+      "turbo": 70,
+      "rdflib": 60
+    },
+    "RDF11_NQUADS": {
+      "total": 87,
+      "turbo": 87,
+      "rdflib": 78
+    },
+    "RDF12_TURTLE_SYNTAX": {
+      "total": 77,
+      "turbo": 35,
+      "rdflib": 26
+    },
+    "RDF12_TURTLE_EVAL": {
+      "total": 32,
+      "turbo": 0,
+      "rdflib": 0
+    },
+    "RDF12_TRIG_SYNTAX": {
+      "total": 38,
+      "turbo": 13,
+      "rdflib": 11
+    },
+    "RDF12_TRIG_EVAL": {
+      "total": 26,
+      "turbo": 0,
+      "rdflib": 0
+    },
+    "RDF12_NTRIPLES_SYNTAX": {
+      "total": 34,
+      "turbo": 25,
+      "rdflib": 23
+    },
+    "RDF12_NQUADS_SYNTAX": {
+      "total": 31,
+      "turbo": 23,
+      "rdflib": 20
+    }
+  },
+  "known_failures": [
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-1",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-2",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-3",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-4",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-5",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-6",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-7",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-8",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-inside-1",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-inside-2",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-inside-3",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-inside-4",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-nested-1",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-nested-2",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-compound-1",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reified triples and triple terms not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-bnode-1",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms with blank nodes not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-bnode-2",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms with blank nodes not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-bnode-3",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms with blank nodes not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-ann-1",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-ann-2",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-ann-3",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-ann-4",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-ann-5",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-ann-6",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-ann-7",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-ann-8",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "nt-ttl12-1",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "nt-ttl12-2",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "nt-ttl12-3",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "nt-ttl12-bnode-1",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms with blank nodes not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "nt-ttl12-nested-1",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "nt-ttl12-langdir-1",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 base-direction literals not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "nt-ttl12-langdir-2",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 base-direction literals not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "nt-ttl12-langdir-bad-5",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 grammar not enabled until PH-20: the RDF 1.1 parser reads '@--ltr' as a language tag instead of rejecting a direction without a language"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-version-01",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 the VERSION/@version directive not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-version-02",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 the VERSION/@version directive not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-version-03",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 the VERSION/@version directive not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-version-04",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 the VERSION/@version directive not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-version-05",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 the VERSION/@version directive not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-version-06",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 the VERSION/@version directive not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-version-07",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 the VERSION/@version directive not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_SYNTAX",
+      "case": "turtle12-version-08",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 the VERSION/@version directive not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_EVAL",
+      "case": "turtle12-rt-01",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_EVAL",
+      "case": "turtle12-rt-02",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_EVAL",
+      "case": "turtle12-rt-03",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_EVAL",
+      "case": "turtle12-rt-04",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_EVAL",
+      "case": "turtle12-rt-05",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_EVAL",
+      "case": "turtle12-rt-06",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_EVAL",
+      "case": "turtle12-rt-07",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_EVAL",
+      "case": "turtle12-rt-08",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_EVAL",
+      "case": "turtle12-rt-09",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms with literals not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_EVAL",
+      "case": "turtle12-bnode-01",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms with blank nodes not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_EVAL",
+      "case": "turtle12-bnode-02",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms with blank nodes not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_EVAL",
+      "case": "turtle12-tt-01",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_EVAL",
+      "case": "turtle12-tt-02",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_EVAL",
+      "case": "turtle12-tt-03",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_EVAL",
+      "case": "turtle12-tt-04",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_EVAL",
+      "case": "turtle12-tt-05",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms with literals not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_EVAL",
+      "case": "turtle12-annotation-01",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_EVAL",
+      "case": "turtle12-annotation-02",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_EVAL",
+      "case": "turtle12-annotation-03",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_EVAL",
+      "case": "turtle12-annotation-04",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_EVAL",
+      "case": "turtle12-annotation-05",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_EVAL",
+      "case": "turtle12-annotation-06",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_EVAL",
+      "case": "turtle12-annotation-07",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_EVAL",
+      "case": "turtle12-annotation-08",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_EVAL",
+      "case": "turtle12-annotation-09",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_EVAL",
+      "case": "turtle12-annotation-10",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_EVAL",
+      "case": "turtle12-annotation-11",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_EVAL",
+      "case": "turtle12-annotation-12",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_EVAL",
+      "case": "turtle12-annotation-13",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_EVAL",
+      "case": "turtle12-reified-triples-annotation-01",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_EVAL",
+      "case": "turtle12-reified-triples-annotation-02",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TURTLE_EVAL",
+      "case": "turtle12-reified-triples-annotation-03",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_SYNTAX",
+      "case": "trig12-1",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_SYNTAX",
+      "case": "trig12-2",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_SYNTAX",
+      "case": "trig12-3",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_SYNTAX",
+      "case": "trig12-4",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_SYNTAX",
+      "case": "trig12-inside-1",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_SYNTAX",
+      "case": "trig12-inside-2",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_SYNTAX",
+      "case": "trig12-inside-3",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_SYNTAX",
+      "case": "trig12-inside-4",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_SYNTAX",
+      "case": "trig12-nested-1",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_SYNTAX",
+      "case": "trig12-nested-2",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_SYNTAX",
+      "case": "trig12-compound-1",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reified triples and triple terms not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_SYNTAX",
+      "case": "trig12-bnode-1",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms with blank nodes not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_SYNTAX",
+      "case": "trig12-bnode-2",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms with blank nodes not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_SYNTAX",
+      "case": "trig12-bnode-3",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms with blank nodes not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_SYNTAX",
+      "case": "trig12-ann-1",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_SYNTAX",
+      "case": "trig12-ann-2",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_SYNTAX",
+      "case": "trig12-ann-3",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_SYNTAX",
+      "case": "trig12-ann-4",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_SYNTAX",
+      "case": "trig12-ann-5",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_SYNTAX",
+      "case": "trig12-ann-6",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_SYNTAX",
+      "case": "trig12-ann-7",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_SYNTAX",
+      "case": "trig12-ann-8",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_SYNTAX",
+      "case": "trig12-base-1",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 base-direction literals not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_SYNTAX",
+      "case": "trig12-base-2",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 base-direction literals not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_SYNTAX",
+      "case": "trig12-base-bad-5",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 grammar not enabled until PH-20: the RDF 1.1 parser reads '@--ltr' as a language tag instead of rejecting a direction without a language"
+    },
+    {
+      "suite": "RDF12_TRIG_EVAL",
+      "case": "trig12-rt-01",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_EVAL",
+      "case": "trig12-rt-02",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_EVAL",
+      "case": "trig12-rt-03",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_EVAL",
+      "case": "trig12-rt-04",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_EVAL",
+      "case": "trig12-rt-05",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_EVAL",
+      "case": "trig12-rt-06",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_EVAL",
+      "case": "trig12-rt-07",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_EVAL",
+      "case": "trig12-rt-08",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 reifier/reified-triple syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_EVAL",
+      "case": "trig12-bnode-1",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms with blank nodes not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_EVAL",
+      "case": "trig12-bnode-2",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms with blank nodes not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_EVAL",
+      "case": "trig12-annotation-01",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_EVAL",
+      "case": "trig12-annotation-02",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_EVAL",
+      "case": "trig12-annotation-03",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_EVAL",
+      "case": "trig12-annotation-04",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_EVAL",
+      "case": "trig12-annotation-05",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_EVAL",
+      "case": "trig12-annotation-06",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_EVAL",
+      "case": "trig12-annotation-07",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_EVAL",
+      "case": "trig12-annotation-08",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_EVAL",
+      "case": "trig12-annotation-09",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_EVAL",
+      "case": "trig12-annotation-10",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_EVAL",
+      "case": "trig12-annotation-11",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_EVAL",
+      "case": "trig12-annotation-12",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_EVAL",
+      "case": "trig12-annotation-13",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_EVAL",
+      "case": "trig12-reified-triples-annotation-01",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_EVAL",
+      "case": "trig12-reified-triples-annotation-02",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_TRIG_EVAL",
+      "case": "trig12-reified-triples-annotation-03",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 annotation syntax not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_NTRIPLES_SYNTAX",
+      "case": "ntriples12-01",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_NTRIPLES_SYNTAX",
+      "case": "ntriples12-02",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_NTRIPLES_SYNTAX",
+      "case": "ntriples12-03",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_NTRIPLES_SYNTAX",
+      "case": "ntriples12-bnode-1",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms with blank nodes not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_NTRIPLES_SYNTAX",
+      "case": "ntriples12-nested-1",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_NTRIPLES_SYNTAX",
+      "case": "ntriples-langdir-1",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 base-direction literals not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_NTRIPLES_SYNTAX",
+      "case": "ntriples-langdir-2",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 base-direction literals not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_NTRIPLES_SYNTAX",
+      "case": "ntriples-version-1",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 the VERSION/@version directive not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_NTRIPLES_SYNTAX",
+      "case": "ntriples-langdir-bad-5",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 grammar not enabled until PH-20: the RDF 1.1 parser reads '@--ltr' as a language tag instead of rejecting a direction without a language"
+    },
+    {
+      "suite": "RDF12_NQUADS_SYNTAX",
+      "case": "nquads12-01",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_NQUADS_SYNTAX",
+      "case": "nquads12-02",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_NQUADS_SYNTAX",
+      "case": "nquads12-03",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_NQUADS_SYNTAX",
+      "case": "nquads12-bnode-1",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms with blank nodes not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_NQUADS_SYNTAX",
+      "case": "nquads12-nested-1",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 triple terms not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_NQUADS_SYNTAX",
+      "case": "nquads-langdir-1",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 base-direction literals not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_NQUADS_SYNTAX",
+      "case": "nquads-langdir-2",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 base-direction literals not enabled until PH-20: the RDF 1.1 parser rejects the input"
+    },
+    {
+      "suite": "RDF12_NQUADS_SYNTAX",
+      "case": "nquads-langdir-bad-5",
+      "rdflib_passes": false,
+      "reason": "RDF 1.2 grammar not enabled until PH-20: the RDF 1.1 parser reads '@--ltr' as a language tag instead of rejecting a direction without a language"
+    }
+  ]
+}
