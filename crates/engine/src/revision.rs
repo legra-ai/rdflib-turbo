@@ -98,6 +98,7 @@ pub const SOURCES: &[(&str, &[u8])] = &[
     ("structural.rs", include_bytes!("structural.rs")),
     ("value.rs", include_bytes!("value.rs")),
     ("value/comparison.rs", include_bytes!("value/comparison.rs")),
+    ("vocabulary.rs", include_bytes!("vocabulary.rs")),
 ];
 
 fn update_source(digest: &mut Sha256, source: &[u8]) {

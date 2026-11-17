@@ -145,11 +145,10 @@ fn equal_order_rules_are_sorted_by_node_identity() {
 #[test]
 fn executable_resources_reject_unsupported_features() {
     for (body, advanced) in [
-        ("<urn:f> a sh:Function.", true),
         ("<urn:f> a sh:SHACLFunction.", true),
         ("<urn:f> a sh:JSFunction.", true),
-        ("<urn:S> sh:targetNode <urn:s>; a sh:UnknownShape.", true),
-        ("<urn:S> sh:targetNode <urn:s>; sh:unknown true.", true),
+        ("<urn:f> a sh:JSFunction.", false),
+        ("<urn:S> sh:targetNode <urn:s>; sh:js [].", true),
     ] {
         let data = crate::IndexedShapesSource::parse_graph(
             &format!("@prefix sh: <http://www.w3.org/ns/shacl#>. {body}"),

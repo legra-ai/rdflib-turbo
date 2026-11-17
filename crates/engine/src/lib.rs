@@ -38,6 +38,7 @@ mod sparql;
 mod sparql_regex;
 mod structural;
 mod value;
+mod vocabulary;
 
 #[cfg(test)]
 mod structural_tests;

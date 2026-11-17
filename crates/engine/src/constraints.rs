@@ -42,47 +42,6 @@ mod membership_list;
 #[path = "constraints_tests.rs"]
 mod coverage_tests;
 
-pub(crate) const PARAMETERS: &[&str] = &[
-    "sparql",
-    "minCount",
-    "maxCount",
-    "hasValue",
-    "class",
-    "datatype",
-    "nodeKind",
-    "minExclusive",
-    "minInclusive",
-    "maxExclusive",
-    "maxInclusive",
-    "minLength",
-    "maxLength",
-    "pattern",
-    "flags",
-    "languageIn",
-    "uniqueLang",
-    "singleLine",
-    "memberShape",
-    "minListLength",
-    "maxListLength",
-    "uniqueMembers",
-    "equals",
-    "disjoint",
-    "lessThan",
-    "lessThanOrEquals",
-    "in",
-    "closed",
-    "ignoredProperties",
-    "node",
-    "not",
-    "and",
-    "or",
-    "xone",
-    "qualifiedValueShape",
-    "qualifiedMinCount",
-    "qualifiedMaxCount",
-    "qualifiedValueShapesDisjoint",
-];
-
 pub(crate) enum Constraint {
     NodeExpression {
         expression: crate::expression::NodeExpression,
