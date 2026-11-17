@@ -95,18 +95,22 @@ def test_prepared_version_uses_root_package_not_independent_workspace(tmp_path):
 
 
 def _assert_shared_release_action_pins(workflow):
-    for action in ["prepare-cargo-release", "tag-tested-release"]:
+    # The planner runs twice (read-only plan, then preparation) at one revision.
+    for action, steps in [("prepare-cargo-release", 2), ("tag-tested-release", 1)]:
         revisions = re.findall(
             rf"(?m)^\s*(?:-\s+)?uses:\s+legra-ai/github-actions/\.github/actions/{action}@([^\s#]+)",
             workflow,
         )
-        assert len(revisions) == 1, f"Expected exactly one shared {action} step"
+        assert len(revisions) == steps, f"Expected exactly {steps} shared {action} step(s)"
+        assert len(set(revisions)) == 1, f"Shared {action} steps must share one revision"
         assert re.fullmatch(r"[0-9a-f]{40}", revisions[0]), f"Unpinned shared {action} step"
 
 
 def test_shared_release_actions_accept_independent_immutable_updates():
     workflow = (
         "    uses: legra-ai/github-actions/.github/actions/prepare-cargo-release@"
+        + "a" * 40
+        + "\n    uses: legra-ai/github-actions/.github/actions/prepare-cargo-release@"
         + "a" * 40
         + "\n  - uses: legra-ai/github-actions/.github/actions/tag-tested-release@"
         + "b" * 40
@@ -121,7 +125,7 @@ def test_shared_release_actions_reject_floating_or_malformed_revisions(action, r
     workflow = "\n".join(
         f"uses: legra-ai/github-actions/.github/actions/{name}@"
         + (revision if name == action else "a" * 40)
-        for name in ["prepare-cargo-release", "tag-tested-release"]
+        for name in ["prepare-cargo-release", "prepare-cargo-release", "tag-tested-release"]
     )
     with pytest.raises(AssertionError):
         _assert_shared_release_action_pins(workflow)
@@ -130,7 +134,9 @@ def test_shared_release_actions_reject_floating_or_malformed_revisions(action, r
 def test_shared_release_actions_reject_missing_or_duplicate_steps():
     step = "uses: legra-ai/github-actions/.github/actions/prepare-cargo-release@" + "a" * 40
     tag = "uses: legra-ai/github-actions/.github/actions/tag-tested-release@" + "b" * 40
-    for workflow in ["", step, step + "\n" + tag + "\n" + step]:
+    split = "uses: legra-ai/github-actions/.github/actions/prepare-cargo-release@" + "c" * 40
+    for workflow in ["", step, step + "\n" + tag, step + "\n" + tag + "\n" + step + "\n" + step,
+                     step + "\n" + split + "\n" + tag]:
         with pytest.raises(AssertionError):
             _assert_shared_release_action_pins(workflow)
 
@@ -143,6 +149,12 @@ def test_main_release_uses_shared_planner_and_successful_test_gate():
     _assert_shared_release_action_pins(workflow)
     assert "needs: [prepare, test]" in workflow
     assert "cancel-in-progress: false" in workflow
-    assert workflow.count("tag-format: pep440") == 2
+    assert workflow.count("tag-format: pep440") == 3
+    plan = workflow.split("\n  plan:\n", 1)[1].split("\n  approve-release:\n", 1)[0]
+    assert "plan-only: 'true'" in plan and "RELEASE_WRITER" not in plan
+    approval = workflow.split("\n  approve-release:\n", 1)[1].split("\n  prepare:\n", 1)[0]
+    assert "'release-approval' || '' }}" in approval
+    assert "\n  prepare:\n    needs: [plan, approve-release]\n" in workflow
+    assert "\n  actions: read\n" in workflow
     assert not (ROOT / "scripts/prepare_release.py").exists()
     assert not (ROOT / "scripts/tag_release.py").exists()
