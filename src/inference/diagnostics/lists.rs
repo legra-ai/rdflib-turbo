@@ -2,8 +2,9 @@
 
 use oxigraph::model::*;
 
+use super::collector::Diagnostics;
 use super::rdf_list::{ListWitnesses, RdfList};
-use super::{Diagnostics, has, objects, text};
+use super::terms::{has, objects, text};
 use crate::Result;
 use crate::graph::{RDF, iri};
 use crate::inference::OWL;

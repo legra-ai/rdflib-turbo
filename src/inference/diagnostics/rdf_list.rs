@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use oxigraph::model::Term;
 
-use super::objects;
+use super::terms::objects;
 use crate::graph::{RDF, iri};
 use crate::inference::backend::Graph;
 use crate::inference::diagnostic_datatypes::list_truthiness;
