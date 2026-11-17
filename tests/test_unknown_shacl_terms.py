@@ -45,5 +45,5 @@ def test_unknown_terms_validate_exactly_like_the_reference(advanced):
 @pytest.mark.parametrize("shapes", JAVASCRIPT)
 def test_shacl_javascript_fails_explicitly(shapes, advanced):
     data, shapes = graphs(shapes)
-    with pytest.raises(NotImplementedError, match="sh:[jJ][sS]"):
+    with pytest.raises(NotImplementedError, match=r"sh:[jJ][sS]"):
         validate(data, shacl_graph=shapes, advanced=advanced)
