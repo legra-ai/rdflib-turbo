@@ -36,7 +36,7 @@ TESTS = (
     "store::pattern::count_tests::transaction_union_count_does_not_allocate_decoded_lexical_payloads",
     "store::read::tests::leases::scoped_lexical_scan_does_not_copy_stored_payloads",
     "store::read_input_tests::native_read_filter_binding_does_not_copy_large_input_lexical",
-    "store::read::tests::exact_membership_allocates_only_one_result_row",
+    "store::read::tests::batches::exact_membership_allocates_only_one_result_row",
     "store::read_input_tests::native_boolean_membership_avoids_result_rows",
     "store::read_input_tests::native_raw_membership_avoids_rows_and_lexical_copies",
     "allocation_tests::report_retirement::direct_select_report_retires_owned_messages",
