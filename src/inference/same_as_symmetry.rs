@@ -3,7 +3,8 @@ use std::collections::HashMap;
 
 use oxigraph::model::*;
 
-use super::{Graph, Pending, Rows, row};
+use super::super::{Graph, Pending};
+use super::rows::{Rows, row};
 use crate::Result;
 
 impl Rows {

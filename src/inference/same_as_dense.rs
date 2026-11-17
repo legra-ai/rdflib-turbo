@@ -3,7 +3,8 @@ use std::collections::HashSet;
 
 use oxigraph::model::*;
 
-use super::{Graph, Pending, Rows};
+use super::super::{Graph, Pending};
+use super::rows::Rows;
 use crate::Result;
 
 fn edge(data: &impl Graph, s: &Term, p: &NamedNode, o: &Term) -> Result<bool> {
