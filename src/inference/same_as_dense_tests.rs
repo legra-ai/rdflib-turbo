@@ -1,5 +1,12 @@
 //! Dense and sparse equality rows retain exact one-round semantics.
-use super::*;
+use std::cell::Cell;
+use std::collections::HashSet;
+
+use oxigraph::model::*;
+
+use super::super::{OWL_RULES, Pending, apply_rules};
+use super::fixtures::*;
+use super::measurement::Measured;
 use oxrdf::GeneralizedDataset;
 
 #[test]

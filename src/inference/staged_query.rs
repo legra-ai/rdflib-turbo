@@ -5,7 +5,7 @@ use oxigraph::model::*;
 use oxrdf::GeneralizedDataset;
 use spareval::{InternalQuad, QueryableDataset};
 
-use super::StagedDataset;
+use super::dataset::StagedDataset;
 
 type QueryTerm<'a> = <&'a GeneralizedDataset as QueryableDataset<'a>>::InternalTerm;
 type Rows<'a> = Box<dyn Iterator<Item = Result<InternalQuad<QueryTerm<'a>>, Infallible>> + 'a>;

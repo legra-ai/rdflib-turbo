@@ -1,6 +1,8 @@
 //! Boolean membership must not reconstruct owned source terms.
 use super::*;
 use crate::allocation_tests::measure_allocated;
+use crate::inference::backend::Graph;
+use oxigraph::model::*;
 use oxrdf::GeneralizedDataset;
 
 #[test]

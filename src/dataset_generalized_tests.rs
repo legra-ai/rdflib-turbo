@@ -1,4 +1,11 @@
 //! Consumer contracts for the generalized legacy owner; no narrowing or base copies.
+use std::sync::RwLock;
+
+use oxigraph::model::*;
+use pyo3::exceptions::PyValueError;
+use pyo3::prelude::*;
+use serde_json::Value;
+
 use super::*;
 
 fn node(name: &str) -> NamedNode {

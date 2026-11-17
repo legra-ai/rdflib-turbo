@@ -3,7 +3,8 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use oxigraph::model::*;
 
-use super::{Graph, Rows, row};
+use super::super::Graph;
+use super::rows::{Rows, row};
 use crate::Result;
 
 #[cfg(test)]

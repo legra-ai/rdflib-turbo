@@ -1,5 +1,9 @@
 //! Catalogue-specific guards remove heads that are already positive body facts.
-use super::*;
+use datalog_structural_model::{BuiltinFilter, Literal, Rule, Term};
+use rdf_reasoning::TRIPLE_RELATION;
+
+use super::CompiledRule;
+use crate::{Error, Result};
 
 impl CompiledRule {
     pub(super) fn without_self_subproperty(rule: &Rule) -> Result<Rule> {

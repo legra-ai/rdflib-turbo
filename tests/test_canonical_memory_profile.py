@@ -51,7 +51,7 @@ def test_canonical_profile_selects_the_public_store_owner(profiler):
     )
     assert (
         profiler.profile_case("generalized-dataset")
-        == "allocation_tests::profile_pipeline_allocations"
+        == "allocation_tests::budgets::profile_pipeline_allocations"
     )
 
 

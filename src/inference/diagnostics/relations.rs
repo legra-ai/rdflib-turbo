@@ -1,6 +1,7 @@
 //! Positive inconsistency conditions checked through existing SPO indexes.
 
-use super::{Diagnostics, has, text};
+use super::collector::Diagnostics;
+use super::terms::{has, text};
 use crate::Result;
 use crate::graph::{RDF, iri};
 use crate::inference::OWL;

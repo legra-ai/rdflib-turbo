@@ -1,7 +1,8 @@
 //! Actual-route copy-growth regressions, isolated from the attribution controls.
-use super::{
-    CompiledRule, Graph, HeadDisposition, Pending, TransactionGraph, fixture, semantic_replay,
+use super::super::{
+    Graph, HeadDisposition, Pending, backend::TransactionGraph, shared::CompiledRule,
 };
+use super::attribution::{fixture, semantic_replay};
 use crate::allocation_tests::{RequestedAllocation, measure_requested};
 use oxigraph::model::BlankNode;
 use rdf_reasoning::RuleId;

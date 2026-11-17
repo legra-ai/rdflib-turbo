@@ -5,11 +5,12 @@ use std::collections::HashSet;
 use oxigraph::model::*;
 use oxigraph::sparql::{PreparedSparqlQuery, QueryResults, SparqlEvaluator};
 
+use super::super::shared::CompiledRule;
 use super::super::{
     Graph, OWL_RULES, PREFIXES, Pending, apply_rules, axioms, intersections, scheduling::Schedule,
     traversal,
 };
-use super::{CompiledRule, oracle};
+use super::oracle;
 use crate::Result;
 
 fn node(name: &str) -> NamedNode {

@@ -1,5 +1,9 @@
 //! Native lexical owners remain valid after their store and cursor are gone.
-use super::{GraphName, LexicalTerm, Literal, NamedNode, Store, insert, open, start};
+use oxigraph::model::{GraphName, Literal, NamedNode};
+use oxigraph::store::{LexicalTerm, Store};
+
+use super::super::start;
+use super::fixtures::{insert, open};
 
 #[test]
 fn lexical_rows_share_dictionary_payloads_and_outlive_the_store() {

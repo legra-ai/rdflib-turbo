@@ -5,7 +5,8 @@ use std::cell::Cell;
 use oxigraph::model::*;
 use oxigraph::sparql::{PreparedSparqlQuery, QueryResults};
 
-use super::super::{Graph, Pending, Rows};
+use super::super::super::{Graph, Pending};
+use super::super::rows::Rows;
 use crate::Result;
 
 struct Reads<'a> {
@@ -96,7 +97,7 @@ fn inspect(data: &GeneralizedDataset, check: impl FnOnce(&Rows, &Reads<'_>)) {
 #[test]
 fn balanced_cliques_and_closed_pairs_allocate_no_component_index() {
     assert_eq!(
-        std::mem::size_of::<super::super::RowGroup>(),
+        std::mem::size_of::<super::super::rows::RowGroup>(),
         std::mem::size_of::<Vec<NamedOrBlankNode>>()
     );
     let mut clique = GeneralizedDataset::new();

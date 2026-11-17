@@ -4,7 +4,7 @@ use pyshacl_turbo_engine::ValidationReport;
 
 pub(crate) struct Report {
     conforms: bool,
-    graph: super::Batch,
+    graph: super::report_terms::Batch,
     text: String,
     warnings: Vec<String>,
     diagnostics: bool,
@@ -12,7 +12,7 @@ pub(crate) struct Report {
 
 impl Report {
     pub(crate) fn try_new(report: ValidationReport) -> Result<Self> {
-        let graph = super::ReportTerms::encode(&report.graph);
+        let graph = super::report_terms::ReportTerms::encode(&report.graph);
         Ok(Self {
             conforms: report.conforms,
             graph,

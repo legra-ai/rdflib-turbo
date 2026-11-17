@@ -4,7 +4,7 @@ use crate::allocation_tests::trace;
 use pyo3::prelude::*;
 use std::sync::Arc;
 
-use super::nt_python_output;
+use super::nt_python_output::nt_python_output;
 use super::operations::{Operation, Reply};
 use super::session::Session;
 use super::typed::{QuadInput, TermTuple};
