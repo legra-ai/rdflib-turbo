@@ -4,7 +4,7 @@ use oxigraph::model::{GraphName, Literal, Quad, Term, Variable};
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
 
-use super::node;
+use super::exact_terms::node;
 
 #[test]
 fn rdflib_exists_optional_does_not_retry_an_unanalyzed_left_scope() {
