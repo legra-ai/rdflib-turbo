@@ -92,7 +92,7 @@ impl NativeStore {
         policy.finish_with(result, error)
     }
 
-    fn insert_terms(
+    pub(super) fn insert_terms(
         &self,
         py: Python<'_>,
         subject: TermTuple,
