@@ -1,5 +1,12 @@
 //! Shared measured full-Term and strict equality query views.
-use super::*;
+use oxrdf::GeneralizedDataset;
+use std::cell::Cell;
+
+use oxigraph::model::*;
+use oxigraph::sparql::{PreparedSparqlQuery, QueryResults};
+
+use super::super::Graph;
+use crate::Result;
 use serde::Deserialize;
 
 pub(super) struct Measured<'a> {

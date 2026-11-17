@@ -1,5 +1,14 @@
 //! Pending facts probe their immutable read snapshot once per distinct new head.
-use super::*;
+use std::cell::Cell;
+use std::collections::HashSet;
+
+use oxigraph::model::*;
+use oxigraph::sparql::{PreparedSparqlQuery, QueryResults};
+
+use super::super::{Graph, Pending};
+use super::fixtures::*;
+use super::measurement::Measured;
+use crate::Result;
 use oxrdf::GeneralizedDataset;
 
 #[test]
