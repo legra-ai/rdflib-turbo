@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def profile_case(owner):
     return {
         "canonical-store": "allocation_tests::canonical::profile_canonical_store_pipeline_allocations",
-        "generalized-dataset": "allocation_tests::profile_pipeline_allocations",
+        "generalized-dataset": "allocation_tests::budgets::profile_pipeline_allocations",
     }[owner]
 
 
