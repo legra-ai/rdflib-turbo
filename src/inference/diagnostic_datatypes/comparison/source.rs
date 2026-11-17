@@ -1,5 +1,6 @@
 //! Refreshable source-call checkpoints, without changing ordinary publisher layout.
-use super::{LexicalContext, Policy, SignalPublisher, comparison_warning};
+use super::super::{LexicalContext, SignalPublisher, comparison_warning};
+use super::policy::Policy;
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
 use pyshacl_turbo_engine::ValueComparisonPolicy;
 use shacl_bindings::{ComparisonPublisher, SourceComparisonInvocation, SourceComparisonPublisher};
