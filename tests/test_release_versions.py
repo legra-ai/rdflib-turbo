@@ -154,7 +154,8 @@ def test_main_release_uses_shared_planner_and_successful_test_gate():
     assert "plan-only: 'true'" in plan and "RELEASE_WRITER" not in plan
     approval = workflow.split("\n  approve-release:\n", 1)[1].split("\n  prepare:\n", 1)[0]
     assert "'release-approval' || '' }}" in approval
-    assert "\n  prepare:\n    needs: [plan, approve-release]\n" in workflow
+    prepare = workflow.split("\n  prepare:\n", 1)[1].split("\n  sdist:\n", 1)[0]
+    assert "\n    needs: [plan, approve-release]\n" in "\n" + prepare
     assert "\n  actions: read\n" in workflow
     assert not (ROOT / "scripts/prepare_release.py").exists()
     assert not (ROOT / "scripts/tag_release.py").exists()

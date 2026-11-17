@@ -88,8 +88,8 @@ jobs:
         run: python3 -c 'print("Preparation verifies the exact owner approval for minor and major releases.")'
 
   prepare:
-    needs: [plan, approve-release]
     if: github.event_name != 'workflow_dispatch' || !inputs['inference-comparison']
+    needs: [plan, approve-release]
     name: prepare
     runs-on: ubuntu-latest
     outputs:
