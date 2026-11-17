@@ -6,8 +6,8 @@ use oxigraph::model::*;
 use oxigraph::sparql::{PreparedSparqlQuery, QueryResults};
 use rdf_reasoning::RuleId;
 
+use super::super::shared::CompiledRule;
 use super::super::{Graph, Pending, apply_rules, staged::JournalGraph};
-use super::CompiledRule;
 use crate::{Error, Result};
 
 struct LateQueryError<'a, 'data> {
