@@ -999,7 +999,7 @@ def main():
         ],
         {**environment, "LLVM_PROFILE_FILE": str(profiles / "python/%p-%m.profraw")},
     )
-    binding = "crates/python/src/lib.rs" if project == "pyshacl-turbo" else "src/lib.rs"
+    binding = "crates/python/src/lib.rs" if project == "pyshacl-turbo" else "src/python_module.rs"
     result["stages"]["python"], _ = export(
         llvm, [profiles / "python"], objects, output / "python", root
     )
