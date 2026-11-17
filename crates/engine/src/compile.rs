@@ -11,6 +11,7 @@ use crate::constraints::{self, Constraint};
 use crate::graph::*;
 use crate::model;
 use crate::path::Path;
+use crate::vocabulary::VocabularyPolicy;
 use crate::{Error, GraphRead, IndexedShapesSource, Result};
 
 #[cfg(test)]
@@ -235,110 +236,6 @@ fn lower_rule(
     })
 }
 
-fn check_vocabulary(
-    store: &(impl GraphRead + ?Sized),
-    advanced: bool,
-    executable_nodes: &HashSet<Term>,
-) -> Result<()> {
-    // Deliberately limited to supported features. This also catches
-    // misspelled SHACL terms instead of silently treating them as annotations.
-    const ALLOWED: &[&str] = &[
-        "targetNode",
-        "targetClass",
-        "targetSubjectsOf",
-        "targetObjectsOf",
-        "target",
-        "select",
-        "prefixes",
-        "property",
-        "path",
-        "minCount",
-        "maxCount",
-        "hasValue",
-        "message",
-        "severity",
-        "deactivated",
-        "order",
-        "rule",
-        "condition",
-        "construct",
-        "name",
-        "description",
-        // The reference validator ignores this newer vocabulary annotation.
-        // Recognizing its name does not enable the typed SingleLine component.
-        "singleLine",
-        "group",
-        "defaultValue",
-        "nodeKind",
-        "optional",
-        "parameter",
-        "validator",
-        "nodeValidator",
-        "propertyValidator",
-        "ask",
-        "labelTemplate",
-        "label",
-        "keyParameter",
-        "returnType",
-        "subject",
-        "predicate",
-        "object",
-        "expression",
-        "filterShape",
-        "nodes",
-        "union",
-        "intersection",
-    ];
-    for quad in store.matching_quads(None, None, None, Some(GraphNameRef::DefaultGraph)) {
-        let quad = quad?;
-        // Function/component declarations have implicit global registration.
-        if advanced
-            && quad.predicate == Term::from(iri(RDF, "type"))
-            && let Term::NamedNode(ref n) = quad.object
-            && let Some(name) = n.as_str().strip_prefix(SH)
-            && ["Function", "SHACLFunction", "JSFunction"].contains(&name)
-        {
-            return Err(Error::Unsupported(format!("sh:{name}")));
-        }
-        // A shapes graph may also contain ordinary data and prior reports.
-        // Only executable resources determine the supported SHACL program.
-        if !executable_nodes.contains(&quad.subject) {
-            continue;
-        }
-        if let Term::NamedNode(predicate) = &quad.predicate
-            && let Some(name) = predicate.as_str().strip_prefix(SH)
-            && !ALLOWED.contains(&name)
-            && !constraints::PARAMETERS.contains(&name)
-        {
-            return Err(Error::Unsupported(format!("sh:{name} on {}", quad.subject)));
-        }
-        if quad.predicate == Term::from(iri(RDF, "type"))
-            && let Term::NamedNode(ref n) = quad.object
-            && let Some(name) = n.as_str().strip_prefix(SH)
-            && ![
-                "NodeShape",
-                "PropertyShape",
-                "SPARQLRule",
-                "SPARQLTarget",
-                "SPARQLConstraint",
-                "ConstraintComponent",
-                "Parameter",
-                "SPARQLAskValidator",
-                "SPARQLSelectValidator",
-                "SPARQLFunction",
-                "TripleRule",
-                "SPARQLTargetType",
-                "TargetType",
-                "SPARQLConstraintObject",
-            ]
-            .contains(&name)
-        {
-            return Err(Error::Unsupported(format!("sh:{name}")));
-        }
-    }
-    Ok(())
-}
-
 impl CompiledShapes {
     /// Whether this program can execute against selected ordinary Graph frames.
     /// Unsupported programs retain their established indexed input representation.
@@ -526,7 +423,7 @@ impl CompiledShapes {
         // Constraint parameter annotations alone do not turn metadata into an
         // executable shape (e.g. sh:path on a function/component parameter).
         executable_nodes.extend(nodes.iter().cloned());
-        check_vocabulary(&store, advanced, &executable_nodes)?;
+        VocabularyPolicy::new(advanced, &executable_nodes).check(&store)?;
         let mut nodes: Vec<_> = nodes.into_iter().collect();
         nodes.sort_by_key(ToString::to_string);
         let indices: HashMap<_, _> = nodes.iter().cloned().zip(0..).collect();

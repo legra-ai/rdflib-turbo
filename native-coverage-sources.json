@@ -1,6 +1,6 @@
 {
   "crates/engine/src/lib.rs": {
-    "sha256": "c3b0efed923542bb6bc5bccd336c30771f3cdaa56c28a2d928aecb57ed442294",
+    "sha256": "5c238b1e8553846704bb04938574d87f6943e9f4b67f4fba45fb339e9b7d2035",
     "reason": "Module declarations, re-exports, aliases and derived errors: fresh exact Rust 1.99.1/LLVM 23 DEBUG default engine, binding and native test executables have no file or function mapping for these lib.rs bytes in either unfiltered executed or empty-profile exports (281 files, 7630 functions). All 166 owned sources were audited; executable sources remain measured. No cfg coverage or historical executable was used."
   },
   "crates/engine/src/model.rs": {
