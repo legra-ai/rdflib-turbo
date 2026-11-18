@@ -50,6 +50,7 @@ jobs:
       - id: release
         uses: legra-ai/github-actions/.github/actions/prepare-cargo-release@8cdaad621c581c2f59e5eb0dfafc05f635c12c0a
         with:
+          breaking-change-bump: minor
           token: ${{ github.token }}
           tag-format: pep440
           plan-only: 'true'
@@ -129,6 +130,7 @@ jobs:
       - id: release
         uses: legra-ai/github-actions/.github/actions/prepare-cargo-release@8cdaad621c581c2f59e5eb0dfafc05f635c12c0a
         with:
+          breaking-change-bump: minor
           token: ${{ steps.writer.outputs.token }}
           tag-format: pep440
       - name: Check out the prepared release revision
