@@ -135,8 +135,13 @@ def test_shared_release_actions_reject_missing_or_duplicate_steps():
     step = "uses: legra-ai/github-actions/.github/actions/prepare-cargo-release@" + "a" * 40
     tag = "uses: legra-ai/github-actions/.github/actions/tag-tested-release@" + "b" * 40
     split = "uses: legra-ai/github-actions/.github/actions/prepare-cargo-release@" + "c" * 40
-    for workflow in ["", step, step + "\n" + tag, step + "\n" + tag + "\n" + step + "\n" + step,
-                     step + "\n" + split + "\n" + tag]:
+    for workflow in [
+        "",
+        step,
+        step + "\n" + tag,
+        step + "\n" + tag + "\n" + step + "\n" + step,
+        step + "\n" + split + "\n" + tag,
+    ]:
         with pytest.raises(AssertionError):
             _assert_shared_release_action_pins(workflow)
 
