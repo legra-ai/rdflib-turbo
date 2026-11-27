@@ -36,42 +36,42 @@ impl NodeExpression {
         functions: &Functions,
         stack: &mut HashSet<Term>,
     ) -> Result<crate::model::NodeExpression<Term>> {
-        use crate::model::{ExpressionKind as K, NodeExpression as E};
+        use crate::model::{ExpressionForm as K, NodeExpression as E};
         if node == &Term::from(iri(SH, "this")) {
-            return Ok(E::new(node.clone(), K::This));
+            return Ok(E::focus_node().with_source(node.clone()));
         }
         if !matches!(node, Term::BlankNode(_)) {
-            return Ok(E::new(node.clone(), K::Constant));
+            return Ok(E::constant(node.clone()).with_source(node.clone()));
         }
         if !stack.insert(node.clone()) {
             return Err(Error::Invalid("Cyclic SHACL node expression".into()));
         }
         let kind = if let Some(path) = one(graph, node, "path")? {
-            K::Path {
+            K::PathValues {
                 path: Path::read(graph, &path)?,
                 path_node: Some(path),
                 // pySHACL 0.40.1 evaluates sh:path from the focus, even when
                 // sh:nodes is present. Preserve that established behavior.
-                nodes: None,
+                focus_node: None,
             }
         } else if let Some(list) = one(graph, node, "union")? {
-            K::Union(
+            K::Concat(
                 rdf_list(graph, &list)?
                     .iter()
-                    .map(|n| Self::read_inner(graph, n, functions, stack))
+                    .map(|n| Self::read_inner(graph, n, functions, stack).map(Box::new))
                     .collect::<Result<_>>()?,
             )
         } else if let Some(list) = one(graph, node, "intersection")? {
             K::Intersection(
                 rdf_list(graph, &list)?
                     .iter()
-                    .map(|n| Self::read_inner(graph, n, functions, stack))
+                    .map(|n| Self::read_inner(graph, n, functions, stack).map(Box::new))
                     .collect::<Result<_>>()?,
             )
         } else if let Some(shape) = one(graph, node, "filterShape")? {
             let nodes = one(graph, node, "nodes")?
                 .ok_or_else(|| Error::Invalid("sh:filterShape requires sh:nodes".into()))?;
-            K::Filter {
+            K::FilterShape {
                 shape,
                 nodes: Box::new(Self::read_inner(graph, &nodes, functions, stack)?),
             }
@@ -96,59 +96,74 @@ impl NodeExpression {
                 )));
             }
             let (name, list) = &calls[0];
-            K::Function {
-                name: crate::structural::named_role(name.clone().into(), "SHACL function")?,
-                args: rdf_list(graph, list)?
+            K::CustomList {
+                function: crate::structural::named_role(name.clone().into(), "SHACL function")?,
+                arguments: rdf_list(graph, list)?
                     .iter()
-                    .map(|n| Self::read_inner(graph, n, functions, stack))
+                    .map(|n| Self::read_inner(graph, n, functions, stack).map(Box::new))
                     .collect::<Result<_>>()?,
             }
         };
         stack.remove(node);
-        Ok(E::new(node.clone(), kind))
+        E::try_new(kind)
+            .map(|e| e.with_source(node.clone()))
+            .map_err(|e| Error::Invalid(e.to_string()))
     }
 
     pub fn lower(
         expression: crate::model::NodeExpression<Term>,
         shapes: &HashMap<Term, usize>,
     ) -> Result<Self> {
-        use crate::model::ExpressionKind as K;
-        Ok(match expression.kind {
-            K::This => Self::This,
-            K::Constant => Self::Constant(expression.node),
-            K::Path {
-                path, nodes: None, ..
+        use crate::model::ExpressionForm as K;
+        Ok(match expression.into_parts().1 {
+            K::Var(name) if name.as_str() == "focusNode" => Self::This,
+            K::Constant(value) => Self::Constant(value),
+            K::PathValues {
+                path,
+                focus_node: None,
+                ..
             } => Self::Path(Path::from(path)),
-            K::Path { nodes: Some(_), .. } => {
+            K::PathValues {
+                focus_node: Some(_),
+                ..
+            } => {
                 return Err(Error::Unsupported(
                     "Nested path inputs are outside pySHACL's expression semantics".into(),
                 ));
             }
-            K::Union(parts) => Self::Union(
+            K::Concat(parts) => Self::Union(
                 parts
                     .into_iter()
-                    .map(|e| Self::lower(e, shapes))
+                    .map(|e| Self::lower(*e, shapes))
                     .collect::<Result<_>>()?,
             ),
             K::Intersection(parts) => Self::Intersection(
                 parts
                     .into_iter()
-                    .map(|e| Self::lower(e, shapes))
+                    .map(|e| Self::lower(*e, shapes))
                     .collect::<Result<_>>()?,
             ),
-            K::Filter { shape, nodes } => Self::Filter {
+            K::FilterShape { shape, nodes } => Self::Filter {
                 shape: *shapes
                     .get(&shape)
                     .ok_or_else(|| Error::Invalid("Unknown filter shape".into()))?,
                 nodes: Box::new(Self::lower(*nodes, shapes)?),
             },
-            K::Function { name, args } => Self::Function {
+            K::CustomList {
+                function: name,
+                arguments: args,
+            } => Self::Function {
                 name,
                 args: args
                     .into_iter()
-                    .map(|e| Self::lower(e, shapes))
+                    .map(|e| Self::lower(*e, shapes))
                     .collect::<Result<_>>()?,
             },
+            other => {
+                return Err(Error::Unsupported(format!(
+                    "Unsupported node expression: {other:?}"
+                )));
+            }
         })
     }
 

@@ -150,9 +150,14 @@ fn lower_target(
     namespaces: &[(String, String)],
 ) -> Result<Target> {
     Ok(match target {
-        model::Target::Node(node) => Target::Node(node),
+        model::Target::Node(node) => Target::Node(
+            node.as_constant()
+                .cloned()
+                .ok_or_else(|| Error::Unsupported("Non-constant node target".into()))?,
+        ),
+        model::Target::Where(_) => return Err(Error::Unsupported("sh:targetWhere".into())),
         model::Target::Class(class) => Target::Class(class.into()),
-        model::Target::ImplicitClass(class) => Target::ImplicitClass(class),
+        model::Target::ImplicitClass { class, .. } => Target::ImplicitClass(class),
         model::Target::SubjectsOf(predicate) => Target::Subjects(predicate),
         model::Target::ObjectsOf(predicate) => Target::Objects(predicate),
         model::Target::Sparql(target) => Target::Sparql {
@@ -443,6 +448,7 @@ impl CompiledShapes {
                 crate::structural::ShapeDeclaration::Property(shape) => (
                     model::NodeShape {
                         id: shape.id,
+                        annotations: shape.annotations,
                         targets: shape.targets,
                         components: shape.components,
                         property_shapes: shape.property_shapes,
@@ -474,7 +480,14 @@ impl CompiledShapes {
                     }
                     model::Component::Expression(expression) => {
                         constraints.push(Constraint::NodeExpression {
-                            node: expression.expression.node.clone(),
+                            node: expression
+                                .expression
+                                .source()
+                                .or_else(|| expression.expression.as_constant())
+                                .cloned()
+                                .ok_or_else(|| {
+                                    Error::Invalid("Expression has no source identity".into())
+                                })?,
                             expression: NodeExpression::lower(expression.expression, &indices)?,
                             messages: expression.messages,
                         })
@@ -533,7 +546,7 @@ impl CompiledShapes {
             });
             shapes.push(Shape {
                 order: order(declaration.order, &declaration.id)?,
-                deactivated: declaration.deactivated,
+                deactivated: crate::structural::lower_deactivation(declaration.deactivated)?,
                 node: declaration.id,
                 path,
                 path_node,

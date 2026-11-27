@@ -1,5 +1,7 @@
 //! The shared model is the actual input to lowering, with exact engine terms.
 
+use crate::model;
+
 use std::collections::HashMap;
 
 use crate::model::{Component, Severity, Target};
@@ -75,11 +77,17 @@ fn shared_node_shape_keeps_blank_refs_literal_targets_and_exact_messages() {
     assert!(
         shape
             .targets
-            .contains(&Target::Node(Literal::new_simple_literal("plain").into()))
+            .contains(&Target::Node(model::NodeExpression::constant(
+                Literal::new_simple_literal("plain").into()
+            )))
     );
-    assert!(shape.targets.contains(&Target::Node(
-        Literal::new_typed_literal("plain", iri(XSD, "string")).into()
-    )));
+    assert!(
+        shape
+            .targets
+            .contains(&Target::Node(model::NodeExpression::constant(
+                Literal::new_typed_literal("plain", iri(XSD, "string")).into()
+            )))
+    );
     assert_eq!(
         shape.messages,
         [Literal::new_language_tagged_literal("Verplicht", "nl")
@@ -133,7 +141,9 @@ fn shared_property_shape_keeps_source_path_and_unbounded_counts() {
     assert_eq!(shape.descriptions.len(), 1);
     assert_eq!(
         shape.targets,
-        [Target::Node(iri("urn:example:", "focus").into())]
+        [Target::Node(model::NodeExpression::constant(
+            iri("urn:example:", "focus").into()
+        ))]
     );
     assert!(
         matches!(&shape.components[0], Component::MinCount(Term::Literal(l)) if l.value() == "18446744073709551616")
@@ -291,7 +301,7 @@ fn custom_component_bindings_keep_distinct_terms_through_model_lowering() {
 
 #[test]
 fn shared_rule_keeps_blank_expression_condition_and_decimal_order() {
-    use crate::model::{ExpressionKind, RuleKind};
+    use crate::model::{ExpressionForm, RuleKind};
     let source = shape_graph(
         r#"ex:S sh:targetNode ex:s; sh:rule _:rule.
         _:rule a sh:TripleRule; sh:order "+0009007199254740993.000001"^^xsd:decimal;
@@ -331,11 +341,11 @@ fn shared_rule_keeps_blank_expression_condition_and_decimal_order() {
         panic!("triple rule expected")
     };
     assert_eq!(
-        triple.object.node,
+        triple.object.source().cloned().unwrap(),
         BlankNode::new("expression").unwrap().into()
     );
     assert!(
-        matches!(&triple.object.kind, ExpressionKind::Path { path_node: Some(n), .. } if n == &path)
+        matches!(triple.object.form(), ExpressionForm::PathValues { path_node: Some(n), .. } if n == &path)
     );
     let program = CompiledShapes::compile(source, true).unwrap();
     let mut data = graph("ex:s a ex:Ready; ex:p 'kept'.");
@@ -445,4 +455,31 @@ fn public_single_line_is_a_selected_draft_extension_for_node_and_property_shapes
             }
         }
     }
+}
+
+#[test]
+fn deactivation_preserves_boolean_lexical_identity() {
+    let source = graph(
+        "ex:Shape a sh:NodeShape; sh:deactivated '1'^^<http://www.w3.org/2001/XMLSchema#boolean>.",
+    );
+    let node = iri("urn:example:", "Shape").into();
+    let declaration = crate::structural::read_shape(
+        &source,
+        &node,
+        &HashMap::new(),
+        false,
+        &Functions::default(),
+        &[],
+        crate::constraints::DecimalDigitPolicy::default(),
+    );
+    let crate::structural::ShapeDeclaration::Node(shape) = declaration.unwrap() else {
+        panic!("node shape expected")
+    };
+    assert_eq!(
+        shape.deactivated.as_ref().unwrap().as_constant(),
+        Some(&Term::Literal(Literal::new_typed_literal(
+            "1",
+            iri(XSD, "boolean")
+        )))
+    );
 }
