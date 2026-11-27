@@ -27,9 +27,16 @@ def test_prepared_stable_abi_source_has_four_builds_and_twenty_installed_pairs()
     assert len(rows) == 4
     assert sum(len(row["python-versions"].split()) for row in rows) == 20
     assert all(row["os"] != "macos-15-intel" for row in rows)
+    assert all(row["target"] != "x86_64-apple-darwin" for row in rows)
 
 
-def test_pending_original_cpython_release_retains_its_exact_seven_job_inventory():
+def test_policy_declares_no_intel_macos_platform():
+    module = policy()
+    assert all(target != "x86_64-apple-darwin" for _, target, _ in module.PLATFORMS)
+    assert all(os_name != "macos-15-intel" for os_name, _, _ in module.PLATFORMS)
+
+
+def test_pending_original_cpython_release_builds_five_jobs_without_intel_macos():
     project = {
         "project": {"requires-python": ">=3.11"},
         "tool": {"maturin": {"features": ["pyo3/extension-module", "persistence"]}},
@@ -37,9 +44,11 @@ def test_pending_original_cpython_release_retains_its_exact_seven_job_inventory(
     result = policy().select(project)
     assert result["stable-abi"] is False
     rows = result["matrix"]["include"]
-    assert len(rows) == 7
-    assert sum(len(row["python-versions"].split()) for row in rows) == 25
-    assert len({row["artifact"] for row in rows}) == 7
+    assert len(rows) == 5
+    assert sum(len(row["python-versions"].split()) for row in rows) == 20
+    assert len({row["artifact"] for row in rows}) == 5
+    assert all(row["os"] != "macos-15-intel" for row in rows)
+    assert all(row["target"] != "x86_64-apple-darwin" for row in rows)
 
 
 @pytest.mark.parametrize("feature", ["pyo3/abi3", "pyo3/abi3-py312", "pyo3/abi3-py310"])
