@@ -7,14 +7,16 @@ original archive inventory and bytes; recovery still checks out that release's
 prepared revision and its original packaging rules. Preserve the workflow-owned
 wheel-policy controller before that checkout, then derive the matrix from the
 prepared manifest. Its explicitly audited historical CPython mode retains the
-original seven cohorts/25 wheels; new abi3 sources select four jobs/wheels.
+original cohorts minus Intel macOS (five jobs/20 wheels); new abi3 sources
+select four jobs/wheels.
 Unknown feature/range combinations fail. Only abi3 sources run the stable-ABI
 audit, since old prepared packaging-tool locks do not declare that tool.
 
 Build the sole native provider with PyO3's `abi3-py311` feature through `uv build`.
 The supported platforms are Apple Silicon macOS, Linux x86-64/ARM64 and Windows
-x86-64. Intel macOS wheels are discontinued for new releases by explicit user
-decision; historical release files and their concrete recovery policy remain.
+x86-64. Intel macOS (x86_64-apple-darwin) is dropped entirely by explicit user
+decision (no users): no build, target configuration or recovery cohort remains,
+including for historical CPython-specific sources; existing release files stay.
 Each supported platform produces one `cp311-abi3` wheel. Test that
 identical original wheel, including every installed native/Python file hash, on
 ordinary CPython 3.11, 3.12, 3.13, 3.14 and 3.15. Retain all 20 supported

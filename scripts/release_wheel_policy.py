@@ -9,7 +9,6 @@ VERSIONS = "3.11 3.12 3.13 3.14 3.15"
 PLATFORMS = (
     ("ubuntu-24.04", "x86_64-unknown-linux-gnu", "quay.io/pypa/manylinux_2_28_x86_64:latest"),
     ("ubuntu-24.04-arm", "aarch64-unknown-linux-gnu", "quay.io/pypa/manylinux_2_28_aarch64:latest"),
-    ("macos-15-intel", "x86_64-apple-darwin", None),
     ("macos-15", "aarch64-apple-darwin", None),
     ("windows-latest", "x86_64-pc-windows-msvc", None),
 )
@@ -29,12 +28,10 @@ def select(project):
         raise ValueError("Unknown prepared-source native wheel feature policy")
     if project["project"]["requires-python"].replace(" ", "") != required:
         raise ValueError("Prepared Python range differs from the audited wheel policy")
-    rows = []  # bounded: five fixed platforms and at most two historical cohorts.
+    rows = []  # bounded: four fixed platforms and at most two historical cohorts.
     for os_name, target, container in PLATFORMS:
-        if stable and target == "x86_64-apple-darwin":
-            continue
         cohorts = [VERSIONS]
-        if not stable and os_name in {"macos-15-intel", "windows-latest"}:
+        if not stable and os_name in {"windows-latest"}:
             cohorts = ["3.11 3.12 3.13", "3.14 3.15"]
         for versions in cohorts:
             artifact = "release-wheel-" + target

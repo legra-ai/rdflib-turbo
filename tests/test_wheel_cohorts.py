@@ -51,7 +51,8 @@ def test_cohorts_cover_every_platform_interpreter_pair_exactly_once():
     assert "uv build --wheel --python 3.11" in job
     assert "scripts/test_wheel.py --python-versions ${{ matrix.python-versions }}" in job
     assert "name: ${{ matrix.artifact }}" in job
-    assert "timeout-minutes: ${{ matrix.os == 'macos-15-intel' && 120 || 90 }}" in job
+    assert "timeout-minutes: 90" in job
+    assert "macos-15-intel" not in job
 
 
 def test_aggregate_requires_every_cohort_and_exact_complete_release_inventory():

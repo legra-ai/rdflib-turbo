@@ -99,15 +99,14 @@ def test_wheel_job_budget_covers_its_interpreters_and_verification():
     workflow = (ROOT / ".github/workflows/ci.yml").read_text()
     wheels = workflow.split("\n  wheels:\n", 1)[1].split("\n  native-coverage:\n", 1)[0]
     timeout = re.search(
-        r"^    timeout-minutes: \$\{\{ matrix\.os == 'macos-15-intel' "
-        r"&& (?P<intel>\d+) \|\| (?P<default>\d+) \}\}$",
+        r"^    timeout-minutes: (?P<default>\d+)$",
         wheels,
         re.MULTILINE,
     )
     assert timeout is not None
     # One cold build plus five complete installed suites and runner setup.
     assert 35 + 9 * 5 + 3 <= int(timeout.group("default")) <= 90
-    assert 35 + 12 * 5 + 3 <= int(timeout.group("intel")) <= 120
+    assert "macos-15-intel" not in wheels
     assert "uv build --wheel --python 3.11" in wheels
     assert "needs.prepare.outputs.stable-abi" in wheels
     assert "python scripts/test_wheel.py" in wheels
