@@ -180,7 +180,7 @@ jobs:
     needs: [prepare, sdist]
     runs-on: ${{ matrix.os }}
     # Build once per platform, then test the identical wheel on all five interpreters.
-    timeout-minutes: ${{ matrix.os == 'macos-15-intel' && 120 || 90 }}
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.wheel-matrix) }}
