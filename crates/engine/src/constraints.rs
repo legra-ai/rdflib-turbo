@@ -42,6 +42,10 @@ mod membership_list;
 #[path = "constraints_tests.rs"]
 mod coverage_tests;
 
+#[cfg(test)]
+#[path = "constraint_load_error_tests.rs"]
+mod constraint_load_error_tests;
+
 pub(crate) enum Constraint {
     NodeExpression {
         expression: crate::expression::NodeExpression,
@@ -171,9 +175,9 @@ fn integer_with_policy(
     name: &str,
     digits: DecimalDigitPolicy,
 ) -> Result<IntegerParameter> {
-    let invalid = || Error::Invalid(format!("Invalid integer parameter sh:{name}: {term}"));
+    let malformed = || IntegerFault::Malformed.error(name);
     let Term::Literal(literal) = &term else {
-        return Err(invalid());
+        return Err(malformed());
     };
     let kind = literal.datatype().as_str().strip_prefix(XSD);
     let qualified = matches!(name, "qualifiedMinCount" | "qualifiedMaxCount");
@@ -182,7 +186,7 @@ fn integer_with_policy(
         match literal.value() {
             "true" | "1" => BigInt::from(1),
             "false" | "0" => BigInt::from(0),
-            _ => return Err(invalid()),
+            _ => return Err(malformed()),
         }
     } else {
         let integer_kind = matches!(
@@ -205,17 +209,27 @@ fn integer_with_policy(
         );
         if !integer_kind
             || (!qualified && !length && kind != Some("integer"))
-            // The pinned reference's length whitelist excludes xsd:byte as
-            // well as the negative/nonpositive datatypes, even for zero.
-            || (length && matches!(kind, Some("byte" | "negativeInteger" | "nonPositiveInteger")))
+            // The pinned reference's length whitelist excludes xsd:byte.
+            || (length && kind == Some("byte"))
         {
-            return Err(invalid());
+            return Err(malformed());
         }
-        integer_lexical_with_policy(literal.value(), digits)
-            .ok_or_else(|| integer_conversion_error(name))?
+        let number = integer_lexical_with_policy(literal.value(), digits)
+            .ok_or_else(|| IntegerFault::Unconvertible.error(name))?;
+        // RDFLib marks out-of-range derived-integer literals ill-typed; only
+        // the reference's length components reject ill-typed literals.
+        if length && !kind.is_some_and(|kind| integer_datatype_admits(kind, &number)) {
+            return Err(malformed());
+        }
+        // The reference rejects these length datatypes as non-positive even
+        // for zero, after its ill-typed lexical check.
+        if length && matches!(kind, Some("negativeInteger" | "nonPositiveInteger")) {
+            return Err(IntegerFault::Negative.error(name));
+        }
+        number
     };
     if !qualified && number.sign() == Sign::Minus {
-        return Err(invalid());
+        return Err(IntegerFault::Negative.error(name));
     }
     Ok(IntegerParameter {
         literal: literal.clone(),
@@ -223,32 +237,85 @@ fn integer_with_policy(
     })
 }
 
-fn integer_conversion_error(name: &str) -> Error {
-    let (message, link) = match name {
-        "minLength" => (
-            "sh:minLength value must be a literal value with an integer.",
-            "https://www.w3.org/TR/shacl/#MinLengthConstraintComponent",
-        ),
-        "maxLength" => (
-            "sh:maxLength value must be a literal value with an integer.",
-            "https://www.w3.org/TR/shacl/#MaxLengthConstraintComponent",
-        ),
-        "qualifiedMinCount" => (
-            "QualifiedMinCountConstraintComponent sh:qualifiedMinCount must be a Literal with Int.",
-            "https://www.w3.org/TR/shacl/#QualifiedValueShapeConstraintComponent",
-        ),
-        "qualifiedMaxCount" => (
-            "QualifiedMaxCountConstraintComponent sh:qualifiedMaxCount must be a Literal with Int.",
-            "https://www.w3.org/TR/shacl/#QualifiedValueShapeConstraintComponent",
-        ),
-        "minCount" | "maxCount" => {
-            return Error::TypeError(
-                "int() argument must be a string, a bytes-like object or a real number, not 'NoneType'",
-            );
-        }
-        _ => unreachable!("only integer constraint parameters use this parser"),
+fn integer_datatype_admits(kind: &str, number: &BigInt) -> bool {
+    let (min, max): (Option<BigInt>, Option<BigInt>) = match kind {
+        "long" => (Some(i64::MIN.into()), Some(i64::MAX.into())),
+        "int" => (Some(i32::MIN.into()), Some(i32::MAX.into())),
+        "short" => (Some(i16::MIN.into()), Some(i16::MAX.into())),
+        "byte" => (Some(i8::MIN.into()), Some(i8::MAX.into())),
+        "unsignedLong" => (Some(0.into()), Some(u64::MAX.into())),
+        "unsignedInt" => (Some(0.into()), Some(u32::MAX.into())),
+        "unsignedShort" => (Some(0.into()), Some(u16::MAX.into())),
+        "unsignedByte" => (Some(0.into()), Some(u8::MAX.into())),
+        "nonNegativeInteger" => (Some(0.into()), None),
+        "positiveInteger" => (Some(1.into()), None),
+        "nonPositiveInteger" => (None, Some(0.into())),
+        "negativeInteger" => (None, Some((-1).into())),
+        _ => (None, None),
     };
-    Error::ConstraintLoad { message, link }
+    min.is_none_or(|n| *number >= n) && max.is_none_or(|n| *number <= n)
+}
+
+/// Why an integer constraint parameter failed to load, keyed to the pinned
+/// pySHACL reference's per-component `ConstraintLoadError` wording.
+#[derive(Clone, Copy)]
+enum IntegerFault {
+    /// Not a literal of an accepted integer datatype.
+    Malformed,
+    /// An accepted datatype whose value is below the component's minimum.
+    Negative,
+    /// An accepted datatype whose lexical form the host cannot convert.
+    Unconvertible,
+}
+
+impl IntegerFault {
+    fn error(self, name: &str) -> Error {
+        let link = match name {
+            "minCount" => "https://www.w3.org/TR/shacl/#MinCountConstraintComponent",
+            "maxCount" => "https://www.w3.org/TR/shacl/#MaxCountConstraintComponent",
+            "minLength" => "https://www.w3.org/TR/shacl/#MinLengthConstraintComponent",
+            "maxLength" => "https://www.w3.org/TR/shacl/#MaxLengthConstraintComponent",
+            "qualifiedMinCount" | "qualifiedMaxCount" => {
+                "https://www.w3.org/TR/shacl/#QualifiedValueShapeConstraintComponent"
+            }
+            _ => unreachable!("only integer constraint parameters use this parser"),
+        };
+        let message = match (self, name) {
+            (Self::Unconvertible, "minCount" | "maxCount") => {
+                return Error::TypeError(
+                    "int() argument must be a string, a bytes-like object or a real number, not 'NoneType'",
+                );
+            }
+            (Self::Malformed, "minCount") => {
+                "MinCountConstraintComponent sh:minCount must be a literal with datatype xsd:integer."
+            }
+            (Self::Negative, "minCount") => {
+                "MinCountConstraintComponent sh:minCount must be an integer >= 0."
+            }
+            (Self::Malformed, "maxCount") => {
+                "MaxCountConstraintComponent sh:maxCount must be a literal with datatype xsd:integer."
+            }
+            (Self::Negative, "maxCount") => {
+                "MaxCountConstraintComponent sh:maxCount must be an integer >= 0."
+            }
+            (Self::Malformed | Self::Unconvertible, "minLength") => {
+                "sh:minLength value must be a literal value with an integer."
+            }
+            (Self::Negative, "minLength") => "sh:minLength value must be a positive integer.",
+            (Self::Malformed | Self::Unconvertible, "maxLength") => {
+                "sh:maxLength value must be a literal value with an integer."
+            }
+            (Self::Negative, "maxLength") => "sh:maxLength value must be a positive integer.",
+            (_, "qualifiedMinCount") => {
+                "QualifiedMinCountConstraintComponent sh:qualifiedMinCount must be a Literal with Int."
+            }
+            (_, "qualifiedMaxCount") => {
+                "QualifiedMaxCountConstraintComponent sh:qualifiedMaxCount must be a Literal with Int."
+            }
+            _ => unreachable!("only integer constraint parameters use this parser"),
+        };
+        Error::ConstraintLoad { message, link }
+    }
 }
 
 fn integer_lexical_with_policy(text: &str, digits: DecimalDigitPolicy) -> Option<BigInt> {
@@ -543,9 +610,11 @@ pub(crate) fn read(
     let ignored = one(store, node, "ignoredProperties")?;
     let closed = one(store, node, "closed")?;
     if ignored.is_some() && closed.is_none() {
-        return Err(Error::Invalid(
-            "sh:ignoredProperties requires sh:closed".into(),
-        ));
+        return Err(Error::ConstraintLoad {
+            message: "ClosedConstraintComponent: You can only use sh:ignoredProperties on a \
+                      Closed Shape (sh:closed).",
+            link: "https://www.w3.org/TR/shacl/#ClosedConstraintComponent",
+        });
     }
     let ignored_properties = ignored
         .map(|head| rdf_list(store, &head))
