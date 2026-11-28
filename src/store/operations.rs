@@ -69,6 +69,10 @@ pub(super) enum Operation {
     Query(String, bool, Option<String>),
     Dump(RdfFormat),
     DumpGraphNt(Option<TermTuple>),
+    CanonicalForm(
+        crate::canonical::CanonicalScope,
+        crate::canonical::TermIdentity,
+    ),
 }
 
 pub(super) enum Reply {
@@ -85,6 +89,7 @@ pub(super) enum Reply {
     Count(usize),
     Text(String),
     GraphNt(super::output::GraphNtOutput),
+    Canonical(Box<crate::canonical::CanonicalForm>),
     Query(String, String),
     Inference(crate::inference::InferenceOutcome),
 }
@@ -119,7 +124,8 @@ impl Operation {
             | Self::Query(..)
             | Self::QueryPrepared(..)
             | Self::Dump(_)
-            | Self::DumpGraphNt(_) => false,
+            | Self::DumpGraphNt(_)
+            | Self::CanonicalForm(..) => false,
         }
     }
 
@@ -406,6 +412,12 @@ impl Operation {
                 ))
                 .map(Reply::GraphNt)
             }
+            Self::CanonicalForm(scope, identity) => crate::canonical::CanonicalForm::collect(
+                transaction.generalized_quads_for_pattern(None, None, None, scope.pattern()),
+                &scope,
+                identity,
+            )
+            .map(|form| Reply::Canonical(Box::new(form))),
         }
     }
 }

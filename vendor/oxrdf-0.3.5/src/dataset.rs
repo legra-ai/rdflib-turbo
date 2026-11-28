@@ -39,6 +39,10 @@ use std::sync::Arc;
 mod indexes;
 #[path = "dataset_pattern.rs"]
 mod pattern;
+#[path = "dataset_canonical_budget.rs"]
+mod canonical_budget;
+use canonical_budget::WorkMeter;
+pub use canonical_budget::{CanonicalizationBudget, CanonicalizationBudgetExceeded};
 use crate::*;
 #[cfg(feature = "rdfc-10")]
 use sha2::{Digest, Sha256, Sha384};
@@ -579,7 +583,7 @@ impl Dataset {
     ///     See [the RDFC specification section about it](https://www.w3.org/TR/rdf-canon/#dataset-poisoning).
     /// </div>
     pub fn canonicalize(&mut self, algorithm: CanonicalizationAlgorithm) {
-        let bnode_mapping = self.canonicalize_interned_blank_nodes(algorithm);
+        let bnode_mapping = self.unlimited_canonical_blank_nodes(algorithm);
         let new_quads = self.map_blank_nodes(&bnode_mapping);
         self.clear();
         for quad in new_quads {
@@ -595,16 +599,45 @@ impl Dataset {
         &self,
         algorithm: CanonicalizationAlgorithm,
     ) -> HashMap<BlankNodeRef<'_>, BlankNode> {
-        self.canonicalize_interned_blank_nodes(algorithm)
+        self.unlimited_canonical_blank_nodes(algorithm)
             .into_iter()
             .map(|(from, to)| (from.decode_from(&self.interner), to))
             .collect()
     }
 
-    fn canonicalize_interned_blank_nodes(
+    /// Like [`canonicalize_blank_nodes`](Self::canonicalize_blank_nodes), but
+    /// stops with [`CanonicalizationBudgetExceeded`] once `budget` is spent
+    /// (Turbo patch; protects callers from RDFC-1.0 dataset poisoning).
+    pub fn canonicalize_blank_nodes_within(
+        &self,
+        algorithm: CanonicalizationAlgorithm,
+        budget: CanonicalizationBudget,
+    ) -> Result<HashMap<BlankNodeRef<'_>, BlankNode>, CanonicalizationBudgetExceeded> {
+        Ok(self
+            .canonicalize_interned_blank_nodes(algorithm, &budget.meter())?
+            .into_iter()
+            .map(|(from, to)| (from.decode_from(&self.interner), to))
+            .collect())
+    }
+
+    fn unlimited_canonical_blank_nodes(
         &self,
         algorithm: CanonicalizationAlgorithm,
     ) -> HashMap<InternedBlankNode, BlankNode> {
+        match self.canonicalize_interned_blank_nodes(
+            algorithm,
+            &CanonicalizationBudget::unlimited().meter(),
+        ) {
+            Ok(mapping) => mapping,
+            Err(_) => unreachable!("an unlimited canonicalization budget cannot be exhausted"),
+        }
+    }
+
+    fn canonicalize_interned_blank_nodes(
+        &self,
+        algorithm: CanonicalizationAlgorithm,
+        work: &WorkMeter,
+    ) -> Result<HashMap<InternedBlankNode, BlankNode>, CanonicalizationBudgetExceeded> {
         let hash_algorithm = match algorithm {
             CanonicalizationAlgorithm::Unstable => None,
             #[cfg(feature = "rdfc-10")]
@@ -706,7 +739,8 @@ impl Dataset {
                     n,
                     &temporary_issuer,
                     hash_algorithm,
-                ))
+                    work,
+                )?)
             }
             // 5.3)
             hash_path_list.sort_unstable_by(|(_, hl), (_, hr)| hl.cmp(hr));
@@ -721,9 +755,9 @@ impl Dataset {
             }
         }
         // 6)
-        canonicalization_state
+        Ok(canonicalization_state
             .canonical_issuer
-            .issued_identifier_map
+            .issued_identifier_map)
     }
 
     #[cfg(feature = "rdf-12")]
@@ -946,7 +980,9 @@ impl Dataset {
         identifier: InternedBlankNode,
         issuer: &IdentifierIssuer,
         hash_algorithm: Option<CanonicalizationHashAlgorithm>,
-    ) -> (IdentifierIssuer, String) {
+        work: &WorkMeter,
+    ) -> Result<(IdentifierIssuer, String), CanonicalizationBudgetExceeded> {
+        work.spend()?;
         let mut issuer = issuer.clone();
         // 1)
         let mut h_n = BTreeMap::<_, HashSet<_>>::new();
@@ -1016,6 +1052,8 @@ impl Dataset {
             // 5.3)
             let mut chosen_issuer = IdentifierIssuer::new("");
             // 5.4)
+            // Turbo patch: charge every permutation before materializing them.
+            work.spend_permutations(blank_node_list.len())?;
             'perm: for p in generate_permutations(blank_node_list) {
                 // 5.4.1)
                 let mut issuer_copy = issuer.clone();
@@ -1060,7 +1098,8 @@ impl Dataset {
                         related,
                         &issuer_copy,
                         hash_algorithm,
-                    );
+                        work,
+                    )?;
                     // 5.4.5.2)
                     let id = Self::issue_identifier(&mut issuer_copy, related);
                     path.push_str("_:");
@@ -1091,7 +1130,7 @@ impl Dataset {
             issuer = chosen_issuer;
         }
         // 6)
-        (issuer, Self::hash_function(&data_to_hash, hash_algorithm))
+        Ok((issuer, Self::hash_function(&data_to_hash, hash_algorithm)))
     }
 
     #[cfg(feature = "rdf-12")]

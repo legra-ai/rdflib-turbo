@@ -22,6 +22,8 @@ pub(crate) enum Error {
     Lexical(inference::LexicalFailure),
     #[error(transparent)]
     Shacl(#[from] pyshacl_turbo_engine::Error),
+    #[error(transparent)]
+    CanonicalBudget(oxigraph::model::CanonicalizationBudgetExceeded),
     #[error("SPARQL evaluation failed: {0}")]
     Query(#[from] oxigraph::sparql::QueryEvaluationError),
 }
@@ -34,6 +36,7 @@ pub(crate) fn error(error: Error) -> PyErr {
         Error::Unsupported(_) => PyNotImplementedError::new_err(error.to_string()),
         Error::Attribute(message) => PyAttributeError::new_err(message),
         Error::Lexical(failure) => lexical_error(failure),
+        Error::CanonicalBudget(exceeded) => crate::canonical::budget_error(exceeded),
         _ => PyRuntimeError::new_err(error.to_string()),
     }
 }

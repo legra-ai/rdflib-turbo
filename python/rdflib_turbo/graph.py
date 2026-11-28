@@ -17,6 +17,7 @@ from rdflib.query import Result
 from rdflib.store import Store as ReferenceStore
 from rdflib.util import from_n3, guess_format
 
+from ._canonical import GraphCanonicalization
 from ._inference import GraphInference, _change_rows
 from ._namespaces import NamespaceBindings
 from ._native import NativeStore
@@ -239,7 +240,13 @@ class RDFLibStore(ReferenceStore):
 
 
 class Graph(
-    GraphOwnership, GraphInference, GraphValidation, GraphSerialization, ProjectedReads, RDFLibGraph
+    GraphOwnership,
+    GraphCanonicalization,
+    GraphInference,
+    GraphValidation,
+    GraphSerialization,
+    ProjectedReads,
+    RDFLibGraph,
 ):
     """RDFLib Graph facade with exact-term native storage and native SPARQL."""
 
@@ -419,7 +426,9 @@ class Graph(
                 owner.cancel_replacement(prepared)
 
 
-class StoreDataset(GraphOwnership, GraphInference, GraphValidation, RDFLibDataset):
+class StoreDataset(
+    GraphOwnership, GraphCanonicalization, GraphInference, GraphValidation, RDFLibDataset
+):
     """RDFLib Dataset over the transactional native store."""
 
     _turbo_native_graph = True

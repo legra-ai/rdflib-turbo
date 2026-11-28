@@ -93,3 +93,15 @@ QuadRecord leases over the same indexes/dictionary. A moved builder/frozen owner
 uses a call-local provenance token; no Dataset/record persisted fields, new RDF
 index, lexical mirror or format is added. Foreign cloned-owner leases fail before
 metadata lookup; RDF key equality remains the full encoded record, not a pointer.
+
+## Bounded RDFC-1.0 canonicalization
+
+`Dataset::canonicalize_blank_nodes_within` takes a `CanonicalizationBudget`
+and returns `CanonicalizationBudgetExceeded` once it is spent
+(`dataset_canonical_budget.rs`). One unit is one Hash N-Degree Quads call or
+one permutation of a related blank-node group; a group's `n!` permutations are
+charged before `generate_permutations` allocates them, so a poison dataset
+fails fast instead of running for factorial time and memory. `canonicalize`
+and `canonicalize_blank_nodes` keep the upstream unlimited behaviour. The
+runtime enables the existing `rdfc-10` feature for this API; see runtime ADR
+0080 and `src/canonical/tests.rs`.

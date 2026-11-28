@@ -905,5 +905,12 @@
       "rdflib_passes": false,
       "reason": "RDF 1.2 grammar not enabled until PH-20: the RDF 1.1 parser reads '@--ltr' as a language tag instead of rejecting a direction without a language"
     }
-  ]
+  ],
+  "rdfc10": {
+    "total": 86,
+    "turbo": 86,
+    "rdflib_graded": 56,
+    "rdflib": 56,
+    "known_failures": []
+  }
 }

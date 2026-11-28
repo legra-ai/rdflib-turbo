@@ -1,3 +1,4 @@
+mod canonical;
 mod dataset_inference;
 mod dataset_output;
 mod dataset_state;
