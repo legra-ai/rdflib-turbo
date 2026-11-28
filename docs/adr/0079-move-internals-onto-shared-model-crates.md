@@ -1,6 +1,7 @@
 # ADR 0079: Move the turbo internals onto the shared model crates
 
-Status: Proposed; design only, no implementation is authorized by this record
+Status: Accepted; the owner approved this record on 2026-11-28, including the
+recommended answer to each open question below
 
 ## Context
 
@@ -264,7 +265,10 @@ split by rule family or component.
   return futures. Mitigation: drive them with a single-threaded local executor
   on the detached native thread; no tokio runtime and no GIL is held.
 
-## Open questions for the owner
+## Owner decisions
+
+The owner approved this record on 2026-11-28. Each question below is decided
+by its recommendation.
 
 1. **Storage and SPARQL.** (a) Keep the Oxigraph fork behind `turbo-store`
    indefinitely; (b) also plan a store of our own now; (c) keep it and
@@ -295,4 +299,5 @@ defined, and the turbo packages stop maintaining copies of them. Storage,
 parsing and query stay on the Oxigraph fork behind an adapter, so the fork is
 still ours to carry. Each slice is reversible on its own and is merged only
 with every gate green. owlrl-turbo ADR 0013 and pyshacl-turbo ADR 0048 point
-here. This record changes no code and claims no speedup or conformance.
+here. This record itself changes no code and claims no speedup or
+conformance; each slice carries its own evidence.
