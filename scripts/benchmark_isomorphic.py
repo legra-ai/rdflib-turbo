@@ -3,7 +3,9 @@
 Each fixture is one N-Triples document parsed twice per library: once as written
 and once with every blank-node label renamed, so every comparison is a true
 isomorphism that both libraries must confirm. Graph construction is outside the
-timed region; each timing is one ``isomorphic(left, right)`` call. Medians of
+timed region. RDFLib's colour refinement grows steeply with blank-node
+count (a 5x4 ring set takes it about 40 s), which bounds the fixture sizes.
+Each timing is one ``isomorphic(left, right)`` call. Medians of
 ``--repeats`` runs per arm are printed as a Markdown table; ``--output`` also
 writes every sample as JSON.
 """
@@ -65,8 +67,8 @@ def ground(count: int) -> Iterator[str]:
 
 
 FIXTURES: dict[str, Callable[[], Iterator[str]]] = {
-    "records-3000": lambda: records(1_000),
-    "lists-100x25": lambda: lists(100, 25),
+    "records-300": lambda: records(300),
+    "lists-20x25": lambda: lists(20, 25),
     "rings-3x4": lambda: rings(3, 4),
     "ground-20000": lambda: ground(20_000),
 }
