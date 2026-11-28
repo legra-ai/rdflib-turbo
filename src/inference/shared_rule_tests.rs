@@ -46,28 +46,35 @@ fn shared_adapter_rejects_unimplemented_semantics_before_execution() {
     rule.body[0] = Literal::Negative(rule.body[0].atom().unwrap().clone());
     assert!(super::shared::CompiledRule::try_new(&rule).is_err());
     rule = RuleId::Rdfs2.definition();
-    rule.head.predicate = PredicateSymbol::new("urn:unsupported:relation");
+    rule.head.as_atom_mut().expect("single-atom head").predicate =
+        PredicateSymbol::new("urn:unsupported:relation");
     assert!(super::shared::CompiledRule::try_new(&rule).is_err());
     rule = RuleId::Rdfs2.definition();
-    rule.head.terms[0] = Term::Variable(VariableSymbol::new("s } WHERE { ?x ?y ?z"));
+    rule.head.as_atom_mut().expect("single-atom head").terms[0] =
+        Term::Variable(VariableSymbol::new("s } WHERE { ?x ?y ?z"));
     assert!(super::shared::CompiledRule::try_new(&rule).is_err());
     rule = RuleId::Rdfs2.definition();
-    rule.head.terms[0] = Term::TripleTerm(Box::new(Atom {
-        predicate: PredicateSymbol::new("urn:p"),
-        terms: vec![],
-    }));
+    rule.head.as_atom_mut().expect("single-atom head").terms[0] =
+        Term::TripleTerm(Box::new(Atom {
+            predicate: PredicateSymbol::new("urn:p"),
+            terms: vec![],
+        }));
     assert!(super::shared::CompiledRule::try_new(&rule).is_err());
 }
 
 #[test]
 fn shared_adapter_validates_terms_even_in_safe_rules() {
     let mut rule = RuleId::Rdfs2.definition();
-    rule.head.terms.pop();
+    rule.head
+        .as_atom_mut()
+        .expect("single-atom head")
+        .terms
+        .pop();
     assert!(super::shared::CompiledRule::try_new(&rule).is_err());
 
     rule = RuleId::Rdfs2.definition();
     let injected = Term::Variable(VariableSymbol::new("s } WHERE { ?x ?y ?z"));
-    rule.head.terms[0] = injected.clone();
+    rule.head.as_atom_mut().expect("single-atom head").terms[0] = injected.clone();
     let Literal::Positive(atom) = &mut rule.body[1] else {
         panic!("catalogue positive atom")
     };
@@ -76,11 +83,12 @@ fn shared_adapter_validates_terms_even_in_safe_rules() {
     assert!(super::shared::CompiledRule::try_new(&rule).is_err());
 
     rule = RuleId::Rdfs2.definition();
-    rule.head.terms[1] = Term::Constant(ConstantSymbol::new("not an IRI"));
+    rule.head.as_atom_mut().expect("single-atom head").terms[1] =
+        Term::Constant(ConstantSymbol::new("not an IRI"));
     assert!(super::shared::CompiledRule::try_new(&rule).is_err());
 
     rule = RuleId::Rdfs2.definition();
-    rule.head.terms[0] = Term::Skolem {
+    rule.head.as_atom_mut().expect("single-atom head").terms[0] = Term::Skolem {
         name: ConstantSymbol::new("urn:skolem"),
         args: vec![],
     };
@@ -381,7 +389,13 @@ fn shared_tuple_negation_validates_before_adapter_rejection() {
         vec![Literal::Negative(tuple("urn:shared:input"))],
     )])
     .expect("disjoint RDF properties have no recursive negative dependency");
-    assert_eq!(program.stratify().unwrap().stratum_of_rule(0), Some(0));
+    assert_eq!(
+        program
+            .stratify()
+            .unwrap()
+            .stratum_of_rule(datalog_structural_model::RuleIndex::new(0)),
+        Some(0)
+    );
     assert!(matches!(
         super::shared::CompiledRule::try_new(&program.rules[0]),
         Err(crate::Error::Unsupported(_))

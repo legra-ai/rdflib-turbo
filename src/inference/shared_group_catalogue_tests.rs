@@ -94,16 +94,23 @@ fn exact_body_grouping_never_reorders_filters_operands_or_variables() {
         2
     );
     let mut renamed = original.clone();
-    for term in renamed.head.terms.iter_mut().chain(
-        renamed
-            .body
-            .iter_mut()
-            .filter_map(|literal| match literal {
-                Literal::Positive(atom) => Some(atom),
-                _ => None,
-            })
-            .flat_map(|atom| atom.terms.iter_mut()),
-    ) {
+    for term in renamed
+        .head
+        .as_atom_mut()
+        .expect("single-atom head")
+        .terms
+        .iter_mut()
+        .chain(
+            renamed
+                .body
+                .iter_mut()
+                .filter_map(|literal| match literal {
+                    Literal::Positive(atom) => Some(atom),
+                    _ => None,
+                })
+                .flat_map(|atom| atom.terms.iter_mut()),
+        )
+    {
         if *term == variable("s") {
             *term = variable("renamed");
         }
@@ -123,16 +130,27 @@ fn every_original_catalogue_head_and_body_is_validated_before_grouping() {
     // must not hide validation by retaining only the first rule in the group.
     let mut cases = Vec::new(); // bounded: six fixed malformed catalogue controls.
     let mut invalid = valid.clone();
-    invalid.head.predicate = PredicateSymbol::new("urn:unsupported");
+    invalid
+        .head
+        .as_atom_mut()
+        .expect("single-atom head")
+        .predicate = PredicateSymbol::new("urn:unsupported");
     cases.push(invalid);
     let mut invalid = valid.clone();
-    invalid.head.terms.pop();
+    invalid
+        .head
+        .as_atom_mut()
+        .expect("single-atom head")
+        .terms
+        .pop();
     cases.push(invalid);
     let mut invalid = valid.clone();
-    invalid.head.terms[1] = Term::Constant(ConstantSymbol::new("not an IRI"));
+    invalid.head.as_atom_mut().expect("single-atom head").terms[1] =
+        Term::Constant(ConstantSymbol::new("not an IRI"));
     cases.push(invalid);
     let mut invalid = valid.clone();
-    invalid.head.terms[0] = Term::Variable(VariableSymbol::new("unbound"));
+    invalid.head.as_atom_mut().expect("single-atom head").terms[0] =
+        Term::Variable(VariableSymbol::new("unbound"));
     cases.push(invalid);
     let mut invalid = valid.clone();
     invalid.body[0] = Literal::Negative(invalid.body[0].atom().unwrap().clone());

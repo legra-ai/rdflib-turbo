@@ -254,7 +254,8 @@ fn catalogue_optimizer_rejects_changed_shapes_and_keeps_generic_clauses_faithful
         changed.body.pop();
         assert!(CompiledRule::without_self_membership(id, &changed).is_err());
         changed = original.clone();
-        changed.head.terms[1] = changed.head.terms[2].clone();
+        changed.head.as_atom_mut().expect("single-atom head").terms[1] =
+            changed.head.as_atom_mut().expect("single-atom head").terms[2].clone();
         assert!(CompiledRule::without_self_membership(id, &changed).is_err());
         changed = original.clone();
         let Literal::Positive(atom) = &mut changed.body[0] else {

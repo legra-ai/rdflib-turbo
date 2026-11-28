@@ -72,6 +72,7 @@ impl CompiledRule {
 
     pub(super) fn without_self_membership(id: rdf_reasoning::RuleId, rule: &Rule) -> Result<Rule> {
         let invalid = || Error::Unsupported("Unexpected equivalent-class catalogue shape".into());
+        let head = Self::head_atom(rule)?;
         let [
             Literal::Positive(equivalence),
             Literal::Positive(membership),
@@ -79,7 +80,7 @@ impl CompiledRule {
         else {
             return Err(invalid());
         };
-        for atom in [&rule.head, equivalence, membership] {
+        for atom in [head, equivalence, membership] {
             if atom.predicate.as_str() != TRIPLE_RELATION || atom.terms.len() != 3 {
                 return Err(invalid());
             }
@@ -89,8 +90,8 @@ impl CompiledRule {
         if !is_constant(
             &membership.terms[1],
             "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-        ) || rule.head.terms[1] != membership.terms[1]
-            || rule.head.terms[0] != membership.terms[0]
+        ) || head.terms[1] != membership.terms[1]
+            || head.terms[0] != membership.terms[0]
             || !is_constant(
                 &equivalence.terms[1],
                 "http://www.w3.org/2002/07/owl#equivalentClass",
@@ -99,7 +100,7 @@ impl CompiledRule {
             return Err(invalid());
         }
         let source = &membership.terms[2];
-        let target = &rule.head.terms[2];
+        let target = &head.terms[2];
         let expected = match id {
             CaxEqc1 => [&equivalence.terms[0], &equivalence.terms[2]],
             CaxEqc2 => [&equivalence.terms[2], &equivalence.terms[0]],
@@ -107,9 +108,9 @@ impl CompiledRule {
         };
         if expected != [source, target]
             || source == target
-            || source == &rule.head.terms[0]
-            || target == &rule.head.terms[0]
-            || [&rule.head.terms[0], source, target]
+            || source == &head.terms[0]
+            || target == &head.terms[0]
+            || [&head.terms[0], source, target]
                 .iter()
                 .any(|term| !matches!(term, Term::Variable(_)))
         {
@@ -149,11 +150,18 @@ impl CompiledRule {
         ))
     }
 
+    /// The single atom a shared rule concludes; other head forms are refused.
+    pub(in crate::inference) fn head_atom(rule: &Rule) -> Result<&Atom> {
+        rule.head.as_atom().ok_or_else(|| {
+            Error::Unsupported("Shared inference rule head is not a single atom".into())
+        })
+    }
+
     pub(super) fn validated_parts(rule: &Rule, literal_values: bool) -> Result<(String, String)> {
         if !rule.is_safe() {
             return Err(Error::Unsupported("Unsafe shared inference rule".into()));
         }
-        let head = Self::atom(&rule.head)?;
+        let head = Self::atom(Self::head_atom(rule)?)?;
         let mut body = String::new();
         for literal in &rule.body {
             match literal {
