@@ -331,7 +331,9 @@ class Baseline:
         )
 
     def write(self, path: Path = BASELINE) -> None:
-        data = {
+        # Other suites' sections (rdf-canon) keep their place and content.
+        data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        data |= {
             "rdflib_version": self.rdflib_version,
             "suites": {suite.name: asdict(counts) for suite, counts in self.suites.items()},
             "known_failures": [failure.to_json() for failure in self.known_failures],

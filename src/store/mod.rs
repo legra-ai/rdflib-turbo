@@ -1,5 +1,6 @@
 //! Native storage and transaction handles, owned by this extension only.
 mod bindings;
+mod canonical;
 mod changes;
 #[cfg(test)]
 mod changes_tests;

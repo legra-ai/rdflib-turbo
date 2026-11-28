@@ -7,6 +7,10 @@
     "sha256": "ca8c40f24e9246669de6ebfccd79de5d2d60ea446d7b4599f27867bfb3961944",
     "reason": "Shared model re-exports and native type aliases only; no executable items. The original instrumented Rust export from CI run 46084988623 at 4a0b5d00 contains 337 mapped files and no file mapping for these exact model.rs bytes. Executable and missing-source mapping checks remain enforced."
   },
+  "src/canonical/mod.rs": {
+    "sha256": "548921b318ff0dbee4d443f1778b95b020797f67ae331359156690eac906be70",
+    "reason": "Barrel module root: only module declarations and re-exports, with no executable item, so instrumented builds emit no coverage mapping for these bytes. Every item it lists lives in a named submodule whose coverage remains measured."
+  },
   "src/inference.rs": {
     "sha256": "517b0c60a6a4c6afbbfb896b95cce27e14ff5c1f06e14e762d7ee87106d59741",
     "reason": "Barrel module root: only module declarations and re-exports, with no executable item, so instrumented builds emit no coverage mapping for these bytes. Every item it lists lives in a named submodule whose coverage remains measured."
@@ -40,7 +44,7 @@
     "reason": "Barrel module root: only module declarations and re-exports, with no executable item, so instrumented builds emit no coverage mapping for these bytes. Every item it lists lives in a named submodule whose coverage remains measured."
   },
   "src/lib.rs": {
-    "sha256": "afe34b04cd4ccec2cbfa6b237716db96b64879d80256f96d0560c5b741bb4dc7",
+    "sha256": "1433aa072d98c8f2f20e28341a2148ed449e16a26aed3d793b215093270ce14f",
     "reason": "Barrel module root: only module declarations and re-exports, with no executable item, so instrumented builds emit no coverage mapping for these bytes. Every item it lists lives in a named submodule whose coverage remains measured."
   },
   "src/shacl.rs": {
@@ -48,7 +52,7 @@
     "reason": "Barrel module root: only module declarations and re-exports, with no executable item, so instrumented builds emit no coverage mapping for these bytes. Every item it lists lives in a named submodule whose coverage remains measured."
   },
   "src/store/mod.rs": {
-    "sha256": "8220cc8ffe165156b900529cbe54b6e5fdcdcb9b9b807ef9176ba59c0282f681",
+    "sha256": "41e02f6bfa588151c990d955d2e5d1360e0be977c3538eeb874cdd8821b84e6e",
     "reason": "Barrel module root: only module declarations and re-exports, with no executable item, so instrumented builds emit no coverage mapping for these bytes. Every item it lists lives in a named submodule whose coverage remains measured."
   },
   "src/store/nt_format.rs": {

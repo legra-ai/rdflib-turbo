@@ -109,6 +109,7 @@ if TYPE_CHECKING:
         Variable as Variable,
     )
 
+    from ._canonical import CanonicalizationBudgetExceeded, HashAlgorithm
     from .graph import Graph, StoreDataset
     from .graph import StoreDataset as Dataset
     from .store import Store, Transaction, ValidationError
@@ -152,7 +153,9 @@ _RDFLIB_EXPORTS = (
 )
 _RDFLIB_FLAGS = ("NORMALIZE_LITERALS", "DAWG_LITERAL_COLLATION")
 __all__ = [
+    "CanonicalizationBudgetExceeded",
     "Dataset",
+    "HashAlgorithm",
     "Graph",
     "Store",
     "StoreDataset",
@@ -172,6 +175,10 @@ def __getattr__(name: str) -> object:
         from . import graph
 
         return graph.StoreDataset if name == "Dataset" else getattr(graph, name)
+    if name in {"CanonicalizationBudgetExceeded", "HashAlgorithm"}:
+        from . import _canonical
+
+        return getattr(_canonical, name)
     if name in {"Store", "Transaction", "ValidationError"}:
         from . import store
 

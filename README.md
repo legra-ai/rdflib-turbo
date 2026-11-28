@@ -62,6 +62,23 @@ uv run --no-project --python 3.13.16 python -I -B benchmarks/matched_graph_drive
     --repeats 5 --output benchmark-artifacts/matched-graph-readme
 ```
 
+### Graph isomorphism
+
+**`rdflib_turbo.compare.isomorphic` (native RDFC-1.0) against `rdflib.compare.isomorphic`.**
+Each pair is one N-Triples document and a copy with every blank-node label renamed.
+
+| Fixture | Triples | RDFLib 7.6.0 (ms) | rdflib-turbo (ms) | Speedup |
+| --- | ---: | ---: | ---: | ---: |
+| 300 blank-node records | 900 | 1,369.79 | 3.92 | 349.5× |
+| 20 RDF lists of 25 cells | 1,020 | 2,761.03 | 5.06 | 545.5× |
+| 3 unanchored 4-node rings | 12 | 65.13 | 0.32 | 204.1× |
+| Ground triples only | 20,000 | 146.81 | 82.06 | 1.8× |
+
+Measured **28 November 2026** on Apple M3 Max / macOS arm64, CPython **3.13.18**:
+medians of five in-process calls after graph construction, with a local release
+build of this branch. Reproduce with `scripts/benchmark_isomorphic.py`. RDFC-1.0
+conformance is 86/86 on the vendored W3C rdf-canon suite (ADR 0080).
+
 ### Historical measurements and provenance
 
 **N-Triples serialization: 4.4–4.9× faster than RDFLib on 100,000 synthetic triples.**

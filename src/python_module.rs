@@ -13,6 +13,12 @@ pub(crate) fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     )?;
     module.add_submodule(&standalone_shacl)?;
     module.add_class::<NativeDataset>()?;
+    module.add(
+        "CanonicalizationBudgetExceeded",
+        module
+            .py()
+            .get_type::<crate::canonical::CanonicalizationBudgetExceeded>(),
+    )?;
     module.add_class::<inference::InferenceOutcome>()?;
     shacl::register(module)?;
     store::register(module)?;

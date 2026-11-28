@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use pyo3::prelude::*;
 
+use super::canonical::CanonicalCall;
 use super::native_store::NativeStore;
 use super::nt_python_output::nt_python_output;
 use super::operations::{Operation, runtime};
@@ -336,6 +337,17 @@ impl NativeStore {
     ) -> PyResult<Py<PyAny>> {
         let text = py.detach(|| self.graph_nt_output(graph)).map_err(error)?;
         nt_python_output(py, text, as_bytes)
+    }
+
+    fn _canonical(
+        &self,
+        py: Python<'_>,
+        scope: (bool, Option<TermTuple>),
+        request: (&str, u64, &str, &str),
+    ) -> PyResult<Py<PyAny>> {
+        py.detach(|| CanonicalCall::new(scope, request).on_store(self))
+            .map_err(error)?
+            .into_python(py)
     }
 
     fn named_graphs(&self, py: Python<'_>) -> PyResult<String> {

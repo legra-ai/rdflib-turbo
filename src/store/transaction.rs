@@ -4,6 +4,7 @@ use crate::allocation_tests::trace;
 use pyo3::prelude::*;
 use std::sync::Arc;
 
+use super::canonical::CanonicalCall;
 use super::nt_python_output::nt_python_output;
 use super::operations::{Operation, Reply};
 use super::session::Session;
@@ -297,6 +298,17 @@ impl NativeTransaction {
             }
         })
         .map_err(error)
+    }
+
+    fn _canonical(
+        &self,
+        py: Python<'_>,
+        scope: (bool, Option<TermTuple>),
+        request: (&str, u64, &str, &str),
+    ) -> PyResult<Py<PyAny>> {
+        py.detach(|| CanonicalCall::new(scope, request).on_transaction(&self.session))
+            .map_err(error)?
+            .into_python(py)
     }
 
     fn dump(&self, py: Python<'_>, rdf_format: &str) -> PyResult<String> {
