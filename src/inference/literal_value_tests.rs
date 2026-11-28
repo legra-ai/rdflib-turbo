@@ -34,12 +34,18 @@ fn literal_value_compiler_rejects_changed_bound_operand_roles() {
         let mut rule = original.clone();
         match variation {
             0 => rule.body.swap(0, 1),
-            1 => rule.head.terms.swap(0, 1),
+            1 => rule
+                .head
+                .as_atom_mut()
+                .expect("single-atom head")
+                .terms
+                .swap(0, 1),
             2 => {
                 let datalog_structural_model::Literal::Positive(assertion) = &rule.body[0] else {
                     panic!("published assertion")
                 };
-                rule.head.terms[2] = assertion.terms[2].clone();
+                rule.head.as_atom_mut().expect("single-atom head").terms[2] =
+                    assertion.terms[2].clone();
             }
             _ => unreachable!(),
         }

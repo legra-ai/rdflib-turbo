@@ -132,12 +132,15 @@ fn unexpected_subproperty_catalogue_shapes_are_rejected() {
     for defect in ["head", "schema", "shared-variable", "body"] {
         let mut rule = Rdfs7.definition();
         match defect {
-            "head" => rule.head.terms[0] = rule.head.terms[2].clone(),
+            "head" => {
+                rule.head.as_atom_mut().expect("single-atom head").terms[0] =
+                    rule.head.as_atom_mut().expect("single-atom head").terms[2].clone()
+            }
             "schema" => {
                 let Literal::Positive(schema) = &mut rule.body[0] else {
                     unreachable!();
                 };
-                schema.terms[1] = rule.head.terms[1].clone();
+                schema.terms[1] = rule.head.as_atom().expect("single-atom head").terms[1].clone();
             }
             "shared-variable" => {
                 let Literal::Positive(assertion) = &mut rule.body[1] else {

@@ -11,6 +11,7 @@ impl CompiledRule {
         // Validate the complete original clause before specializing its known roles.
         let (head, _) = Self::validated_parts(rule, true)?;
         let invalid = || Error::Unsupported("Unexpected literal substitution clause shape".into());
+        let head_atom = Self::head_atom(rule)?;
         let [
             Literal::Positive(assertion),
             Literal::Positive(original),
@@ -19,7 +20,7 @@ impl CompiledRule {
         else {
             return Err(invalid());
         };
-        for atom in [assertion, &rule.head] {
+        for atom in [assertion, head_atom] {
             if atom.predicate.as_str() != TRIPLE_RELATION || atom.terms.len() != 3 {
                 return Err(invalid());
             }
@@ -29,8 +30,8 @@ impl CompiledRule {
                 return Err(invalid());
             }
         }
-        if rule.head.terms[..2] != assertion.terms[..2]
-            || rule.head.terms[2] != replacement.terms[0]
+        if head_atom.terms[..2] != assertion.terms[..2]
+            || head_atom.terms[2] != replacement.terms[0]
             || assertion.terms[2] != original.terms[0]
             || original.terms[1] != replacement.terms[1]
         {

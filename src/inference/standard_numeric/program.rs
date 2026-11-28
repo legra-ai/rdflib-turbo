@@ -38,7 +38,7 @@ impl Program {
         emit: &mut impl FnMut(&Atom, &Bindings) -> Result<()>,
     ) -> Result<()> {
         let Some(body) = rule.body.get(index) else {
-            return emit(&rule.head, binding);
+            return emit(Self::head_atom(rule)?, binding);
         };
         match body {
             Body::Positive(atom) => source.facts(atom, binding, |row| {
@@ -59,6 +59,12 @@ impl Program {
         }
     }
 
+    fn head_atom(rule: &Rule) -> Result<&Atom> {
+        rule.head.as_atom().ok_or_else(|| {
+            Error::Unsupported("Shared numeric clause head is not a single atom".into())
+        })
+    }
+
     fn validate(&self) -> Result<()> {
         for rule in &self.rules {
             if !rule.is_safe() || rule.body.len() > 3 {
@@ -66,7 +72,7 @@ impl Program {
                     "Unsafe or oversized shared numeric clause".into(),
                 ));
             }
-            Self::validate_atom(&rule.head, true)?;
+            Self::validate_atom(Self::head_atom(rule)?, true)?;
             for body in &rule.body {
                 match body {
                     Body::Positive(atom) => Self::validate_atom(atom, false)?,

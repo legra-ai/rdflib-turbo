@@ -114,6 +114,7 @@ jobs:
         with:
           toolchain: 1.99.1
       - run: uv run --no-project python scripts/test_dependabot_policy.py
+      - run: uv run --no-project python scripts/test_model_crate_versions.py
       - run: uv run --no-project python scripts/test_dev_tools.py
       - uses: actions/create-github-app-token@v3
         id: writer

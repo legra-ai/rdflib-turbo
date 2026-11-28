@@ -8,24 +8,25 @@ use crate::{Error, Result};
 impl CompiledRule {
     pub(super) fn without_self_subproperty(rule: &Rule) -> Result<Rule> {
         let invalid = || Error::Unsupported("Unexpected subproperty catalogue shape".into());
+        let head_atom = Self::head_atom(rule)?;
         let [Literal::Positive(schema), Literal::Positive(assertion)] = rule.body.as_slice() else {
             return Err(invalid());
         };
-        for atom in [&rule.head, schema, assertion] {
+        for atom in [head_atom, schema, assertion] {
             if atom.predicate.as_str() != TRIPLE_RELATION || atom.terms.len() != 3 {
                 return Err(invalid());
             }
         }
         let source = &assertion.terms[1];
-        let target = &rule.head.terms[1];
+        let target = &head_atom.terms[1];
         if !matches!(
             &schema.terms[1],
             Term::Constant(iri)
                 if iri.as_str() == "http://www.w3.org/2000/01/rdf-schema#subPropertyOf"
         ) || &schema.terms[0] != source
             || &schema.terms[2] != target
-            || rule.head.terms[0] != assertion.terms[0]
-            || rule.head.terms[2] != assertion.terms[2]
+            || head_atom.terms[0] != assertion.terms[0]
+            || head_atom.terms[2] != assertion.terms[2]
         {
             return Err(invalid());
         }
