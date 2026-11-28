@@ -135,6 +135,7 @@ def test_collector_passes_original_authority_only_to_the_candidate_shacl_suite(i
         "SHACL_RELEASE_PROJECT_AUTHORITY": "untrusted",
         "SHACL_BASE_REVISION": "stale",
         "SHACL_CANDIDATE_RECEIPT": "stale",
+        "PYSHACL_TURBO_CANDIDATE_PROVIDER": "1",
     }
     collector.run_facade_suite(
         ["pytest", "candidate/tests"], inherited, authority, record, candidate
@@ -144,6 +145,7 @@ def test_collector_passes_original_authority_only_to_the_candidate_shacl_suite(i
         "SHACL_RELEASE_PROJECT_AUTHORITY": str(authority),
         "SHACL_BASE_REVISION": candidate["facade_revision"],
         "SHACL_CANDIDATE_RECEIPT": str(candidate["receipt"]),
+        "PYSHACL_TURBO_CANDIDATE_PROVIDER": "1",
     }
     collector.run_facade_suite(["pytest", "original/tests"], inherited, None, None, None)
     assert calls[1][1] == {"KEEP": "yes"}

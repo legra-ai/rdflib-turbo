@@ -402,12 +402,17 @@ def release_project_helper():
     return module
 
 
+# pyshacl-turbo narrows only its exact provider-pin freshness check under this marker.
+CANDIDATE_PROVIDER_MARKER = "PYSHACL_TURBO_CANDIDATE_PROVIDER"
+
+
 def run_facade_suite(arguments, environment, authority, frozen, candidate):
     stage_environment = dict(environment)
     for name in (
         "SHACL_RELEASE_PROJECT_AUTHORITY",
         "SHACL_BASE_REVISION",
         "SHACL_CANDIDATE_RECEIPT",
+        CANDIDATE_PROVIDER_MARKER,
     ):
         stage_environment.pop(name, None)
     with release_project_helper().stage(authority, frozen) as original:
@@ -415,6 +420,9 @@ def run_facade_suite(arguments, environment, authority, frozen, candidate):
         if candidate is not None:
             stage_environment["SHACL_BASE_REVISION"] = candidate["facade_revision"]
             stage_environment["SHACL_CANDIDATE_RECEIPT"] = str(candidate["receipt"])
+            # The candidate pins this unpublished provider build, which the
+            # facade's committed direct contract cannot name.
+            stage_environment[CANDIDATE_PROVIDER_MARKER] = "1"
         run(arguments, stage_environment)
 
 
