@@ -368,7 +368,7 @@ pub(crate) fn read(
     property: bool,
     digits: DecimalDigitPolicy,
 ) -> Result<Vec<crate::model::Component<Term>>> {
-    use crate::model::{Component as C, NodeKind, ShaclPath};
+    use crate::model::{Component as C, LanguageTag, NodeKind, ShaclPath};
     use crate::structural::named_role;
     let mut result = Vec::new();
     for value in values(store, node, "memberShape")? {
@@ -463,7 +463,10 @@ pub(crate) fn read(
         result.push(C::LanguageIn(
             rdf_list(store, &head)?
                 .into_iter()
-                .map(|v| string(v, "languageIn"))
+                .map(|v| {
+                    LanguageTag::try_new(string(v, "languageIn")?)
+                        .map_err(|error| Error::Invalid(format!("sh:languageIn: {error}")))
+                })
                 .collect::<Result<_>>()?,
         ));
     }
@@ -554,7 +557,7 @@ pub(crate) fn read(
     let is_closed = boolean(store, node, "closed")?;
     if closed.is_some() {
         result.push(C::Closed {
-            is_closed,
+            closedness: crate::model::Closedness::from_boolean(is_closed),
             ignored_properties,
         });
     }
@@ -665,9 +668,12 @@ pub(crate) fn lower_one(
                 None => crate::pattern::Pattern::compile(&pattern, &flags)?,
             })
         }
-        C::LanguageIn(values) => {
-            Constraint::LanguageIn(values.into_iter().map(|v| v.to_ascii_lowercase()).collect())
-        }
+        C::LanguageIn(values) => Constraint::LanguageIn(
+            values
+                .into_iter()
+                .map(|v| v.as_str().to_ascii_lowercase())
+                .collect(),
+        ),
         C::UniqueLang(true) => Constraint::UniqueLang,
         C::UniqueLang(false) => return Ok(None),
         C::SingleLine(true) => Constraint::SingleLine,
@@ -725,10 +731,13 @@ pub(crate) fn lower_one(
             }
         }
         C::Closed {
-            is_closed,
+            closedness,
             ignored_properties,
         } => {
-            if !is_closed {
+            if closedness == crate::model::Closedness::ByTypes {
+                return Err(Error::Unsupported("sh:closed sh:ByTypes".into()));
+            }
+            if !closedness.is_closed() {
                 return Ok(None);
             }
             let mut allowed: HashSet<_> = ignored_properties.into_iter().collect();
@@ -738,6 +747,14 @@ pub(crate) fn lower_one(
                 }
             }
             Constraint::Closed(allowed)
+        }
+        C::SubsetOf(_)
+        | C::SomeValue(_)
+        | C::ReifierShape { .. }
+        | C::RootClass(_)
+        | C::UniqueValuesFor(_)
+        | C::NodeByExpression(_) => {
+            return Err(Error::Unsupported("SHACL 1.2 constraint execution".into()));
         }
         C::Sparql(_) | C::Expression(_) | C::Custom(_) => {
             return Err(Error::Invalid(

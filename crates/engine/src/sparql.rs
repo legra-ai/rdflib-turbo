@@ -45,7 +45,7 @@ pub(crate) fn lower(
         validator,
         path,
         &[],
-        declaration.deactivated,
+        crate::structural::lower_deactivation(declaration.deactivated)?,
         None,
         namespaces,
     )

@@ -1,5 +1,5 @@
 use super::*;
-use crate::model::{ExpressionKind as K, NodeExpression as E, ShaclPath};
+use crate::model::{ExpressionForm as K, NodeExpression as E, ShaclPath};
 use oxigraph::io::RdfFormat;
 
 fn graph(body: &str) -> Dataset {
@@ -80,14 +80,12 @@ fn expression_reader_rejects_cycles_missing_filter_inputs_and_unknown_calls() {
 
 #[test]
 fn lowering_rejects_unknown_filter_shapes_and_unsupported_nested_path_inputs() {
-    let constant = || E::new(named("a"), K::Constant);
-    let filter = E::new(
-        blank("filter"),
-        K::Filter {
-            shape: named("missing"),
-            nodes: Box::new(constant()),
-        },
-    );
+    let constant = || E::constant(named("a"));
+    let filter = E::try_new(K::FilterShape {
+        shape: named("missing"),
+        nodes: Box::new(constant()),
+    })
+    .unwrap();
     assert!(
         NodeExpression::lower(filter, &HashMap::new())
             .err()
@@ -95,14 +93,12 @@ fn lowering_rejects_unknown_filter_shapes_and_unsupported_nested_path_inputs() {
             .to_string()
             .contains("Unknown filter shape")
     );
-    let path = E::new(
-        blank("path"),
-        K::Path {
-            path: ShaclPath::Predicate(NamedNode::new("https://example.org/p").unwrap()),
-            path_node: None,
-            nodes: Some(Box::new(constant())),
-        },
-    );
+    let path = E::try_new(K::PathValues {
+        path: ShaclPath::Predicate(NamedNode::new("https://example.org/p").unwrap()),
+        path_node: None,
+        focus_node: Some(Box::new(constant())),
+    })
+    .unwrap();
     assert!(matches!(
         NodeExpression::lower(path, &HashMap::new()),
         Err(Error::Unsupported(_))

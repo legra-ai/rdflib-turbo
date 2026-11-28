@@ -4,8 +4,8 @@
     "reason": "Module declarations, re-exports, aliases and derived errors: fresh exact Rust 1.99.1/LLVM 23 DEBUG default engine, binding and native test executables have no file or function mapping for these lib.rs bytes in either unfiltered executed or empty-profile exports (281 files, 7630 functions). All 166 owned sources were audited; executable sources remain measured. No cfg coverage or historical executable was used."
   },
   "crates/engine/src/model.rs": {
-    "sha256": "b4e7ef47bbf266bec27ee6c73f3c0270b29b0076c40a50272af2a137b573097a",
-    "reason": "Shared model re-exports and native type aliases: a Rust 1.99.1/LLVM 23.1.1 DEBUG engine test binary (-Cinstrument-coverage, no cfg coverage; 128 tests passed) has no file or function mapping for these exact bytes, verified by an unfiltered llvm-cov export containing 794 files and 41956 functions. Retain missing-executable-mapping checks."
+    "sha256": "ca8c40f24e9246669de6ebfccd79de5d2d60ea446d7b4599f27867bfb3961944",
+    "reason": "Shared model re-exports and native type aliases only; no executable items. The original instrumented Rust export from CI run 46084988623 at 4a0b5d00 contains 337 mapped files and no file mapping for these exact model.rs bytes. Executable and missing-source mapping checks remain enforced."
   },
   "src/inference.rs": {
     "sha256": "517b0c60a6a4c6afbbfb896b95cce27e14ff5c1f06e14e762d7ee87106d59741",

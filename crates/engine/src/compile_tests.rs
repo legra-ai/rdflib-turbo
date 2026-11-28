@@ -62,12 +62,9 @@ fn query_lowering_checks_literal_types_query_kinds_and_required_projection() {
 
 fn triple() -> model::RuleKind<Term> {
     model::RuleKind::Triple(Box::new(model::TripleRule {
-        subject: model::NodeExpression::new(iri(SH, "this").into(), model::ExpressionKind::This),
-        predicate: model::NodeExpression::new(
-            iri("urn:", "p").into(),
-            model::ExpressionKind::Constant,
-        ),
-        object: model::NodeExpression::new(text("value"), model::ExpressionKind::Constant),
+        subject: model::NodeExpression::focus_node(),
+        predicate: model::NodeExpression::constant(iri("urn:", "p").into()),
+        object: model::NodeExpression::constant(text("value")),
     }))
 }
 
@@ -193,7 +190,15 @@ fn target_lowering_preserves_explicit_and_implicit_class_stages() {
     let graph = Dataset::new();
     let class = iri("urn:", "Class");
     let explicit = lower_target(&graph, model::Target::Class(class.clone()), &[]).unwrap();
-    let implicit = lower_target(&graph, model::Target::ImplicitClass(class.into()), &[]).unwrap();
+    let implicit = lower_target(
+        &graph,
+        model::Target::ImplicitClass {
+            class: class.into(),
+            declaration: model::ClassDeclaration::RdfsClass,
+        },
+        &[],
+    )
+    .unwrap();
     assert_ne!(
         std::mem::discriminant(&explicit),
         std::mem::discriminant(&implicit)

@@ -1,4 +1,5 @@
 use super::*;
+use crate::model;
 use crate::model::{Component as C, ShaclPath};
 
 #[test]
@@ -80,7 +81,7 @@ fn lowerer_rejects_unresolved_shape_references_and_non_predicate_pairs() {
             true,
             &HashMap::new(),
             C::Closed {
-                is_closed: false,
+                closedness: model::Closedness::Open,
                 ignored_properties: vec![]
             },
             Default::default(),

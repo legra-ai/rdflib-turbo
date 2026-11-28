@@ -114,9 +114,10 @@ pub(crate) fn read_shape(
         }
     }
     if implicit {
-        shape
-            .targets
-            .push(model::Target::ImplicitClass(node.clone()));
+        shape.targets.push(model::Target::ImplicitClass {
+            class: node.clone(),
+            declaration: model::ClassDeclaration::RdfsClass,
+        });
     }
     shape.components = crate::constraints::read(graph, node, path_node.is_some(), digits)?;
     if advanced {
@@ -158,11 +159,14 @@ pub(crate) fn read_shape(
         None => model::Severity::Violation,
     };
     shape.order = one(graph, node, "order")?;
-    shape.deactivated = boolean(graph, node, "deactivated")?;
+    shape.deactivated = deactivation(graph, node)?;
     Ok(match path_node {
         None => ShapeDeclaration::Node(Box::new(shape)),
         Some(path_node) => ShapeDeclaration::Property(Box::new(model::PropertyShape {
             id: shape.id,
+            annotations: shape.annotations,
+            group: one(graph, node, "group")?,
+            values: None,
             path: paths
                 .get(&path_node)
                 .ok_or_else(|| Error::Invalid(format!("Unresolved path {path_node}")))?
@@ -193,7 +197,7 @@ fn targets(
     use model::Target;
     let mut targets: Vec<_> = values(graph, node, "targetNode")?
         .into_iter()
-        .map(Target::Node)
+        .map(|value| Target::Node(model::NodeExpression::constant(value)))
         .collect();
     for name in ["targetClass", "targetSubjectsOf", "targetObjectsOf"] {
         for value in values(graph, node, name)? {
@@ -259,7 +263,7 @@ pub(crate) fn sparql_constraint(
 ) -> Result<model::SparqlConstraint<Term>> {
     let mut declaration = model::SparqlConstraint::new(node.clone(), select(graph, node)?);
     declaration.messages = messages(graph, node)?;
-    declaration.deactivated = boolean(graph, node, "deactivated")?;
+    declaration.deactivated = deactivation(graph, node)?;
     Ok(declaration)
 }
 
@@ -368,4 +372,33 @@ pub(crate) fn prefix_resource(
         id: node,
         declarations,
     })
+}
+
+// Core boolean declarations become constant expressions in the SHACL 1.2 model.
+fn deactivation(
+    graph: &(impl GraphRead + ?Sized),
+    node: &Term,
+) -> Result<Option<model::NodeExpression>> {
+    boolean(graph, node, "deactivated")?;
+    Ok(one(graph, node, "deactivated")?.map(model::NodeExpression::constant))
+}
+
+pub(crate) fn lower_deactivation(expression: Option<model::NodeExpression>) -> Result<bool> {
+    match expression {
+        None => Ok(false),
+        Some(expression) => match expression.as_constant() {
+            Some(Term::Literal(value))
+                if value.datatype() == oxigraph::model::vocab::xsd::BOOLEAN =>
+            {
+                match value.value() {
+                    "true" | "1" => Ok(true),
+                    "false" | "0" => Ok(false),
+                    _ => Err(Error::Invalid("Invalid boolean deactivation".into())),
+                }
+            }
+            _ => Err(Error::Unsupported(
+                "Non-boolean deactivation expression".into(),
+            )),
+        },
+    }
 }

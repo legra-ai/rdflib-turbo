@@ -23,9 +23,11 @@ pub(crate) type CustomTarget<T = Term> = shacl_structural_model::CustomTarget<T,
 pub(crate) type ParameterValues<T = Term> = shacl_structural_model::ParameterValues<T, NamedNode>;
 pub(crate) type CustomConstraint<T = Term> = shacl_structural_model::CustomConstraint<T, NamedNode>;
 pub(crate) type NodeExpression<T = Term> = shacl_structural_model::NodeExpression<T, NamedNode>;
-pub(crate) type ExpressionKind<T = Term> = shacl_structural_model::ExpressionKind<T, NamedNode>;
+pub(crate) type ExpressionForm<T = Term> = shacl_structural_model::ExpressionForm<T, NamedNode>;
 pub(crate) type ExpressionConstraint<T = Term> =
     shacl_structural_model::ExpressionConstraint<T, NamedNode>;
 pub(crate) type ShaclRule<T = Term> = shacl_structural_model::ShaclRule<T, NamedNode>;
 pub(crate) type RuleKind<T = Term> = shacl_structural_model::RuleKind<T, NamedNode>;
 pub(crate) type TripleRule<T = Term> = shacl_structural_model::TripleRule<T, NamedNode>;
+
+pub(crate) type SparqlConstraint<T = Term> = shacl_structural_model::SparqlConstraint<T, NamedNode>;
